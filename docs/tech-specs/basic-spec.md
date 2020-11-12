@@ -6,9 +6,9 @@
 | *By* | Imran M Yousuf |
 | *Date* | November 10, 2020 |
 
-## Problem Statement / Goals
+## Problem Statement / Goal
 
-In a service oriented or microservice architecture the necessity to reliable pass messages between systems is essential. We want a reliable message broker without increasing architectural complexity with high throughput and scalability.
+In a service oriented or microservice architecture the necessity to reliably pass messages between systems is essential. We want a reliable message broker without increasing architectural complexity with high throughput and scalability.
 
 ## Assumptions & Considerations
 
@@ -23,6 +23,11 @@ The considerations are -
 * The broker will ensure at least once webhook event is delivered
 * Consumer should have access to all the messages it failed to receive due to error on its part
 * Consumer could access past messages for replaying purpose
+
+Key attributes deliberately out of consideration -
+
+* There will be no guarantee of message order
+* There is no consideration for Consumer errors caused by bugs
 
 ## Key Concepts
 
@@ -122,14 +127,39 @@ For each message delivery we would have to follow the delivery lifecycle as desi
   * If consumer failed to connect, update status as _Retry-Delivery_ with exponentially backed off _next attempt timestamp_
   * If Max-Retries is reached and status is not _Delivered_ then mark delivery as _Dead_
 
-#### Key Open Question
+## Use cases
 
-* Should be make it mandatory for **Producer** to associate a Message ID? It could be used to ensure that we do not resend a Message in case the Producer crashed before receiving the ACK. Or should we make it optional to keep the flexibility?
+The obvious goal is to serve the purpose of Enterprise Service Bus over HTTP; it is best suited when ordering is not a necessity; for example, change streams with optimistic locking. This Broker is not intended to be used as a replacement for Kafka or AWS Kinesis when order sequence is absolutely necessary.
+
+### Additional Possibilities
+
+* Using Python Decorators and controlled controllers (specific to FastAPI and Flask) we can use this broker to implement Celery like message processor
+* We can create a similar library wrapper imitating [Bull](https://github.com/OptimalBits/bull) using this broker as backend
+
+## Implementation Consideration
+
+TBD
+
+## Implementation Details
+
+TBD
+
+## Adoption Strategy
+
+TBD
+
+## Key Open Question
+
+### To be decided during implementation
+
+* Should we make it mandatory for **Producer** to associate a Message ID? It could be used to ensure that we do not resend a Message in case the Producer crashed before receiving the ACK. Or should we make it optional to keep the flexibility?
 * Should there be a Signature of the Message passed in header for data integrity verification? Or should we make it optional to keep the flexibility?
 * What is the rational-delay for fail-safe process to pick up Message and Message Delivery? Going with a minute could be too late in certain circumstance.
 * What is a reasonable delivery-timeout?
 * What is a reasonable Max-Retry limit?
 
-## Implementation Details
+### To be addressed by separate techspec
 
-TBD
+* Do we need rate limiting per Consumer-Channel combo?
+* Do we want to have control over pausing pushing to Consumer?
+* Can we automate a protocol for DLQ processing from the broker?
