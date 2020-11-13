@@ -22,6 +22,8 @@ func InitializeDispatcher() *Dispatcher {
 	maxWorkersConfig := NewMaxWorkersConfig()
 	maxQueuesConfig := NewMaxQueuesConfig()
 	v := NewJobQueue(maxQueuesConfig)
-	dispatcher := NewDispatcher(maxWorkersConfig, v)
+	priorityQueue := NewJobPriorityQueue()
+	priorityDispatcherSwitch := NewPriorityDispatcherSwitch()
+	dispatcher := NewDispatcher(maxWorkersConfig, v, priorityQueue, priorityDispatcherSwitch)
 	return dispatcher
 }

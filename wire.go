@@ -18,6 +18,6 @@ func InitializeJobQueue() chan Job {
 }
 
 func InitializeDispatcher() *Dispatcher {
-	wire.Build(NewDispatcher, NewMaxWorkersConfig, NewMaxQueuesConfig, NewJobQueue)
+	wire.Build(NewDispatcher, NewMaxWorkersConfig, NewMaxQueuesConfig, NewJobQueue, NewJobPriorityQueue, NewPriorityDispatcherSwitch)
 	return &Dispatcher{}
 }

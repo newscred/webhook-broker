@@ -38,10 +38,22 @@ func main() {
 		done <- true
 	}()
 
-	for i := 0; i < 1000000; i++ {
-		job := Job{Data: Message{Payload: "Test Message " + strconv.Itoa(i)}, Priority: 1}
-		jobQueue <- job
+	for i := 0; i < 27; i++ {
+		go func(workerIndex int) {
+			for j := 0; j < 100000; j++ {
+				job := Job{Data: Message{Payload: "Low Priority Test Message " + strconv.Itoa(workerIndex) + "-" + strconv.Itoa(j)}, Priority: 0}
+				jobQueue <- job
+			}
+		}(i)
 	}
+
+	go func() {
+		for i := 0; i < 100000; i++ {
+			job := Job{Data: Message{Payload: "High Priority Test Message " + strconv.Itoa(i)}, Priority: 1}
+			jobQueue <- job
+		}
+	}()
+
 	fmt.Println("awaiting signal")
 	<-done
 	dispatcher.Stop()

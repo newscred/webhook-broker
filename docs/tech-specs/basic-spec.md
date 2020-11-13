@@ -127,6 +127,10 @@ For each message delivery we would have to follow the delivery lifecycle as desi
   * If consumer failed to connect, update status as _Retry-Delivery_ with exponentially backed off _next attempt timestamp_
   * If Max-Retries is reached and status is not _Delivered_ then mark delivery as _Dead_
 
+### Prioritized Dispatcher
+
+We can now overlay an aspect of _priority_ on this dispatcher process as well. For example, if there is a relatively higher priority message for a Consumer in a Channel, then in most cases that should be delivered first; one effect of introducing priority is, it will deliberately disrupt the order even further. Priority will allow producers to dictate in relative sense which should be delivered earlier provided they are both enqueued for delivery; it could very well be the cause that a relatively low and high priority message can be attempted to deliver concurrently. As the fail-safe mechanism will use the same process as the regular, it should respect priority if that is chosen. One important consideration would be, when priority is switched on, it will definitely impact overall throughput since there will be an active attempt to order queued messages by priority.
+
 ## Use cases
 
 The obvious goal is to serve the purpose of Enterprise Service Bus over HTTP; it is best suited when ordering is not a necessity; for example, change streams with optimistic locking. This Broker is not intended to be used as a replacement for Kafka or AWS Kinesis when order sequence is absolutely necessary.
