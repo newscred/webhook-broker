@@ -139,10 +139,32 @@ The obvious goal is to serve the purpose of Enterprise Service Bus over HTTP; it
 
 * Using Python Decorators and controlled controllers (specific to FastAPI and Flask) we can use this broker to implement Celery like message processor
 * We can create a similar library wrapper imitating [Bull](https://github.com/OptimalBits/bull) using this broker as backend
+* Using message priority we can have large back ground scripts generate a lot of event which will not hamper user action generating events from application
 
 ## Implementation Consideration
 
-TBD
+### Language Choice
+
+Instead of focusing on "_Why not \<language\>?_", I would rather like to point out the key advantages of the language choice. The choice of language for the project is GoLang; the primary reasons for the choice are -
+
+* GoLang's CSP inspired [concurrency](https://golang.org/doc/effective_go.html#concurrency) model
+* GoLang's single binary based deployment model simplifies deployment and maintenance
+* [Event Loop is built into](https://www.quora.com/What-is-the-difference-between-Python-asyncio-and-Golang-Go-routines) Go's DB drivers and HTTP Clients making it suitable for such use
+* Implicit [interface](https://golang.org/doc/effective_go.html#interfaces) and [build time IoC](https://github.com/google/wire) will be handy in storage independent implementation
+* Performance. [GetStream.io](https://getstream.io/), who has a broader amount of use cases similar to this project already did [deep study](https://getstream.io/blog/switched-python-go/#:~:text=Go%20is%20extremely%20fast.,game%20comparing%20Go%20vs%20Python.) on it.
+* Concurrency at scale. [Malwarebyte's experience](http://marcio.io/2015/07/handling-1-million-requests-per-minute-with-golang/) inspired us to write our own experiment code around it with priority queue baked in
+
+### Storage Choice
+
+Storage would be the most obvious bottleneck in scaling throughput for an application such as this. But I firmly believe too much concern of such cases is premature optimization and it would be nice to have this headache. So we will go for simplicity - MySQL 8. Primarily because if push comes to shove we will be able to choose [MySQL Group Replication](https://dev.mysql.com/doc/refman/8.0/en/group-replication.html) with [multi-primary mode enabled](https://dev.mysql.com/doc/refman/8.0/en/group-replication-multi-primary-mode.html); this functionality is also available through [managed services](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/aurora-multi-master.html#aurora-multi-master-overview). The implementation will be abstracted sufficiently we can totally switch to a NoSQL such as Kafka, Cassandra for scaling writes. For unit tests we will be using SQLite. Furthermore, GoLang's [MySQL driver](https://github.com/go-sql-driver/mysql) is matured from some [extensive production use](https://github.blog/2020-05-20-three-bugs-in-the-go-mysql-driver/) as well.
+
+### Prioritized Message Limitations
+
+Taking priority into consideration automatically will have throughput implications since enqueueing and dequeueing will have to be mutually exclusive across the queue. And trying to maintain the queue across the cluster of broker would add more complication. So we will limit the priority to take effect within a single instance of the broker process. What it means is when we have a worker available to dispatch a message it will always give priority to the highest priority message. It also means, if there are too many messages queued, the likely time needed to queue will be longer; so increasing brokers aggressively is a deployment recommendation.
+
+### HTTP2 Consideration
+
+Given throughput is one of the primary goal of the project, HTTP/2 had to be an avenue we explore to take advantage of its multiplexing capabilities and binary frame compression. The limitation would be what if a consumer is not HTTP/2 enabled or the producer's HTTP client is HTTP/1.1 compliant only; in most cases Go's HTTP server and client can talk in both protocols. One other consideration is, the load balancer used with the broker has to be HTTP/2 compliant in receiving and proxying; for example, until [very recently](https://aws.amazon.com/blogs/aws/new-application-load-balancer-support-for-end-to-end-http-2-and-grpc/) AWS ALB is HTTP/2 enabled in receiving but not when proxying. From an implementation standpoint we will have to account for the fact that now requests [will come more in batch](https://www.lucidchart.com/techblog/2019/04/10/why-turning-on-http2-was-a-mistake/) rather than sequential calls.
 
 ## Implementation Details
 
@@ -150,7 +172,7 @@ TBD
 
 ## Adoption Strategy
 
-TBD
+Given how primitive the APIs of the broker is, when creating Python and Node clients for the project we will need keep them as close (if possible identical) to Celery and SQS/Bull APIs (may 2 clients for Node) such that replacing the code is as minimal as changing the import statement in most trivial cases. For atypical cases, for example using Celery API to publish to Celery Broker (`app.send_task`), we will need a code change; but there too we can keep the code comparable.
 
 ## Key Open Question
 
