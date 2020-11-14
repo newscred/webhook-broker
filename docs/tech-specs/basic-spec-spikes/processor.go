@@ -3,7 +3,11 @@ package main
 import (
 	"container/list"
 	"fmt"
+	"net/http"
+	"strconv"
+	"strings"
 	"sync"
+	"time"
 )
 
 // Message represents the message to be delivered to
@@ -86,13 +90,14 @@ type Worker struct {
 func NewWorker(workerPool chan chan Job) Worker {
 	return Worker{
 		WorkerPool: workerPool,
-		JobChannel: make(chan Job),
-		quit:       make(chan bool)}
+		JobChannel: make(chan Job, 1),
+		quit:       make(chan bool, 1)}
 }
 
 // Start method starts the run loop for the worker, listening for a quit channel in
 // case we need to stop it
 func (w Worker) Start() {
+	var client = &http.Client{Timeout: time.Second * 10}
 	go func() {
 		for {
 			// register the current worker into the worker queue.
@@ -101,7 +106,18 @@ func (w Worker) Start() {
 			select {
 			case job := <-w.JobChannel:
 				// we have received a work request.
-				fmt.Println("HOLA! " + job.Data.Payload)
+				req, reqErr := http.NewRequest("POST", "http://localhost:58080/consumer", strings.NewReader(job.Data.Payload))
+				if reqErr != nil {
+					fmt.Println(reqErr)
+					return
+				}
+				req.Header.Set("Content-Type", "text/plain")
+				req.Header.Set("X-Broker-Message-Priority", strconv.Itoa(job.Priority))
+				_, err := client.Do(req)
+				if err != nil {
+					fmt.Println(err)
+				}
+				req.Body.Close()
 
 			case <-w.quit:
 				// we have received a signal to stop
@@ -147,12 +163,12 @@ func NewPriorityDispatcherSwitch() PriorityDispatcherSwitch {
 
 // NewMaxWorkersConfig retrieves the configuration for max workers
 func NewMaxWorkersConfig() MaxWorkersConfig {
-	return 50
+	return 100
 }
 
 // NewMaxQueuesConfig retrieves the configuration for max jobs to process at once
 func NewMaxQueuesConfig() MaxQueuesConfig {
-	return 1000000
+	return 100000
 }
 
 // NewJobQueue ensures a initialized job queue is retrieved
