@@ -168,7 +168,69 @@ Given throughput is one of the primary goal of the project, HTTP/2 had to be an 
 
 ## Implementation Details
 
-TBD
+### Objects
+
+![Class Diagram](./images/basic-spec/BrokerObjects.svg)
+
+### Endpoints
+
+We want the broker service itself to be stateless and follow the RESTful API paradigms. As follows are the conventions for the API -
+
+* `PUT` for creating **Producer**, **Channel** and **Consumer**; primarily to allow the client to dictate the ID; it will be idempotent so it can work as edit as well
+* All `PUT` request will accept `application/x-www-form-urlencoded` MIME Type Form data
+* All the `GET` will expose a `Last-Modified` header
+* `DELETE` is not supported for any resource type
+* All list endpoints will be ordered by ID and hence use ID as the pagination key
+* When `PUT` requests will created it will return `201`; else `200` when updated.
+* **Message** can only be a `POST` and can not be amended, but can be fetched.
+  * The POST call will need to come with special headers to identify Producer
+    * `X-Broker-Producer-ID` ID of the Producer
+    * `X-Broker-Producer-Token` Token of the Producer
+  * The POST call also will need the channel token for simple auth purpose - `X-Broker-Channel-Token`
+  * The message priority will also need to be passed via header - `X-Broker-Message-Priority`
+  * Message's content type will be derived from request `Content-Type`; if missing will default to `application/octet-stream`
+* The **Message** list endpoint can be filtered using _statusChangedSince_ query parameter
+* The **Message** `GET` endpoint will list all the jobs and their status in the resource itself since the **Message** and **DeliverJob** are both immutable through the API.
+  * **DeliveryJob** will expose re-trigger endpoint to be used by consumer, but only if the delivery status is _dead_.
+* **Message** delivery or **DeliveryJob** can be re-triggered using _Admin Token_ by the Fail-safe worker
+  * That means they will have special re-trigger endpoint which will need _Admin Token_.
+  * DLQ'd jobs can be re-triggered by consumer using its _Consumer Token_.
+  * The Admin token is - `X-Broker-Admin-Token`
+  * The delivery to a consumer will also contain `X-Broker-Consumer-Token` to ensure the request is coming from Broker, in addition to a custom `User-Agent`
+
+So the endpoints available would be -
+
+1. PUT /producer/{producer-id}
+1. GET /producers (Query Params - size, first)
+1. GET /producer/{producer-id}
+1. PUT /channel/{channel-id}
+1. GET /channels (Query Params - size, first)
+1. GET /channel/{channel-id}
+1. PUT /channel/{channel-id}/consumer/{consumer-id}
+1. GET /channel/{channel-id}/consumers (Query Params - size, first)
+1. GET /channel/{channel-id}/consumer/{consumer-id}
+1. POST /channel/{channel-id}/broadcast
+1. GET /channel/{channel-id}/messages (Query Params - statusChangedSince, size, first)
+1. GET /channel/{channel-id}/message/{message-id}
+1. POST /channel/{channel-id}/message/{message-id}/re-trigger (fail-safe only)
+1. POST /channel/{channel-id}/message/{message-id}/job/{job-id}/re-trigger (DLQ or fail-safe)
+
+### Fail-safe worker
+
+Whether the fail-safe worker is working, that will be a configuration; similarly the _Admin Token_ will also be a configuration. Fail-safe worker will simply re-trigger a state using Load-Balanced endpoint of the broker (that is call itself) so that rest of the process works as usual.
+
+### Libraries
+
+* Migration Management - https://github.com/golang-migrate/migrate
+* Web Controller Router - https://github.com/gorilla/mux and https://github.com/gorilla/handlers
+* Log Management & Rotation - https://github.com/natefinch/lumberjack
+* Build Time IoC - https://github.com/google/wire
+* Configuration parsing - https://github.com/go-ini/ini
+* ORM - to avoid reflection (and hence performance consequence) we will use the [sql package](https://golang.org/pkg/database/sql/) of Go which itself is quite easy to use and flexible.
+
+### CI & Release Management
+
+We use Github Actions along with Makefile for continuous integration purpose. We will use Github Actions for release management purpose as well.
 
 ## Adoption Strategy
 
