@@ -217,7 +217,7 @@ So the endpoints available would be -
 
 ### Fail-safe worker
 
-Whether the fail-safe worker is working, that will be a configuration; similarly the _Admin Token_ will also be a configuration. Fail-safe worker will simply re-trigger a state using Load-Balanced endpoint of the broker (that is call itself) so that rest of the process works as usual.
+Whether the fail-safe worker is working, that will be a configuration; similarly the _Admin Token_ will also be a configuration. Fail-safe worker will simply re-trigger a state using Load-Balanced endpoint of the broker (that is call itself) so that rest of the process works as usual. The spinning up of fail-safe worker will be configurable so that fail-safe is executed from a single execution-unit.
 
 ### Libraries
 
@@ -227,6 +227,14 @@ Whether the fail-safe worker is working, that will be a configuration; similarly
 * Build Time IoC - https://github.com/google/wire
 * Configuration parsing - https://github.com/go-ini/ini
 * ORM - to avoid reflection (and hence performance consequence) we will use the [sql package](https://golang.org/pkg/database/sql/) of Go which itself is quite easy to use and flexible.
+
+### Configuration Management Friendly
+
+In order for making configuration management easy, we will allow Producer, Channel and Consumer to also be created directly through Configuration. Since the IDs will be known and the URIs for the resources predicted, they can be hooked up to any service discovery backend to fetch the `Token` values in runtime.
+
+### Caching of key objects
+
+To ensure key objects such as **Producer**, **Channel** and **Consumer** which are accessed quite frequently we will implement a simple read-through cache in non-distributed mode; the reason on read-through will suffice is, when updating the only field that can be updated in reality is the `Name` which will not be accessed for message delivery.
 
 ### CI & Release Management
 
