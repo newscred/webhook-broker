@@ -221,11 +221,11 @@ Whether the fail-safe worker is working, that will be a configuration; similarly
 
 ### Libraries
 
-* Migration Management - https://github.com/golang-migrate/migrate
-* Web Controller Router - https://github.com/gorilla/mux and https://github.com/gorilla/handlers
-* Log Management & Rotation - https://github.com/natefinch/lumberjack
-* Build Time IoC - https://github.com/google/wire
-* Configuration parsing - https://github.com/go-ini/ini
+* Schema Migration Management - [GoLang Migrate](https://github.com/golang-migrate/migrate)
+* Web Controller Router - [Gorilla Mux](https://github.com/gorilla/mux) and [Gorilla Handlers](https://github.com/gorilla/handlers)
+* Log Management & Rotation - [Lumberjack.V2](https://github.com/natefinch/lumberjack)
+* Build Time IoC - [Google Wire](https://github.com/google/wire)
+* Configuration parsing - [Go INI](https://github.com/go-ini/ini)
 * ORM - to avoid reflection (and hence performance consequence) we will use the [sql package](https://golang.org/pkg/database/sql/) of Go which itself is quite easy to use and flexible.
 
 ### Configuration Management Friendly
