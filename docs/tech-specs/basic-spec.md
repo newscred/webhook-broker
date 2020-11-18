@@ -231,7 +231,7 @@ Whether the fail-safe worker is working, that will be a configuration; similarly
 ### Libraries
 
 * Schema Migration Management - [GoLang Migrate](https://github.com/golang-migrate/migrate)
-* Web Controller Router - [Gorilla Mux](https://github.com/gorilla/mux) and [Gorilla Handlers](https://github.com/gorilla/handlers)
+* Web Controller Router - [HttpRouter](https://github.com/julienschmidt/httprouter) and [Gorilla Handlers](https://github.com/gorilla/handlers)
 * Log Management & Rotation - [Lumberjack.V2](https://github.com/natefinch/lumberjack)
 * Build Time IoC - [Google Wire](https://github.com/google/wire)
 * Configuration parsing - [Go INI](https://github.com/go-ini/ini)
@@ -240,7 +240,7 @@ Whether the fail-safe worker is working, that will be a configuration; similarly
 
 ### Configuration Management Friendly
 
-In order for making configuration management easy, we will allow Producer, Channel and Consumer to also be created directly through Configuration. Since the IDs will be known and the URIs for the resources predicted, they can be hooked up to any service discovery backend to fetch the `Token` values in runtime.
+In order for making configuration management easy, we will allow Producer, Channel and Consumer to also be created directly through Configuration. Since the IDs will be known and the URIs for the resources predicted, they can be hooked up to any service discovery backend to fetch the `Token` values in runtime or `Token` can be provided when creating them. In addition, it will be possible to configure the `User Agent` string and Token header name for Consumers generally.
 
 ### Caching of key objects
 
@@ -269,3 +269,6 @@ Given how primitive the APIs of the broker is, when creating Python and Node cli
 * Do we need rate limiting per Consumer-Channel combo?
 * Do we want to have control over pausing pushing to Consumer?
 * Can we automate a protocol for DLQ processing from the broker?
+* Do we want HMAC-sha* authentication for Broadcast/Consumer?
+  * What is HMAC computation strategy?
+  * Is HMAC enabled only for producer or only for consumer or both?
