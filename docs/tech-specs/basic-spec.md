@@ -236,6 +236,7 @@ Whether the fail-safe worker is working, that will be a configuration; similarly
 * Build Time IoC - [Google Wire](https://github.com/google/wire)
 * Configuration parsing - [Go INI](https://github.com/go-ini/ini)
 * ORM - to avoid reflection (and hence performance consequence) we will use the [sql package](https://golang.org/pkg/database/sql/) of Go which itself is quite easy to use and flexible.
+* Unit Test - [Testify](https://github.com/stretchr/testify)
 
 ### Configuration Management Friendly
 
