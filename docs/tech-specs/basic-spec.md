@@ -29,6 +29,24 @@ Key attributes deliberately out of consideration -
 * There will be no guarantee of message order
 * There is no consideration for Consumer errors caused by bugs
 
+## Use cases
+
+The obvious goal is to serve the purpose of Enterprise Service Bus over HTTP; it is best suited when ordering is not a necessity; for example, change streams with optimistic locking. This Broker is not intended to be used as a replacement for Kafka or AWS Kinesis when order sequence is absolutely necessary.
+
+### Yet another message broker
+
+The key complexity that brokers such as SQS, AMQP based broker, Celery, Kinesis, Kafka is it needs a separate worker process that needs to be deployed in addition to your Web API. On the surface it might seem not so significant; but when we think about infrastructure code for deploying Web API **and** the worker; plus it also means we need to add 2 different kind of monitoring, logging, scalability and fail-over code to solve; and depending on volume the separate infrastructure may not make sense either. With auto-scalable infrastructure, I would argue that, most projects can do with the workers being HTTP to begin with.
+
+Furthermore, from a developer perspective it simplifies what the developer works on; from a mental model you can concentrate of developing everything be HTTP endpoints, hence giving you the simplicity of following the same pattern.
+
+Moreover, it is not polling based and with HTTP/2 multiplexing it makes it lucrative to have workers be based of HTTP where the broker pushes rather than the client pulls.
+
+### Additional Possibilities
+
+* Using Python Decorators and controlled controllers (specific to FastAPI and Flask) we can use this broker to implement Celery like message processor
+* We can create a similar library wrapper imitating [Bull](https://github.com/OptimalBits/bull) using this broker as backend
+* Using message priority we can have large back ground scripts generate a lot of event which will not hamper user action generating events from application
+
 ## Key Concepts
 
 | Concept | Definition |
@@ -131,16 +149,6 @@ For each message delivery we would have to follow the delivery lifecycle as desi
 
 We can now overlay an aspect of _priority_ on this dispatcher process as well. For example, if there is a relatively higher priority message for a Consumer in a Channel, then in most cases that should be delivered first; one effect of introducing priority is, it will deliberately disrupt the order even further. Priority will allow producers to dictate in relative sense which should be delivered earlier provided they are both enqueued for delivery; it could very well be the cause that a relatively low and high priority message can be attempted to deliver concurrently. As the fail-safe mechanism will use the same process as the regular, it should respect priority if that is chosen. One important consideration would be, when priority is switched on, it will definitely impact overall throughput since there will be an active attempt to order queued messages by priority.
 
-## Use cases
-
-The obvious goal is to serve the purpose of Enterprise Service Bus over HTTP; it is best suited when ordering is not a necessity; for example, change streams with optimistic locking. This Broker is not intended to be used as a replacement for Kafka or AWS Kinesis when order sequence is absolutely necessary.
-
-### Additional Possibilities
-
-* Using Python Decorators and controlled controllers (specific to FastAPI and Flask) we can use this broker to implement Celery like message processor
-* We can create a similar library wrapper imitating [Bull](https://github.com/OptimalBits/bull) using this broker as backend
-* Using message priority we can have large back ground scripts generate a lot of event which will not hamper user action generating events from application
-
 ## Implementation Consideration
 
 ### Language Choice
@@ -209,6 +217,7 @@ So the endpoints available would be -
 1. PUT /channel/{channel-id}/consumer/{consumer-id}
 1. GET /channel/{channel-id}/consumers (Query Params - size, first)
 1. GET /channel/{channel-id}/consumer/{consumer-id}
+1. GET /channel/{channel-id}/consumer/{consumer-id}/dlq - The dead letter queue
 1. POST /channel/{channel-id}/broadcast
 1. GET /channel/{channel-id}/messages (Query Params - statusChangedSince, size, first)
 1. GET /channel/{channel-id}/message/{message-id}
