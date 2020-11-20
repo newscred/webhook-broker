@@ -187,7 +187,7 @@ We want the broker service itself to be stateless and follow the RESTful API par
 * `PUT` for creating **Producer**, **Channel** and **Consumer**; primarily to allow the client to dictate the ID; it will be idempotent so it can work as edit as well
 * All `PUT` request will accept `application/x-www-form-urlencoded` MIME Type Form data
 * All the `GET` will expose a `Last-Modified` header
-* `DELETE` is not supported for any resource type
+* `DELETE` is not supported for any resource type other than for **Consumer**
 * All list endpoints will be ordered by ID and hence use ID as the pagination key
 * When `PUT` requests will created it will return `201`; else `200` when updated.
 * **Message** can only be a `POST` and can not be amended, but can be fetched.
@@ -217,6 +217,7 @@ So the endpoints available would be -
 1. PUT /channel/{channel-id}/consumer/{consumer-id}
 1. GET /channel/{channel-id}/consumers (Query Params - size, first)
 1. GET /channel/{channel-id}/consumer/{consumer-id}
+1. DELETE /channel/{channel-id}/consumer/{consumer-id}
 1. GET /channel/{channel-id}/consumer/{consumer-id}/dlq - The dead letter queue
 1. POST /channel/{channel-id}/broadcast
 1. GET /channel/{channel-id}/messages (Query Params - statusChangedSince, size, first)
