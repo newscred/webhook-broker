@@ -70,6 +70,8 @@ Moreover, it is not polling based and with HTTP/2 multiplexing it makes it lucra
 * Broker retrieves the **Consumers** interested in broadcast of a **Channel**
 * Broker _delivers_ **Message** to each **Consumer** retrieved in previous step
 
+![High Level Flow](./images/basic-spec/high-level-message-flow.svg)
+
 ### Key milestones in that flow
 
 * Acknowledge to **Producer** of receipt of **Message**
@@ -144,6 +146,10 @@ For each message delivery we would have to follow the delivery lifecycle as desi
   * If work finishes before Timeout, mark status as _Delivered_
   * If consumer failed to connect, update status as _Retry-Delivery_ with exponentially backed off _next attempt timestamp_
   * If Max-Retries is reached and status is not _Delivered_ then mark delivery as _Dead_
+
+#### In a Sequence Diagram
+
+![Broker Message Lifecycle](./images/basic-spec/Broker_Message_Lifecycle.png)
 
 ### Prioritized Dispatcher
 
