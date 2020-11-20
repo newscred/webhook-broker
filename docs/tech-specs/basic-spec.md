@@ -31,7 +31,7 @@ Key attributes deliberately out of consideration -
 
 ## Use cases
 
-The obvious goal is to serve the purpose of Enterprise Service Bus over HTTP; it is best suited when ordering is not a necessity; for example, change streams with optimistic locking. This Broker is not intended to be used as a replacement for Kafka or AWS Kinesis when order sequence is absolutely necessary.
+The obvious goal is to serve the purpose of Enterprise Service Bus over HTTP; it is best suited when ordering is not a necessity; for example, change streams with optimistic locking. This Broker is not intended to be used as a replacement for Kafka or AWS Kinesis when order sequence is absolutely necessary or is of streaming nature with funnel effect; in addition to streaming it is also not intended to be used for batch processing purpose.
 
 ### Yet another message broker
 
@@ -254,6 +254,10 @@ We use Github Actions along with Makefile for continuous integration purpose. We
 ## Adoption Strategy
 
 Given how primitive the APIs of the broker is, when creating Python and Node clients for the project we will need keep them as close (if possible identical) to Celery and SQS/Bull APIs (may 2 clients for Node) such that replacing the code is as minimal as changing the import statement in most trivial cases. For atypical cases, for example using Celery API to publish to Celery Broker (`app.send_task`), we will need a code change; but there too we can keep the code comparable.
+
+### Consumer consideration
+
+In a message passing scenario each consumer should be prepared to handle at least the max number of workers that a cumulative broker cluster would have. For example, if each broker node is configured to have 10 workers and there are 3 broker nodes; then each consumer cluster should prepare to handle at least 30 concurrent incoming webhook calls.
 
 ## Key Open Question
 
