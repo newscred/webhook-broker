@@ -1,4 +1,5 @@
 # webhook-broker
+![webhook-broker CI](https://github.com/imyousuf/webhook-broker/workflows/webhook-broker%20CI/badge.svg?branch=main) ![webhook-broker Container CI](https://github.com/imyousuf/webhook-broker/workflows/webhook-broker%20Container%20CI/badge.svg)
 
 This is a fully HTTP based Pub/Sub Broker with a goal to simplify systems architected in SOA or Microservice architecture. It aims to solve the inter service communication problem.
 
