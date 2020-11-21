@@ -25,3 +25,29 @@ jobs:
       with:
         name: dist-app
         path: dist/webhook-broker-*.tar.bz2
+
+  coverage:
+    needs: [ build ]
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@master
+    - uses: actions/setup-go@v2
+      with:
+        go-version: '1.15.5'
+    - name: Create dist
+      run: mkdir ./dist/
+    - name: Install dependencies
+      run: make dep-tools deps
+    - uses: actions/setup-node@master
+      with:
+        node-version: '12'
+    - uses: paambaati/codeclimate-action@v2.7.4
+      env:
+        CC_TEST_REPORTER_ID: ${{ secrets.CODECLIMATE_REPORTER_ID }}
+      with:
+        coverageCommand: go test -coverprofile=cover.out ./...
+        debug: true
+        prefix: github.com/imyousuf/webhook-broker/
+        coverageLocations: |
+          ${{github.workspace}}/*.out:gocov

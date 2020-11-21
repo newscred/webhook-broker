@@ -29,12 +29,12 @@ endif
 
 deps:
 	go mod vendor
+	go generate -mod=readonly
 
 dep-tools:
 	go get github.com/google/wire/cmd/wire
 
 build:
-	go generate -mod=readonly
 	go build -mod=readonly
 	cp ./webhook-broker ./dist/
 	@echo "Version: $(shell git log --pretty=format:'%h' -n 1)"
