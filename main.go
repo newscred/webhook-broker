@@ -5,5 +5,5 @@ import (
 )
 
 func main() {
-	fmt.Println("Hello World")
+	fmt.Println("Webhook Broker - " + string(GetAppVersion()))
 }

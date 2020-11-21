@@ -1,6 +1,31 @@
+SHELL = /bin/bash -o pipefail
+
+UNAME_S := $(shell uname -s)
+OS := $(shell test -f /etc/os-release && cat /etc/os-release | grep '^NAME' | sed -e 's/NAME="\(.*\)"/\1/g')
+
 all: clean os-deps dep-tools deps test build
 
+apt-packages:
+
+brew-packages:
+
+alpine-packages:
+
 os-deps:
+ifeq ($(UNAME_S),Linux)
+ifeq ($(OS),Ubuntu)
+os-deps: apt-packages
+endif
+ifeq ($(OS),LinuxMint)
+os-deps: apt-packages
+endif
+ifeq ($(OS),Alpine Linux)
+os-deps: alpine-packages
+endif
+endif
+ifeq ($(UNAME_S),Darwin)
+os-deps: brew-packages
+endif
 
 deps:
 	go mod vendor
@@ -8,9 +33,7 @@ deps:
 dep-tools:
 	go get github.com/google/wire/cmd/wire
 
-build-web:
-
-build: build-web
+build:
 	go generate -mod=readonly
 	go build -mod=readonly
 	cp ./webhook-broker ./dist/
