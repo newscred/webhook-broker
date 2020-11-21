@@ -25,5 +25,5 @@ jobs:
       with:
         push: true
         tags: |
-          imyousuf/webhook-broker:${{ env.GITHUB_SHA }}
+          imyousuf/webhook-broker:${{ github.sha }}
           imyousuf/webhook-broker:latest
