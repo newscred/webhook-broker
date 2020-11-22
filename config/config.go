@@ -122,14 +122,11 @@ func GetConfiguration(configFilePath string) (*Config, error) {
 	if err != nil {
 		return EmptyConfigurationForError, err
 	}
-	storageConfError := setupStorageConfiguration(cfg, configuration)
-	if storageConfError != nil {
-		return EmptyConfigurationForError, storageConfError
-	}
+	setupStorageConfiguration(cfg, configuration)
 	return configuration, nil
 }
 
-func setupStorageConfiguration(cfg *ini.File, configuration *Config) error {
+func setupStorageConfiguration(cfg *ini.File, configuration *Config) {
 	dbSection, _ := cfg.GetSection("database")
 	dbDialect, _ := dbSection.GetKey("dialect")
 	dbConnection, _ := dbSection.GetKey("connection-url")
@@ -143,5 +140,4 @@ func setupStorageConfiguration(cfg *ini.File, configuration *Config) error {
 	configuration.dbConnectionMaxLifetime = time.Duration(dbMaxLifetimeInSec.MustUint(0)) * time.Second
 	configuration.dbMaxIdleConnections = uint16(dbMaxIdleConnections.MustUint(10))
 	configuration.dbMaxOpenConnections = uint16(dbMaxOpenConnections.MustUint(50))
-	return nil
 }
