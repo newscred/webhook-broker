@@ -90,6 +90,23 @@ func TestGetAutoConfiguration_Default(t *testing.T) {
 	assert.Equal(t, uint(3), config.GetMaxLogBackups())
 	assert.Equal(t, true, config.IsCompressionEnabledOnLogBackups())
 	assert.Equal(t, true, config.IsLoggerConfigAvailable())
+	seedData := config.GetSeedData()
+	assert.Equal(t, 1, len(seedData.Channels))
+	assert.Equal(t, 1, len(seedData.Producers))
+	assert.Equal(t, 1, len(seedData.Consumers))
+	seedChannel := seedData.Channels[0]
+	assert.Equal(t, "sample-channel", seedChannel.ID)
+	assert.Equal(t, "Sample Channel", seedChannel.Name)
+	assert.Equal(t, "sample-channel-token", seedChannel.Token)
+	seedProducer := seedData.Producers[0]
+	assert.Equal(t, "sample-producer", seedProducer.ID)
+	assert.Equal(t, "Sample Producer", seedProducer.Name)
+	assert.Equal(t, "sample-producer-token", seedProducer.Token)
+	seedConsumer := seedData.Consumers[0]
+	assert.Equal(t, "sample-consumer", seedConsumer.ID)
+	assert.Equal(t, "sample-consumer", seedConsumer.Name)
+	assert.Equal(t, "sample-consumer-token", seedConsumer.Token)
+	assert.Equal(t, "http://sample-endpoint/webhook-receiver", seedConsumer.CallbackURL)
 }
 
 func TestGetAutoConfiguration_WrongValues(t *testing.T) {
@@ -166,6 +183,49 @@ func TestGetConfiguration(t *testing.T) {
 	assert.Equal(t, uint(30), config.GetMaxLogBackups())
 	assert.Equal(t, false, config.IsCompressionEnabledOnLogBackups())
 	assert.Equal(t, false, config.IsLoggerConfigAvailable())
+	seedData := config.GetSeedData()
+	assert.Equal(t, 3, len(seedData.Channels))
+	assert.Equal(t, 3, len(seedData.Producers))
+	assert.Equal(t, 3, len(seedData.Consumers))
+	seedChannel := seedData.Channels[0]
+	assert.Equal(t, "sample-channel", seedChannel.ID)
+	assert.Equal(t, "Sample Channel", seedChannel.Name)
+	assert.Equal(t, "sample-channel-token", seedChannel.Token)
+	seedChannel = seedData.Channels[1]
+	assert.Equal(t, "test-channel", seedChannel.ID)
+	assert.Equal(t, "Test Channel", seedChannel.Name)
+	assert.Equal(t, "test-channel-token", seedChannel.Token)
+	seedChannel = seedData.Channels[2]
+	assert.Equal(t, "test-channel2", seedChannel.ID)
+	assert.Equal(t, "Test Channel 2", seedChannel.Name)
+	assert.Equal(t, "", seedChannel.Token)
+	seedProducer := seedData.Producers[0]
+	assert.Equal(t, "sample-producer", seedProducer.ID)
+	assert.Equal(t, "Sample Producer", seedProducer.Name)
+	assert.Equal(t, "sample-producer-token", seedProducer.Token)
+	seedProducer = seedData.Producers[1]
+	assert.Equal(t, "test-producer", seedProducer.ID)
+	assert.Equal(t, "Test Producer", seedProducer.Name)
+	assert.Equal(t, "test-producer-token", seedProducer.Token)
+	seedProducer = seedData.Producers[2]
+	assert.Equal(t, "test-producer2", seedProducer.ID)
+	assert.Equal(t, "Test Producer 2", seedProducer.Name)
+	assert.Equal(t, "", seedProducer.Token)
+	seedConsumer := seedData.Consumers[0]
+	assert.Equal(t, "sample-consumer", seedConsumer.ID)
+	assert.Equal(t, "sample-consumer", seedConsumer.Name)
+	assert.Equal(t, "sample-consumer-token", seedConsumer.Token)
+	assert.Equal(t, "http://sample-endpoint/webhook-receiver", seedConsumer.CallbackURL)
+	seedConsumer = seedData.Consumers[1]
+	assert.Equal(t, "test-consumer", seedConsumer.ID)
+	assert.Equal(t, "test-consumer", seedConsumer.Name)
+	assert.Equal(t, "test-consumer-token", seedConsumer.Token)
+	assert.Equal(t, "http://imy13.us/webhook-receiver", seedConsumer.CallbackURL)
+	seedConsumer = seedData.Consumers[2]
+	assert.Equal(t, "test-consumer4", seedConsumer.ID)
+	assert.Equal(t, "test-consumer4", seedConsumer.Name)
+	assert.Equal(t, "", seedConsumer.Token)
+	assert.Equal(t, "http://imy13.us/webhook-receiver1", seedConsumer.CallbackURL)
 }
 
 func TestGetVersion(t *testing.T) {
@@ -176,4 +236,5 @@ func TestConfigInterfaces(t *testing.T) {
 	var _ DBConfig = (*Config)(nil)
 	var _ HTTPConfig = (*Config)(nil)
 	var _ LogConfig = (*Config)(nil)
+	var _ SeedDataConfig = (*Config)(nil)
 }

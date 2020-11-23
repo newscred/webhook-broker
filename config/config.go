@@ -1,6 +1,7 @@
 package config
 
 import (
+	"net/url"
 	"os/user"
 	"time"
 
@@ -313,5 +314,52 @@ func setupLogConfiguration(cfg *ini.File, configuration *Config) {
 }
 
 func setupSeedDataConfiguration(cfg *ini.File, configuration *Config) {
+	seedData := SeedData{}
 
+	initialChannels, _ := cfg.GetSection("initial-channels")
+	initialChannelTokens, _ := cfg.GetSection("initial-channel-tokens")
+	seedChannels := make([]SeedChannel, len(initialChannels.Keys()))
+	for chanIndex, channel := range initialChannels.Keys() {
+		token, tokenErr := initialChannelTokens.GetKey(channel.Name())
+		seedChannel := SeedChannel{ID: channel.Name(), Name: channel.MustString("")}
+		if tokenErr == nil {
+			seedChannel.Token = token.MustString("")
+		}
+		seedChannels[chanIndex] = seedChannel
+	}
+	seedData.Channels = seedChannels
+
+	initialProducers, _ := cfg.GetSection("initial-producers")
+	initialProducerTokens, _ := cfg.GetSection("initial-producer-tokens")
+	seedProducers := make([]SeedProducer, len(initialProducers.Keys()))
+	for prodIndex, channel := range initialProducers.Keys() {
+		token, tokenErr := initialProducerTokens.GetKey(channel.Name())
+		seedProducer := SeedProducer{ID: channel.Name(), Name: channel.MustString("")}
+		if tokenErr == nil {
+			seedProducer.Token = token.MustString("")
+		}
+		seedProducers[prodIndex] = seedProducer
+	}
+	seedData.Producers = seedProducers
+
+	initialConsumers, _ := cfg.GetSection("initial-consumers")
+	initialConsumerTokens, _ := cfg.GetSection("initial-consumer-tokens")
+	seedConsumers := make([]SeedConsumer, 0, len(initialConsumers.Keys()))
+	for _, channel := range initialConsumers.Keys() {
+		token, tokenErr := initialConsumerTokens.GetKey(channel.Name())
+		seedConsumer := SeedConsumer{}
+		seedConsumer.ID = channel.Name()
+		seedConsumer.Name = channel.Name()
+		seedConsumer.CallbackURL = channel.MustString("")
+		if tokenErr == nil {
+			seedConsumer.Token = token.MustString("")
+		}
+		consumerCallbackURL, urlErr := url.Parse(seedConsumer.CallbackURL)
+		if urlErr == nil && consumerCallbackURL.IsAbs() {
+			seedConsumers = append(seedConsumers, seedConsumer)
+		}
+	}
+	seedData.Consumers = seedConsumers
+
+	configuration.SeedData = seedData
 }
