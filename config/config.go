@@ -40,6 +40,30 @@ const (
 	max-backups=3
 	max-age-in-days=28
 	compress-backups=true
+	[broker]
+	max-message-queue-size=10000
+	max-workers=200
+	priority-dispatcher-enabled=true
+	retrigger-base-endpoint=http://localhost:8080
+	max-retry=5
+	rational-delay-in-seconds=20
+	retry-backoff-delays-in-seconds=5,30,60
+	[consumer-connection]
+	token-header-name=X-Broker-Consumer-Token
+	user-agent=Webhook Message Broker
+	connection-timeout-in-seconds=30
+	[initial-channels]
+	sample-channel=Sample Channel
+	[initial-producers]
+	sample-producer=Sample Producer
+	[initial-consumers]
+	sample-consumer=http://sample-endpoint/webhook-receiver
+	[initial-channel-tokens]
+	sample-channel=sample-channel-token
+	[initial-producer-tokens]
+	sample-producer=sample-producer-token
+	[initial-consumer-tokens]
+	sample-consumer=sample-consumer-token
 	`
 )
 

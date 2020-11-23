@@ -28,6 +28,41 @@ const (
 	max-backups=asd3
 	max-age-in-days=dasd28
 	compress-backups=asdtrue
+	# Generic Webhook Broker config such as - Max message queue size, max workers, priority dispatcher on, retrigger base-endpoint
+	[broker]
+	max-message-queue-size=asd10000
+	max-workers=asd200
+	priority-dispatcher-enabled=adtrue
+	retrigger-base-endpoint=http:/localhost:8080
+	max-retry=5ad
+	rational-delay-in-seconds=2sd0
+	retry-backoff-delays-in-seconds=5,30,asd 6a 0
+
+	# Generic consumer configuration such as - Token Header name, User Agent, Consumer connection timeout
+	[consumer-connection]
+	token-header-name=X-Broker-Consumer-Token
+	user-agent=Webhook Message Broker
+	connection-timeout-in-seconds=a d3d0
+
+	# Preemptive Channel, Producer, Consumer setup
+	[initial-channels]
+	sample-channel=Sample Channel
+
+	[initial-producers]
+	sample-producer=Sample Producer
+
+	[initial-consumers]
+	sample-consumer=http://sample-endpoint/webhook-receiver
+
+	# Support for preemptive token setup for the aboves
+	[initial-channel-tokens]
+	sample-channel=sample-channel-token
+
+	[initial-producer-tokens]
+	sample-producer=sample-producer-token
+
+	[initial-consumer-tokens]
+	sample-consumer=sample-consumer-token
 	`
 	errorConfig = `[database]
 	asda sdads
