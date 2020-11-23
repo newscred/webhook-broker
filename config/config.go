@@ -118,97 +118,136 @@ type LogConfig interface {
 	IsCompressionEnabledOnLogBackups() bool
 }
 
+// SeedProducer represents the pre configured producer via configuration
+type SeedProducer struct {
+	// ID is the ID of the data
+	ID string
+	// Name is name of the data
+	Name string
+	// Token is the pre configured token of the data
+	Token string
+}
+
+// SeedChannel represents pre configured channel via configuration
+type SeedChannel SeedProducer
+
+// SeedConsumer represents pre configured consumer via configuration
+type SeedConsumer struct {
+	SeedProducer
+	// CallbackURL represents the URl to call back
+	CallbackURL string
+}
+
+// SeedData represents data specified in configuration to ensure is present when app starts up
+type SeedData struct {
+	DataHash  string
+	Producers []SeedProducer
+	Channels  []SeedChannel
+	Consumers []SeedConsumer
+}
+
+// SeedDataConfig provides the interface for working with SeedData in configuration
+type SeedDataConfig interface {
+	GetSeedData() SeedData
+}
+
 //Config represents the application configuration
 type Config struct {
-	dbDialect               string
-	dbConnectionURL         string
-	dbConnectionMaxIdleTime time.Duration
-	dbConnectionMaxLifetime time.Duration
-	dbMaxIdleConnections    uint16
-	dbMaxOpenConnections    uint16
-	httpListeningAddr       string
-	httpReadTimeout         uint
-	httpWriteTimeout        uint
-	logFilename             string
-	maxFileSize             uint
-	maxBackups              uint
-	maxAge                  uint
-	compressBackupsEnabled  bool
+	DBDialect               string
+	DBConnectionURL         string
+	DBConnectionMaxIdleTime time.Duration
+	DBConnectionMaxLifetime time.Duration
+	DBMaxIdleConnections    uint16
+	DBMaxOpenConnections    uint16
+	HTTPListeningAddr       string
+	HTTPReadTimeout         uint
+	HTTPWriteTimeout        uint
+	LogFilename             string
+	MaxFileSize             uint
+	MaxBackups              uint
+	MaxAge                  uint
+	CompressBackupsEnabled  bool
+	SeedData                SeedData
 }
 
 // GetDBDialect returns the DB dialect of the configuration
 func (config *Config) GetDBDialect() string {
-	return config.dbDialect
+	return config.DBDialect
 }
 
 // GetDBConnectionURL returns the DB Connection URL string
 func (config *Config) GetDBConnectionURL() string {
-	return config.dbConnectionURL
+	return config.DBConnectionURL
 }
 
 // GetDBConnectionMaxIdleTime returns the DB Connection max idle time
 func (config *Config) GetDBConnectionMaxIdleTime() time.Duration {
-	return config.dbConnectionMaxIdleTime
+	return config.DBConnectionMaxIdleTime
 }
 
 // GetDBConnectionMaxLifetime returns the DB Connection max lifetime
 func (config *Config) GetDBConnectionMaxLifetime() time.Duration {
-	return config.dbConnectionMaxLifetime
+	return config.DBConnectionMaxLifetime
 }
 
 // GetMaxIdleDBConnections returns the maximum number of idle DB connections to retain in pool
 func (config *Config) GetMaxIdleDBConnections() uint16 {
-	return config.dbMaxIdleConnections
+	return config.DBMaxIdleConnections
 }
 
 // GetMaxOpenDBConnections returns the maximum number of concurrent DB connections to keep open
 func (config *Config) GetMaxOpenDBConnections() uint16 {
-	return config.dbMaxOpenConnections
+	return config.DBMaxOpenConnections
 }
 
 // GetHTTPListeningAddr retrieves the connection string to listen to
 func (config *Config) GetHTTPListeningAddr() string {
-	return config.httpListeningAddr
+	return config.HTTPListeningAddr
 }
 
 // GetHTTPReadTimeout retrieves the connection read timeout
 func (config *Config) GetHTTPReadTimeout() uint {
-	return config.httpReadTimeout
+	return config.HTTPReadTimeout
 }
 
 // GetHTTPWriteTimeout retrieves the connection write timeout
 func (config *Config) GetHTTPWriteTimeout() uint {
-	return config.httpWriteTimeout
+	return config.HTTPWriteTimeout
 }
 
 // IsLoggerConfigAvailable checks is logger configuration is set since its optional
 func (config *Config) IsLoggerConfigAvailable() bool {
-	return len(config.logFilename) > 0
+	return len(config.LogFilename) > 0
 }
 
 // GetLogFilename retrieves the file name of the log
 func (config *Config) GetLogFilename() string {
-	return config.logFilename
+	return config.LogFilename
 }
 
 // GetMaxLogFileSize retrieves the max log file size before its rotated in MB
 func (config *Config) GetMaxLogFileSize() uint {
-	return config.maxFileSize
+	return config.MaxFileSize
 }
 
 // GetMaxLogBackups retrieves max rotated logs to retain
 func (config *Config) GetMaxLogBackups() uint {
-	return config.maxBackups
+	return config.MaxBackups
 }
 
 // GetMaxAgeForALogFile retrieves maximum day to retain a rotated log file
 func (config *Config) GetMaxAgeForALogFile() uint {
-	return config.maxAge
+	return config.MaxAge
 }
 
 // IsCompressionEnabledOnLogBackups checks if log backups are compressed
 func (config *Config) IsCompressionEnabledOnLogBackups() bool {
-	return config.compressBackupsEnabled
+	return config.CompressBackupsEnabled
+}
+
+// GetSeedData returns the seed data configuration
+func (config *Config) GetSeedData() SeedData {
+	return config.SeedData
 }
 
 // func (config *Config) () {}
@@ -229,6 +268,7 @@ func GetConfiguration(configFilePath string) (*Config, error) {
 	setupStorageConfiguration(cfg, configuration)
 	setupHTTPConfiguration(cfg, configuration)
 	setupLogConfiguration(cfg, configuration)
+	setupSeedDataConfiguration(cfg, configuration)
 	return configuration, nil
 }
 
@@ -240,12 +280,12 @@ func setupStorageConfiguration(cfg *ini.File, configuration *Config) {
 	dbMaxLifetimeInSec, _ := dbSection.GetKey("connxn-max-lifetime-seconds")
 	dbMaxIdleConnections, _ := dbSection.GetKey("max-idle-connxns")
 	dbMaxOpenConnections, _ := dbSection.GetKey("max-open-connxns")
-	configuration.dbDialect = dbDialect.String()
-	configuration.dbConnectionURL = dbConnection.String()
-	configuration.dbConnectionMaxIdleTime = time.Duration(dbMaxIdleTimeInSec.MustUint(0)) * time.Second
-	configuration.dbConnectionMaxLifetime = time.Duration(dbMaxLifetimeInSec.MustUint(0)) * time.Second
-	configuration.dbMaxIdleConnections = uint16(dbMaxIdleConnections.MustUint(10))
-	configuration.dbMaxOpenConnections = uint16(dbMaxOpenConnections.MustUint(50))
+	configuration.DBDialect = dbDialect.String()
+	configuration.DBConnectionURL = dbConnection.String()
+	configuration.DBConnectionMaxIdleTime = time.Duration(dbMaxIdleTimeInSec.MustUint(0)) * time.Second
+	configuration.DBConnectionMaxLifetime = time.Duration(dbMaxLifetimeInSec.MustUint(0)) * time.Second
+	configuration.DBMaxIdleConnections = uint16(dbMaxIdleConnections.MustUint(10))
+	configuration.DBMaxOpenConnections = uint16(dbMaxOpenConnections.MustUint(50))
 }
 
 func setupHTTPConfiguration(cfg *ini.File, configuration *Config) {
@@ -253,9 +293,9 @@ func setupHTTPConfiguration(cfg *ini.File, configuration *Config) {
 	httpListener, _ := httpSection.GetKey("listener")
 	httpReadTimeout, _ := httpSection.GetKey("read-timeout")
 	httpWriteTimeout, _ := httpSection.GetKey("write-timeout")
-	configuration.httpListeningAddr = httpListener.String()
-	configuration.httpReadTimeout = httpReadTimeout.MustUint(180)
-	configuration.httpWriteTimeout = httpWriteTimeout.MustUint(180)
+	configuration.HTTPListeningAddr = httpListener.String()
+	configuration.HTTPReadTimeout = httpReadTimeout.MustUint(180)
+	configuration.HTTPWriteTimeout = httpWriteTimeout.MustUint(180)
 }
 
 func setupLogConfiguration(cfg *ini.File, configuration *Config) {
@@ -265,9 +305,13 @@ func setupLogConfiguration(cfg *ini.File, configuration *Config) {
 	maxBackupsKey, _ := logSection.GetKey("max-backups")
 	maxAgeKey, _ := logSection.GetKey("max-age-in-days")
 	compressEnabledKey, _ := logSection.GetKey("compress-backups")
-	configuration.logFilename = logFilenameKey.String()
-	configuration.maxFileSize = maxFileSizeKey.MustUint(50)
-	configuration.maxBackups = maxBackupsKey.MustUint(1)
-	configuration.maxAge = maxAgeKey.MustUint(30)
-	configuration.compressBackupsEnabled = compressEnabledKey.MustBool(false)
+	configuration.LogFilename = logFilenameKey.String()
+	configuration.MaxFileSize = maxFileSizeKey.MustUint(50)
+	configuration.MaxBackups = maxBackupsKey.MustUint(1)
+	configuration.MaxAge = maxAgeKey.MustUint(30)
+	configuration.CompressBackupsEnabled = compressEnabledKey.MustBool(false)
+}
+
+func setupSeedDataConfiguration(cfg *ini.File, configuration *Config) {
+
 }
