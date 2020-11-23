@@ -8,3 +8,7 @@ connxn-max-lifetime-seconds=0
 max-idle-connxns=30
 max-open-connxns=100
 
+[http]
+listener=:8080
+read-timeout=240
+write-timeout=240

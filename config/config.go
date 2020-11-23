@@ -30,6 +30,10 @@ const (
 	connxn-max-lifetime-seconds=0
 	max-idle-connxns=30
 	max-open-connxns=100
+	[http]
+	listener=:8080
+	read-timeout=240
+	write-timeout=240
 	`
 )
 
@@ -67,6 +71,13 @@ type DBConfig interface {
 	GetMaxOpenDBConnections() uint16
 }
 
+// HTTPConfig represents the HTTP configuration related behaviors
+type HTTPConfig interface {
+	GetHTTPListeningAddr() string
+	GetHTTPReadTimeout() uint
+	GetHTTPWriteTimeout() uint
+}
+
 //Config represents the application configuration
 type Config struct {
 	dbDialect               string
@@ -75,6 +86,9 @@ type Config struct {
 	dbConnectionMaxLifetime time.Duration
 	dbMaxIdleConnections    uint16
 	dbMaxOpenConnections    uint16
+	httpListeningAddr       string
+	httpReadTimeout         uint
+	httpWriteTimeout        uint
 }
 
 // GetDBDialect returns the DB dialect of the configuration
@@ -107,6 +121,21 @@ func (config *Config) GetMaxOpenDBConnections() uint16 {
 	return config.dbMaxOpenConnections
 }
 
+// GetHTTPListeningAddr retrieves the connection string to listen to
+func (config *Config) GetHTTPListeningAddr() string {
+	return config.httpListeningAddr
+}
+
+// GetHTTPReadTimeout retrieves the connection read timeout
+func (config *Config) GetHTTPReadTimeout() uint {
+	return config.httpReadTimeout
+}
+
+// GetHTTPWriteTimeout retrieves the connection write timeout
+func (config *Config) GetHTTPWriteTimeout() uint {
+	return config.httpWriteTimeout
+}
+
 // func (config *Config) () {}
 
 // GetAutoConfiguration gets configuration from default config and system defined path chain of
@@ -123,6 +152,7 @@ func GetConfiguration(configFilePath string) (*Config, error) {
 		return EmptyConfigurationForError, err
 	}
 	setupStorageConfiguration(cfg, configuration)
+	setupHTTPConfiguration(cfg, configuration)
 	return configuration, nil
 }
 
@@ -140,4 +170,14 @@ func setupStorageConfiguration(cfg *ini.File, configuration *Config) {
 	configuration.dbConnectionMaxLifetime = time.Duration(dbMaxLifetimeInSec.MustUint(0)) * time.Second
 	configuration.dbMaxIdleConnections = uint16(dbMaxIdleConnections.MustUint(10))
 	configuration.dbMaxOpenConnections = uint16(dbMaxOpenConnections.MustUint(50))
+}
+
+func setupHTTPConfiguration(cfg *ini.File, configuration *Config) {
+	httpSection, _ := cfg.GetSection("http")
+	httpListener, _ := httpSection.GetKey("listener")
+	httpReadTimeout, _ := httpSection.GetKey("read-timeout")
+	httpWriteTimeout, _ := httpSection.GetKey("write-timeout")
+	configuration.httpListeningAddr = httpListener.String()
+	configuration.httpReadTimeout = httpReadTimeout.MustUint(180)
+	configuration.httpWriteTimeout = httpWriteTimeout.MustUint(180)
 }

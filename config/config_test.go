@@ -18,6 +18,10 @@ const (
 	connxn-max-lifetime-seconds=ascx0x
 	max-idle-connxns=as30
 	max-open-connxns=-100
+	[http]
+	listener=:6080
+	read-timeout=asd240
+	write-timeout=zf240
 	`
 	errorConfig = `[database]
 	asda sdads
@@ -36,6 +40,9 @@ func TestGetAutoConfiguration_Default(t *testing.T) {
 	assert.Equal(t, time.Duration(0), config.GetDBConnectionMaxLifetime())
 	assert.Equal(t, uint16(30), config.GetMaxIdleDBConnections())
 	assert.Equal(t, uint16(100), config.GetMaxOpenDBConnections())
+	assert.Equal(t, ":8080", config.GetHTTPListeningAddr())
+	assert.Equal(t, uint(240), config.GetHTTPReadTimeout())
+	assert.Equal(t, uint(240), config.GetHTTPWriteTimeout())
 }
 
 func TestGetAutoConfiguration_WrongValues(t *testing.T) {
@@ -50,6 +57,9 @@ func TestGetAutoConfiguration_WrongValues(t *testing.T) {
 	assert.Equal(t, time.Duration(0), config.GetDBConnectionMaxLifetime())
 	assert.Equal(t, uint16(10), config.GetMaxIdleDBConnections())
 	assert.Equal(t, uint16(50), config.GetMaxOpenDBConnections())
+	assert.Equal(t, ":6080", config.GetHTTPListeningAddr())
+	assert.Equal(t, uint(180), config.GetHTTPReadTimeout())
+	assert.Equal(t, uint(180), config.GetHTTPWriteTimeout())
 	defer func() {
 		loadConfiguration = defaultLoadFunc
 	}()
@@ -94,6 +104,9 @@ func TestGetConfiguration(t *testing.T) {
 	assert.Equal(t, time.Duration(10)*time.Second, config.GetDBConnectionMaxLifetime())
 	assert.Equal(t, uint16(300), config.GetMaxIdleDBConnections())
 	assert.Equal(t, uint16(1000), config.GetMaxOpenDBConnections())
+	assert.Equal(t, ":7080", config.GetHTTPListeningAddr())
+	assert.Equal(t, uint(2401), config.GetHTTPReadTimeout())
+	assert.Equal(t, uint(2401), config.GetHTTPWriteTimeout())
 }
 
 func TestGetVersion(t *testing.T) {
@@ -102,4 +115,5 @@ func TestGetVersion(t *testing.T) {
 
 func TestConfigInterfaces(t *testing.T) {
 	var _ DBConfig = (*Config)(nil)
+	var _ HTTPConfig = (*Config)(nil)
 }
