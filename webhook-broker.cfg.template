@@ -12,3 +12,10 @@ max-open-connxns=100
 listener=:8080
 read-timeout=240
 write-timeout=240
+
+[log]
+filename=/var/log/webhook-broker.log
+max-file-size-in-mb=200
+max-backups=3
+max-age-in-days=28
+compress-backups=true

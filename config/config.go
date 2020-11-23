@@ -34,6 +34,12 @@ const (
 	listener=:8080
 	read-timeout=240
 	write-timeout=240
+	[log]
+	filename=/var/log/webhook-broker.log
+	max-file-size-in-mb=200
+	max-backups=3
+	max-age-in-days=28
+	compress-backups=true
 	`
 )
 
@@ -78,6 +84,16 @@ type HTTPConfig interface {
 	GetHTTPWriteTimeout() uint
 }
 
+// LogConfig represents the interface for log related configuration
+type LogConfig interface {
+	IsLoggerConfigAvailable() bool
+	GetLogFilename() string
+	GetMaxLogFileSize() uint
+	GetMaxLogBackups() uint
+	GetMaxAgeForALogFile() uint
+	IsCompressionEnabledOnLogBackups() bool
+}
+
 //Config represents the application configuration
 type Config struct {
 	dbDialect               string
@@ -89,6 +105,11 @@ type Config struct {
 	httpListeningAddr       string
 	httpReadTimeout         uint
 	httpWriteTimeout        uint
+	logFilename             string
+	maxFileSize             uint
+	maxBackups              uint
+	maxAge                  uint
+	compressBackupsEnabled  bool
 }
 
 // GetDBDialect returns the DB dialect of the configuration
@@ -136,6 +157,36 @@ func (config *Config) GetHTTPWriteTimeout() uint {
 	return config.httpWriteTimeout
 }
 
+// IsLoggerConfigAvailable checks is logger configuration is set since its optional
+func (config *Config) IsLoggerConfigAvailable() bool {
+	return len(config.logFilename) > 0
+}
+
+// GetLogFilename retrieves the file name of the log
+func (config *Config) GetLogFilename() string {
+	return config.logFilename
+}
+
+// GetMaxLogFileSize retrieves the max log file size before its rotated in MB
+func (config *Config) GetMaxLogFileSize() uint {
+	return config.maxFileSize
+}
+
+// GetMaxLogBackups retrieves max rotated logs to retain
+func (config *Config) GetMaxLogBackups() uint {
+	return config.maxBackups
+}
+
+// GetMaxAgeForALogFile retrieves maximum day to retain a rotated log file
+func (config *Config) GetMaxAgeForALogFile() uint {
+	return config.maxAge
+}
+
+// IsCompressionEnabledOnLogBackups checks if log backups are compressed
+func (config *Config) IsCompressionEnabledOnLogBackups() bool {
+	return config.compressBackupsEnabled
+}
+
 // func (config *Config) () {}
 
 // GetAutoConfiguration gets configuration from default config and system defined path chain of
@@ -153,6 +204,7 @@ func GetConfiguration(configFilePath string) (*Config, error) {
 	}
 	setupStorageConfiguration(cfg, configuration)
 	setupHTTPConfiguration(cfg, configuration)
+	setupLogConfiguration(cfg, configuration)
 	return configuration, nil
 }
 
@@ -180,4 +232,18 @@ func setupHTTPConfiguration(cfg *ini.File, configuration *Config) {
 	configuration.httpListeningAddr = httpListener.String()
 	configuration.httpReadTimeout = httpReadTimeout.MustUint(180)
 	configuration.httpWriteTimeout = httpWriteTimeout.MustUint(180)
+}
+
+func setupLogConfiguration(cfg *ini.File, configuration *Config) {
+	logSection, _ := cfg.GetSection("log")
+	logFilenameKey, _ := logSection.GetKey("filename")
+	maxFileSizeKey, _ := logSection.GetKey("max-file-size-in-mb")
+	maxBackupsKey, _ := logSection.GetKey("max-backups")
+	maxAgeKey, _ := logSection.GetKey("max-age-in-days")
+	compressEnabledKey, _ := logSection.GetKey("compress-backups")
+	configuration.logFilename = logFilenameKey.String()
+	configuration.maxFileSize = maxFileSizeKey.MustUint(50)
+	configuration.maxBackups = maxBackupsKey.MustUint(1)
+	configuration.maxAge = maxAgeKey.MustUint(30)
+	configuration.compressBackupsEnabled = compressEnabledKey.MustBool(false)
 }

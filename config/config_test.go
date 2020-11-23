@@ -22,6 +22,12 @@ const (
 	listener=:6080
 	read-timeout=asd240
 	write-timeout=zf240
+	[log]
+	filename=/var/log/webhook-broker.log
+	max-file-size-in-mb=as200
+	max-backups=asd3
+	max-age-in-days=dasd28
+	compress-backups=asdtrue
 	`
 	errorConfig = `[database]
 	asda sdads
@@ -43,6 +49,12 @@ func TestGetAutoConfiguration_Default(t *testing.T) {
 	assert.Equal(t, ":8080", config.GetHTTPListeningAddr())
 	assert.Equal(t, uint(240), config.GetHTTPReadTimeout())
 	assert.Equal(t, uint(240), config.GetHTTPWriteTimeout())
+	assert.Equal(t, "/var/log/webhook-broker.log", config.GetLogFilename())
+	assert.Equal(t, uint(200), config.GetMaxLogFileSize())
+	assert.Equal(t, uint(28), config.GetMaxAgeForALogFile())
+	assert.Equal(t, uint(3), config.GetMaxLogBackups())
+	assert.Equal(t, true, config.IsCompressionEnabledOnLogBackups())
+	assert.Equal(t, true, config.IsLoggerConfigAvailable())
 }
 
 func TestGetAutoConfiguration_WrongValues(t *testing.T) {
@@ -60,6 +72,12 @@ func TestGetAutoConfiguration_WrongValues(t *testing.T) {
 	assert.Equal(t, ":6080", config.GetHTTPListeningAddr())
 	assert.Equal(t, uint(180), config.GetHTTPReadTimeout())
 	assert.Equal(t, uint(180), config.GetHTTPWriteTimeout())
+	assert.Equal(t, "/var/log/webhook-broker.log", config.GetLogFilename())
+	assert.Equal(t, uint(50), config.GetMaxLogFileSize())
+	assert.Equal(t, uint(30), config.GetMaxAgeForALogFile())
+	assert.Equal(t, uint(1), config.GetMaxLogBackups())
+	assert.Equal(t, false, config.IsCompressionEnabledOnLogBackups())
+	assert.Equal(t, true, config.IsLoggerConfigAvailable())
 	defer func() {
 		loadConfiguration = defaultLoadFunc
 	}()
@@ -107,6 +125,12 @@ func TestGetConfiguration(t *testing.T) {
 	assert.Equal(t, ":7080", config.GetHTTPListeningAddr())
 	assert.Equal(t, uint(2401), config.GetHTTPReadTimeout())
 	assert.Equal(t, uint(2401), config.GetHTTPWriteTimeout())
+	assert.Equal(t, "", config.GetLogFilename())
+	assert.Equal(t, uint(20), config.GetMaxLogFileSize())
+	assert.Equal(t, uint(280), config.GetMaxAgeForALogFile())
+	assert.Equal(t, uint(30), config.GetMaxLogBackups())
+	assert.Equal(t, false, config.IsCompressionEnabledOnLogBackups())
+	assert.Equal(t, false, config.IsLoggerConfigAvailable())
 }
 
 func TestGetVersion(t *testing.T) {
@@ -116,4 +140,5 @@ func TestGetVersion(t *testing.T) {
 func TestConfigInterfaces(t *testing.T) {
 	var _ DBConfig = (*Config)(nil)
 	var _ HTTPConfig = (*Config)(nil)
+	var _ LogConfig = (*Config)(nil)
 }
