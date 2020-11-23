@@ -1,6 +1,8 @@
 package config
 
 import (
+	"errors"
+	"os/user"
 	"testing"
 	"time"
 
@@ -67,6 +69,20 @@ func TestGetAutoConfiguration_Error(t *testing.T) {
 	}()
 }
 
+func TestGetAutoConfiguration_CurrentUserError(t *testing.T) {
+	oldCurrentUser := currentUser
+	currentUser = func() (*user.User, error) {
+		return nil, errors.New("Unit test error")
+	}
+	_, cfgErr := GetAutoConfiguration()
+	if cfgErr != nil {
+		t.Error("Auto Configuration failed", cfgErr)
+	}
+	defer func() {
+		currentUser = oldCurrentUser
+	}()
+}
+
 func TestGetConfiguration(t *testing.T) {
 	config, cfgErr := GetConfiguration("./test-webhook-broker.cfg")
 	if cfgErr != nil {
@@ -78,6 +94,10 @@ func TestGetConfiguration(t *testing.T) {
 	assert.Equal(t, time.Duration(10)*time.Second, config.GetDBConnectionMaxLifetime())
 	assert.Equal(t, uint16(300), config.GetMaxIdleDBConnections())
 	assert.Equal(t, uint16(1000), config.GetMaxOpenDBConnections())
+}
+
+func TestGetVersion(t *testing.T) {
+	assert.NotEmpty(t, GetVersion())
 }
 
 func TestConfigInterfaces(t *testing.T) {

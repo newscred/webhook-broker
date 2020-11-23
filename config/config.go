@@ -37,20 +37,20 @@ var (
 	// EmptyConfigurationForError Represents the configuration instance to be
 	// used when there is a configuration error during load
 	EmptyConfigurationForError = &Config{}
-	// DefaultUserConfigFilePath is the default user home based location for config file path
-	DefaultUserConfigFilePath = getUserHomeDirBasedDefaultConfigFileLocation()
 
 	defaultLoadFunc = func(configFilePath string) (*ini.File, error) {
 		if len(configFilePath) > 0 {
-			return ini.LooseLoad([]byte(DefaultConfiguration), DefaultSystemConfigFilePath, DefaultUserConfigFilePath, DefaultCurrentDirConfigFilePath, configFilePath)
+			return ini.LooseLoad([]byte(DefaultConfiguration), DefaultSystemConfigFilePath, getUserHomeDirBasedDefaultConfigFileLocation(), DefaultCurrentDirConfigFilePath, configFilePath)
 		}
-		return ini.LooseLoad([]byte(DefaultConfiguration), DefaultSystemConfigFilePath, DefaultUserConfigFilePath, DefaultCurrentDirConfigFilePath)
+		return ini.LooseLoad([]byte(DefaultConfiguration), DefaultSystemConfigFilePath, getUserHomeDirBasedDefaultConfigFileLocation(), DefaultCurrentDirConfigFilePath)
 	}
 	loadConfiguration = defaultLoadFunc
 )
 
+var currentUser = user.Current
+
 func getUserHomeDirBasedDefaultConfigFileLocation() string {
-	user, err := user.Current()
+	user, err := currentUser()
 	if err != nil {
 		return DefaultCurrentDirConfigFilePath
 	}
