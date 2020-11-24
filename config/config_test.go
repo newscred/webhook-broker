@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	wrongValueConfig = `[database]
+	wrongValueConfig = `[rdbms]
 	dialect=mysql
 	connection-url=webhook_broker:zxc909zxc@tcp(mysql:3306)/webhook-broker?charset=utf8&parseTime=True
 	connxn-max-idle-time-seconds=-10
@@ -64,7 +64,7 @@ const (
 	[initial-consumer-tokens]
 	sample-consumer=sample-consumer-token
 	`
-	errorConfig = `[database]
+	errorConfig = `[rdbms]
 	asda sdads
 	connection-url=webhook_broker:zxc909zxc@tcp(mysql:3306)/webhook-broker?charset=utf8&parseTime=True
 	`
@@ -242,7 +242,7 @@ func TestGetVersion(t *testing.T) {
 }
 
 func TestConfigInterfaces(t *testing.T) {
-	var _ DBConfig = (*Config)(nil)
+	var _ RelationalDatabaseConfig = (*Config)(nil)
 	var _ HTTPConfig = (*Config)(nil)
 	var _ LogConfig = (*Config)(nil)
 	var _ SeedDataConfig = (*Config)(nil)

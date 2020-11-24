@@ -24,7 +24,7 @@ const (
 	// DefaultCurrentDirConfigFilePath is the config file path based on current working dir
 	DefaultCurrentDirConfigFilePath = ConfigFilename
 	// DefaultConfiguration is the configuration that will be in effect if no configuration is loaded from any of the expected locations
-	DefaultConfiguration = `[database]
+	DefaultConfiguration = `[rdbms]
 	dialect=mysql
 	connection-url=webhook_broker:zxc909zxc@tcp(mysql:3306)/webhook-broker?charset=utf8&parseTime=True
 	connxn-max-idle-time-seconds=0
@@ -92,8 +92,8 @@ func getUserHomeDirBasedDefaultConfigFileLocation() string {
 	return user.HomeDir + "/.webhook-broker/" + ConfigFilename
 }
 
-// DBConfig represents DB configuration related behaviors
-type DBConfig interface {
+// RelationalDatabaseConfig represents DB configuration related behaviors
+type RelationalDatabaseConfig interface {
 	GetDBDialect() string
 	GetDBConnectionURL() string
 	GetDBConnectionMaxIdleTime() time.Duration
@@ -317,7 +317,7 @@ func validateConfigurationState(configuration *Config) error {
 }
 
 func setupStorageConfiguration(cfg *ini.File, configuration *Config) {
-	dbSection, _ := cfg.GetSection("database")
+	dbSection, _ := cfg.GetSection("rdbms")
 	dbDialect, _ := dbSection.GetKey("dialect")
 	dbConnection, _ := dbSection.GetKey("connection-url")
 	dbMaxIdleTimeInSec, _ := dbSection.GetKey("connxn-max-idle-time-seconds")

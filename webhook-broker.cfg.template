@@ -1,7 +1,7 @@
 # This is the default configuration to be used even if none supplied
 
 # Database connection settings
-[database]
+[rdbms]
 dialect=mysql
 connection-url=webhook_broker:zxc909zxc@tcp(mysql:3306)/webhook-broker?charset=utf8&parseTime=True
 connxn-max-idle-time-seconds=0
