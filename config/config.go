@@ -152,6 +152,13 @@ type SeedDataConfig interface {
 	GetSeedData() SeedData
 }
 
+// ConsumerConnectionConfig provides the interface for working with consumer connection related configuration
+type ConsumerConnectionConfig interface {
+	GetTokenRequestHeaderName() string
+	GetUserAgent() string
+	GetConnectionTimeout() time.Duration
+}
+
 //Config represents the application configuration
 type Config struct {
 	DBDialect               string
@@ -169,6 +176,9 @@ type Config struct {
 	MaxAge                  uint
 	CompressBackupsEnabled  bool
 	SeedData                SeedData
+	TokenRequestHeaderName  string
+	UserAgent               string
+	ConnectionTimeout       time.Duration
 }
 
 // GetDBDialect returns the DB dialect of the configuration
@@ -251,6 +261,21 @@ func (config *Config) GetSeedData() SeedData {
 	return config.SeedData
 }
 
+// GetTokenRequestHeaderName returns the Token request header to pass to the consumers
+func (config *Config) GetTokenRequestHeaderName() string {
+	return config.TokenRequestHeaderName
+}
+
+// GetUserAgent returns the user agent string for consumer HTTP connection
+func (config *Config) GetUserAgent() string {
+	return config.UserAgent
+}
+
+// GetConnectionTimeout returns the connection timeout from broker to consumer
+func (config *Config) GetConnectionTimeout() time.Duration {
+	return config.ConnectionTimeout
+}
+
 // func (config *Config) () {}
 
 // GetAutoConfiguration gets configuration from default config and system defined path chain of
@@ -270,7 +295,25 @@ func GetConfiguration(configFilePath string) (*Config, error) {
 	setupHTTPConfiguration(cfg, configuration)
 	setupLogConfiguration(cfg, configuration)
 	setupSeedDataConfiguration(cfg, configuration)
+	setupConsumerConnectionConfiguration(cfg, configuration)
+	validateConfigurationState(configuration)
 	return configuration, nil
+}
+
+func validateConfigurationState(configuration *Config) error {
+	if len(configuration.TokenRequestHeaderName) <= 0 {
+		configuration.TokenRequestHeaderName = "X-Broker-Consumer-Token"
+	}
+	if len(configuration.UserAgent) <= 0 {
+		configuration.UserAgent = "Webhook Message Broker"
+	}
+	if len(configuration.HTTPListeningAddr) <= 0 {
+		configuration.HTTPListeningAddr = ":8080"
+	}
+	// Check Listener Address port is open
+	// Check DB Connection is valid
+	// Check retrigger endpoint is a valid Absolute URL
+	return nil
 }
 
 func setupStorageConfiguration(cfg *ini.File, configuration *Config) {
@@ -347,10 +390,7 @@ func setupSeedDataConfiguration(cfg *ini.File, configuration *Config) {
 	seedConsumers := make([]SeedConsumer, 0, len(initialConsumers.Keys()))
 	for _, channel := range initialConsumers.Keys() {
 		token, tokenErr := initialConsumerTokens.GetKey(channel.Name())
-		seedConsumer := SeedConsumer{}
-		seedConsumer.ID = channel.Name()
-		seedConsumer.Name = channel.Name()
-		seedConsumer.CallbackURL = channel.MustString("")
+		seedConsumer := SeedConsumer{SeedProducer: SeedProducer{ID: channel.Name(), Name: channel.Name()}, CallbackURL: channel.MustString("")}
 		if tokenErr == nil {
 			seedConsumer.Token = token.MustString("")
 		}
@@ -362,4 +402,14 @@ func setupSeedDataConfiguration(cfg *ini.File, configuration *Config) {
 	seedData.Consumers = seedConsumers
 
 	configuration.SeedData = seedData
+}
+
+func setupConsumerConnectionConfiguration(cfg *ini.File, configuration *Config) {
+	consumerConnection, _ := cfg.GetSection("consumer-connection")
+	tokenHeaderName, _ := consumerConnection.GetKey("token-header-name")
+	userAgent, _ := consumerConnection.GetKey("user-agent")
+	connectionTimeoutInSecs, _ := consumerConnection.GetKey("connection-timeout-in-seconds")
+	configuration.TokenRequestHeaderName = tokenHeaderName.MustString("")
+	configuration.UserAgent = userAgent.MustString("")
+	configuration.ConnectionTimeout = time.Duration(connectionTimeoutInSecs.MustUint(60)) * time.Second
 }

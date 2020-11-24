@@ -11,6 +11,7 @@ max-open-connxns=100
 
 # HTTP Server settings
 [http]
+# Listener address must be bindable else it will error out
 listener=:8080
 read-timeout=240
 write-timeout=240
@@ -28,6 +29,7 @@ compress-backups=true
 max-message-queue-size=10000
 max-workers=200
 priority-dispatcher-enabled=true
+# If retrigger base endpoint is not a absolute URL config initialization will error out
 retrigger-base-endpoint=http://localhost:8080
 max-retry=5
 rational-delay-in-seconds=20
@@ -47,6 +49,7 @@ sample-channel=Sample Channel
 sample-producer=Sample Producer
 
 [initial-consumers]
+# If consumer callback URL is not a absolute URL the consumer will be ignored
 sample-consumer=http://sample-endpoint/webhook-receiver
 
 # Support for preemptive token setup for the aboves

@@ -19,7 +19,7 @@ const (
 	max-idle-connxns=as30
 	max-open-connxns=-100
 	[http]
-	listener=:6080
+	listener=
 	read-timeout=asd240
 	write-timeout=zf240
 	[log]
@@ -40,8 +40,8 @@ const (
 
 	# Generic consumer configuration such as - Token Header name, User Agent, Consumer connection timeout
 	[consumer-connection]
-	token-header-name=X-Broker-Consumer-Token
-	user-agent=Webhook Message Broker
+	token-header-name=
+	user-agent=
 	connection-timeout-in-seconds=a d3d0
 
 	# Preemptive Channel, Producer, Consumer setup
@@ -107,6 +107,9 @@ func TestGetAutoConfiguration_Default(t *testing.T) {
 	assert.Equal(t, "sample-consumer", seedConsumer.Name)
 	assert.Equal(t, "sample-consumer-token", seedConsumer.Token)
 	assert.Equal(t, "http://sample-endpoint/webhook-receiver", seedConsumer.CallbackURL)
+	assert.Equal(t, "Webhook Message Broker", config.GetUserAgent())
+	assert.Equal(t, "X-Broker-Consumer-Token", config.GetTokenRequestHeaderName())
+	assert.Equal(t, time.Duration(30)*time.Second, config.GetConnectionTimeout())
 }
 
 func TestGetAutoConfiguration_WrongValues(t *testing.T) {
@@ -121,7 +124,7 @@ func TestGetAutoConfiguration_WrongValues(t *testing.T) {
 	assert.Equal(t, time.Duration(0), config.GetDBConnectionMaxLifetime())
 	assert.Equal(t, uint16(10), config.GetMaxIdleDBConnections())
 	assert.Equal(t, uint16(50), config.GetMaxOpenDBConnections())
-	assert.Equal(t, ":6080", config.GetHTTPListeningAddr())
+	assert.Equal(t, ":8080", config.GetHTTPListeningAddr())
 	assert.Equal(t, uint(180), config.GetHTTPReadTimeout())
 	assert.Equal(t, uint(180), config.GetHTTPWriteTimeout())
 	assert.Equal(t, "/var/log/webhook-broker.log", config.GetLogFilename())
@@ -130,6 +133,9 @@ func TestGetAutoConfiguration_WrongValues(t *testing.T) {
 	assert.Equal(t, uint(1), config.GetMaxLogBackups())
 	assert.Equal(t, false, config.IsCompressionEnabledOnLogBackups())
 	assert.Equal(t, true, config.IsLoggerConfigAvailable())
+	assert.Equal(t, "Webhook Message Broker", config.GetUserAgent())
+	assert.Equal(t, "X-Broker-Consumer-Token", config.GetTokenRequestHeaderName())
+	assert.Equal(t, time.Duration(60)*time.Second, config.GetConnectionTimeout())
 	defer func() {
 		loadConfiguration = defaultLoadFunc
 	}()
@@ -226,6 +232,9 @@ func TestGetConfiguration(t *testing.T) {
 	assert.Equal(t, "test-consumer4", seedConsumer.Name)
 	assert.Equal(t, "", seedConsumer.Token)
 	assert.Equal(t, "http://imy13.us/webhook-receiver1", seedConsumer.CallbackURL)
+	assert.Equal(t, "Test User Agent", config.GetUserAgent())
+	assert.Equal(t, "X-Test-Consumer-Token", config.GetTokenRequestHeaderName())
+	assert.Equal(t, time.Duration(300)*time.Second, config.GetConnectionTimeout())
 }
 
 func TestGetVersion(t *testing.T) {
@@ -237,4 +246,5 @@ func TestConfigInterfaces(t *testing.T) {
 	var _ HTTPConfig = (*Config)(nil)
 	var _ LogConfig = (*Config)(nil)
 	var _ SeedDataConfig = (*Config)(nil)
+	var _ ConsumerConnectionConfig = (*Config)(nil)
 }
