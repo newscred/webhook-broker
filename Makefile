@@ -41,7 +41,7 @@ build:
 	(cd dist && tar cjvf webhook-broker-$(shell git log --pretty=format:'%h' -n 1).tar.bz2 ./webhook-broker)
 
 test:
-	go test -mod=readonly ./...
+	go test -mod=readonly -v ./...
 
 install: build-web
 	go install -mod=readonly
