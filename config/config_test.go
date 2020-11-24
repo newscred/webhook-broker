@@ -33,7 +33,7 @@ const (
 	max-message-queue-size=asd10000
 	max-workers=asd200
 	priority-dispatcher-enabled=adtrue
-	retrigger-base-endpoint=http:/localhost:8080
+	retrigger-base-endpoint=http://localhost:6080
 	max-retry=5ad
 	rational-delay-in-seconds=2sd0
 	retry-backoff-delays-in-seconds=5,30,asd 6a 0
@@ -110,6 +110,13 @@ func TestGetAutoConfiguration_Default(t *testing.T) {
 	assert.Equal(t, "Webhook Message Broker", config.GetUserAgent())
 	assert.Equal(t, "X-Broker-Consumer-Token", config.GetTokenRequestHeaderName())
 	assert.Equal(t, time.Duration(30)*time.Second, config.GetConnectionTimeout())
+	assert.Equal(t, uint(10000), config.GetMaxMessageQueueSize())
+	assert.Equal(t, uint(200), config.GetMaxWorkers())
+	assert.Equal(t, true, config.IsPriorityDispatcherEnabled())
+	assert.Equal(t, "http://localhost:8080", config.GetRetriggerBaseEndpoint())
+	assert.Equal(t, uint8(5), config.GetMaxRetry())
+	assert.Equal(t, time.Duration(20)*time.Second, config.GetRationalDelay())
+	assert.Equal(t, []time.Duration{time.Duration(5) * time.Second, time.Duration(30) * time.Second, time.Duration(60) * time.Second}, config.GetRetryBackoffDelays())
 }
 
 func TestGetAutoConfiguration_WrongValues(t *testing.T) {
@@ -136,6 +143,13 @@ func TestGetAutoConfiguration_WrongValues(t *testing.T) {
 	assert.Equal(t, "Webhook Message Broker", config.GetUserAgent())
 	assert.Equal(t, "X-Broker-Consumer-Token", config.GetTokenRequestHeaderName())
 	assert.Equal(t, time.Duration(60)*time.Second, config.GetConnectionTimeout())
+	assert.Equal(t, uint(100000), config.GetMaxMessageQueueSize())
+	assert.Equal(t, uint(100), config.GetMaxWorkers())
+	assert.Equal(t, false, config.IsPriorityDispatcherEnabled())
+	assert.Equal(t, "http://localhost:6080", config.GetRetriggerBaseEndpoint())
+	assert.Equal(t, uint8(10), config.GetMaxRetry())
+	assert.Equal(t, time.Duration(30)*time.Second, config.GetRationalDelay())
+	assert.Equal(t, []time.Duration{time.Duration(5) * time.Second, time.Duration(30) * time.Second, time.Duration(15) * time.Second}, config.GetRetryBackoffDelays())
 	defer func() {
 		loadConfiguration = defaultLoadFunc
 	}()
@@ -235,6 +249,13 @@ func TestGetConfiguration(t *testing.T) {
 	assert.Equal(t, "Test User Agent", config.GetUserAgent())
 	assert.Equal(t, "X-Test-Consumer-Token", config.GetTokenRequestHeaderName())
 	assert.Equal(t, time.Duration(300)*time.Second, config.GetConnectionTimeout())
+	assert.Equal(t, uint(20000), config.GetMaxMessageQueueSize())
+	assert.Equal(t, uint(250), config.GetMaxWorkers())
+	assert.Equal(t, true, config.IsPriorityDispatcherEnabled())
+	assert.Equal(t, "http://localhost:7080", config.GetRetriggerBaseEndpoint())
+	assert.Equal(t, uint8(7), config.GetMaxRetry())
+	assert.Equal(t, time.Duration(30)*time.Second, config.GetRationalDelay())
+	assert.Equal(t, []time.Duration{time.Duration(15) * time.Second, time.Duration(30) * time.Second, time.Duration(60) * time.Second, time.Duration(120) * time.Second}, config.GetRetryBackoffDelays())
 }
 
 func TestGetVersion(t *testing.T) {

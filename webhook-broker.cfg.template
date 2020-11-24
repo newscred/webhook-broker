@@ -33,6 +33,7 @@ priority-dispatcher-enabled=true
 retrigger-base-endpoint=http://localhost:8080
 max-retry=5
 rational-delay-in-seconds=20
+# Expected comma separated list of numbers; in case any value is a non number it will be defaulted to 15
 retry-backoff-delays-in-seconds=5,30,60
 
 # Generic consumer configuration such as - Token Header name, User Agent, Consumer connection timeout

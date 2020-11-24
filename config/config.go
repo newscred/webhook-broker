@@ -3,6 +3,8 @@ package config
 import (
 	"net/url"
 	"os/user"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-ini/ini"
@@ -159,26 +161,44 @@ type ConsumerConnectionConfig interface {
 	GetConnectionTimeout() time.Duration
 }
 
+// BrokerConfig provides the interface for configuring the broker
+type BrokerConfig interface {
+	GetMaxMessageQueueSize() uint
+	GetMaxWorkers() uint
+	IsPriorityDispatcherEnabled() bool
+	GetRetriggerBaseEndpoint() string
+	GetMaxRetry() uint8
+	GetRationalDelay() time.Duration
+	GetRetryBackoffDelays() []time.Duration
+}
+
 //Config represents the application configuration
 type Config struct {
-	DBDialect               string
-	DBConnectionURL         string
-	DBConnectionMaxIdleTime time.Duration
-	DBConnectionMaxLifetime time.Duration
-	DBMaxIdleConnections    uint16
-	DBMaxOpenConnections    uint16
-	HTTPListeningAddr       string
-	HTTPReadTimeout         uint
-	HTTPWriteTimeout        uint
-	LogFilename             string
-	MaxFileSize             uint
-	MaxBackups              uint
-	MaxAge                  uint
-	CompressBackupsEnabled  bool
-	SeedData                SeedData
-	TokenRequestHeaderName  string
-	UserAgent               string
-	ConnectionTimeout       time.Duration
+	DBDialect                 string
+	DBConnectionURL           string
+	DBConnectionMaxIdleTime   time.Duration
+	DBConnectionMaxLifetime   time.Duration
+	DBMaxIdleConnections      uint16
+	DBMaxOpenConnections      uint16
+	HTTPListeningAddr         string
+	HTTPReadTimeout           uint
+	HTTPWriteTimeout          uint
+	LogFilename               string
+	MaxFileSize               uint
+	MaxBackups                uint
+	MaxAge                    uint
+	CompressBackupsEnabled    bool
+	SeedData                  SeedData
+	TokenRequestHeaderName    string
+	UserAgent                 string
+	ConnectionTimeout         time.Duration
+	MaxMessageQueueSize       uint
+	MaxWorkers                uint
+	PriorityDispatcherEnabled bool
+	RetriggerBaseEndpoint     string
+	MaxRetry                  uint8
+	RationalDelay             time.Duration
+	RetryBackoffDelays        []time.Duration
 }
 
 // GetDBDialect returns the DB dialect of the configuration
@@ -276,6 +296,41 @@ func (config *Config) GetConnectionTimeout() time.Duration {
 	return config.ConnectionTimeout
 }
 
+// GetMaxMessageQueueSize returns the maximum number of messages to be queued without being dispatched
+func (config *Config) GetMaxMessageQueueSize() uint {
+	return config.MaxMessageQueueSize
+}
+
+// GetMaxWorkers returns the max number of workers dispatching a message to a consumer
+func (config *Config) GetMaxWorkers() uint {
+	return config.MaxWorkers
+}
+
+// IsPriorityDispatcherEnabled returns whether priority will be respected during dispatching from queue
+func (config *Config) IsPriorityDispatcherEnabled() bool {
+	return config.PriorityDispatcherEnabled
+}
+
+// GetRetriggerBaseEndpoint returns the URL to the load balanced endpoint for the broker for retriggering jobs
+func (config *Config) GetRetriggerBaseEndpoint() string {
+	return config.RetriggerBaseEndpoint
+}
+
+// GetMaxRetry returns the maximum number of attempts for delivering a message to a consumer
+func (config *Config) GetMaxRetry() uint8 {
+	return config.MaxRetry
+}
+
+// GetRationalDelay returns how long to wait before retriggering, i.e., what is the addition to picking up messages in fail-safe process.
+func (config *Config) GetRationalDelay() time.Duration {
+	return config.RationalDelay
+}
+
+// GetRetryBackoffDelays returns the delay steps in retrying delivery; retry will be the index and if index is greater than size use the last value times retry-attempt
+func (config *Config) GetRetryBackoffDelays() []time.Duration {
+	return config.RetryBackoffDelays
+}
+
 // func (config *Config) () {}
 
 // GetAutoConfiguration gets configuration from default config and system defined path chain of
@@ -296,7 +351,10 @@ func GetConfiguration(configFilePath string) (*Config, error) {
 	setupLogConfiguration(cfg, configuration)
 	setupSeedDataConfiguration(cfg, configuration)
 	setupConsumerConnectionConfiguration(cfg, configuration)
-	validateConfigurationState(configuration)
+	setupBrokerConfiguration(cfg, configuration)
+	if validationErr := validateConfigurationState(configuration); validationErr != nil {
+		return EmptyConfigurationForError, validationErr
+	}
 	return configuration, nil
 }
 
@@ -412,4 +470,31 @@ func setupConsumerConnectionConfiguration(cfg *ini.File, configuration *Config) 
 	configuration.TokenRequestHeaderName = tokenHeaderName.MustString("")
 	configuration.UserAgent = userAgent.MustString("")
 	configuration.ConnectionTimeout = time.Duration(connectionTimeoutInSecs.MustUint(60)) * time.Second
+}
+
+func setupBrokerConfiguration(cfg *ini.File, configuration *Config) {
+	broker, _ := cfg.GetSection("broker")
+	maxMsgQueueSize, _ := broker.GetKey("max-message-queue-size")
+	maxWorkers, _ := broker.GetKey("max-workers")
+	priorityDispatcher, _ := broker.GetKey("priority-dispatcher-enabled")
+	retriggerBaseEndpoint, _ := broker.GetKey("retrigger-base-endpoint")
+	maxRetry, _ := broker.GetKey("max-retry")
+	rationalDelayInSecs, _ := broker.GetKey("rational-delay-in-seconds")
+	retryBackoffDelayInSecs, _ := broker.GetKey("retry-backoff-delays-in-seconds")
+	configuration.MaxMessageQueueSize = maxMsgQueueSize.MustUint(100000)
+	configuration.MaxWorkers = maxWorkers.MustUint(100)
+	configuration.PriorityDispatcherEnabled = priorityDispatcher.MustBool(false)
+	configuration.RetriggerBaseEndpoint = retriggerBaseEndpoint.MustString("")
+	configuration.MaxRetry = uint8(maxRetry.MustUint(10))
+	configuration.RationalDelay = time.Duration(rationalDelayInSecs.MustUint(30)) * time.Second
+	backoffDelayStrings := strings.Split(retryBackoffDelayInSecs.MustString("15"), ",")
+	var backoffDelays []time.Duration = make([]time.Duration, 0, len(backoffDelayStrings))
+	for _, backoffDelayString := range backoffDelayStrings {
+		parsedBackoff, backoffParseErr := strconv.ParseUint(backoffDelayString, 10, 32)
+		if backoffParseErr != nil {
+			parsedBackoff = 15
+		}
+		backoffDelays = append(backoffDelays, time.Duration(parsedBackoff)*time.Second)
+	}
+	configuration.RetryBackoffDelays = backoffDelays
 }
