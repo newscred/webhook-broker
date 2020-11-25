@@ -29,7 +29,14 @@ os-deps: brew-packages
 endif
 
 deps:
+ifeq ($(OS),Alpine Linux)
+	go mod download
+endif
+ifneq ($(OS),Alpine Linux)
 	go mod vendor
+endif
+
+generate:
 	go generate -mod=readonly
 
 dep-tools:

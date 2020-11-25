@@ -11,9 +11,11 @@ RUN make os-deps dep-tools
 
 ADD go.mod .
 ADD go.sum .
+RUN make deps
+
 ADD main.go .
 ADD wire.go .
 ADD wire_gen.go .
 ADD config ./config
 
-RUN make deps build test
+RUN make build test
