@@ -10,6 +10,7 @@ apt-packages:
 brew-packages:
 
 alpine-packages:
+	apk add --no-cache gcc musl-dev
 
 os-deps:
 ifeq ($(UNAME_S),Linux)
