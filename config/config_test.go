@@ -73,6 +73,10 @@ const (
 	`
 )
 
+func toSecond(second uint) time.Duration {
+	return time.Duration(second) * time.Second
+}
+
 func TestGetAutoConfiguration_Default(t *testing.T) {
 	config, cfgErr := GetAutoConfiguration()
 	if cfgErr != nil {
@@ -85,8 +89,8 @@ func TestGetAutoConfiguration_Default(t *testing.T) {
 	assert.Equal(t, uint16(30), config.GetMaxIdleDBConnections())
 	assert.Equal(t, uint16(100), config.GetMaxOpenDBConnections())
 	assert.Equal(t, ":8080", config.GetHTTPListeningAddr())
-	assert.Equal(t, uint(240), config.GetHTTPReadTimeout())
-	assert.Equal(t, uint(240), config.GetHTTPWriteTimeout())
+	assert.Equal(t, toSecond(uint(240)), config.GetHTTPReadTimeout())
+	assert.Equal(t, toSecond(uint(240)), config.GetHTTPWriteTimeout())
 	assert.Equal(t, "/var/log/webhook-broker.log", config.GetLogFilename())
 	assert.Equal(t, uint(200), config.GetMaxLogFileSize())
 	assert.Equal(t, uint(28), config.GetMaxAgeForALogFile())
@@ -113,14 +117,14 @@ func TestGetAutoConfiguration_Default(t *testing.T) {
 	assert.Equal(t, "http://sample-endpoint/webhook-receiver", seedConsumer.CallbackURL)
 	assert.Equal(t, "Webhook Message Broker", config.GetUserAgent())
 	assert.Equal(t, "X-Broker-Consumer-Token", config.GetTokenRequestHeaderName())
-	assert.Equal(t, time.Duration(30)*time.Second, config.GetConnectionTimeout())
+	assert.Equal(t, toSecond(30), config.GetConnectionTimeout())
 	assert.Equal(t, uint(10000), config.GetMaxMessageQueueSize())
 	assert.Equal(t, uint(200), config.GetMaxWorkers())
 	assert.Equal(t, true, config.IsPriorityDispatcherEnabled())
 	assert.Equal(t, "http://localhost:8080", config.GetRetriggerBaseEndpoint())
 	assert.Equal(t, uint8(5), config.GetMaxRetry())
-	assert.Equal(t, time.Duration(20)*time.Second, config.GetRationalDelay())
-	assert.Equal(t, []time.Duration{time.Duration(5) * time.Second, time.Duration(30) * time.Second, time.Duration(60) * time.Second}, config.GetRetryBackoffDelays())
+	assert.Equal(t, toSecond(20), config.GetRationalDelay())
+	assert.Equal(t, []time.Duration{toSecond(5), toSecond(30), toSecond(60)}, config.GetRetryBackoffDelays())
 }
 
 func TestGetAutoConfiguration_WrongValues(t *testing.T) {
@@ -136,8 +140,8 @@ func TestGetAutoConfiguration_WrongValues(t *testing.T) {
 	assert.Equal(t, uint16(10), config.GetMaxIdleDBConnections())
 	assert.Equal(t, uint16(50), config.GetMaxOpenDBConnections())
 	assert.Equal(t, ":8080", config.GetHTTPListeningAddr())
-	assert.Equal(t, uint(180), config.GetHTTPReadTimeout())
-	assert.Equal(t, uint(180), config.GetHTTPWriteTimeout())
+	assert.Equal(t, toSecond(uint(180)), config.GetHTTPReadTimeout())
+	assert.Equal(t, toSecond(uint(180)), config.GetHTTPWriteTimeout())
 	assert.Equal(t, "/var/log/webhook-broker.log", config.GetLogFilename())
 	assert.Equal(t, uint(50), config.GetMaxLogFileSize())
 	assert.Equal(t, uint(30), config.GetMaxAgeForALogFile())
@@ -146,14 +150,14 @@ func TestGetAutoConfiguration_WrongValues(t *testing.T) {
 	assert.Equal(t, true, config.IsLoggerConfigAvailable())
 	assert.Equal(t, "Webhook Message Broker", config.GetUserAgent())
 	assert.Equal(t, "X-Broker-Consumer-Token", config.GetTokenRequestHeaderName())
-	assert.Equal(t, time.Duration(60)*time.Second, config.GetConnectionTimeout())
+	assert.Equal(t, toSecond(60), config.GetConnectionTimeout())
 	assert.Equal(t, uint(100000), config.GetMaxMessageQueueSize())
 	assert.Equal(t, uint(100), config.GetMaxWorkers())
 	assert.Equal(t, false, config.IsPriorityDispatcherEnabled())
 	assert.Equal(t, "http://localhost:6080", config.GetRetriggerBaseEndpoint())
 	assert.Equal(t, uint8(10), config.GetMaxRetry())
-	assert.Equal(t, time.Duration(30)*time.Second, config.GetRationalDelay())
-	assert.Equal(t, []time.Duration{time.Duration(5) * time.Second, time.Duration(30) * time.Second, time.Duration(15) * time.Second}, config.GetRetryBackoffDelays())
+	assert.Equal(t, toSecond(30), config.GetRationalDelay())
+	assert.Equal(t, []time.Duration{toSecond(5), toSecond(30), toSecond(15)}, config.GetRetryBackoffDelays())
 	defer func() {
 		loadConfiguration = defaultLoadFunc
 	}()
@@ -194,13 +198,13 @@ func TestGetConfiguration(t *testing.T) {
 	}
 	assert.Equal(t, "sqlite3", config.GetDBDialect())
 	assert.Equal(t, "database.sqlite3", config.GetDBConnectionURL())
-	assert.Equal(t, time.Duration(10)*time.Second, config.GetDBConnectionMaxIdleTime())
-	assert.Equal(t, time.Duration(10)*time.Second, config.GetDBConnectionMaxLifetime())
+	assert.Equal(t, toSecond(10), config.GetDBConnectionMaxIdleTime())
+	assert.Equal(t, toSecond(10), config.GetDBConnectionMaxLifetime())
 	assert.Equal(t, uint16(300), config.GetMaxIdleDBConnections())
 	assert.Equal(t, uint16(1000), config.GetMaxOpenDBConnections())
 	assert.Equal(t, ":7080", config.GetHTTPListeningAddr())
-	assert.Equal(t, uint(2401), config.GetHTTPReadTimeout())
-	assert.Equal(t, uint(2401), config.GetHTTPWriteTimeout())
+	assert.Equal(t, toSecond(uint(2401)), config.GetHTTPReadTimeout())
+	assert.Equal(t, toSecond(uint(2401)), config.GetHTTPWriteTimeout())
 	assert.Equal(t, "", config.GetLogFilename())
 	assert.Equal(t, uint(20), config.GetMaxLogFileSize())
 	assert.Equal(t, uint(280), config.GetMaxAgeForALogFile())
@@ -253,14 +257,14 @@ func TestGetConfiguration(t *testing.T) {
 	assert.Equal(t, "http://imy13.us/webhook-receiver1", seedConsumer.CallbackURL)
 	assert.Equal(t, "Test User Agent", config.GetUserAgent())
 	assert.Equal(t, "X-Test-Consumer-Token", config.GetTokenRequestHeaderName())
-	assert.Equal(t, time.Duration(300)*time.Second, config.GetConnectionTimeout())
+	assert.Equal(t, toSecond(300), config.GetConnectionTimeout())
 	assert.Equal(t, uint(20000), config.GetMaxMessageQueueSize())
 	assert.Equal(t, uint(250), config.GetMaxWorkers())
 	assert.Equal(t, true, config.IsPriorityDispatcherEnabled())
 	assert.Equal(t, "http://localhost:7080", config.GetRetriggerBaseEndpoint())
 	assert.Equal(t, uint8(7), config.GetMaxRetry())
-	assert.Equal(t, time.Duration(30)*time.Second, config.GetRationalDelay())
-	assert.Equal(t, []time.Duration{time.Duration(15) * time.Second, time.Duration(30) * time.Second, time.Duration(60) * time.Second, time.Duration(120) * time.Second}, config.GetRetryBackoffDelays())
+	assert.Equal(t, toSecond(30), config.GetRationalDelay())
+	assert.Equal(t, []time.Duration{toSecond(15), toSecond(30), toSecond(60), toSecond(120)}, config.GetRetryBackoffDelays())
 }
 
 func TestGetConfigurationFromParseConfig_ValueError(t *testing.T) {

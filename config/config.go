@@ -118,8 +118,8 @@ type RelationalDatabaseConfig interface {
 // HTTPConfig represents the HTTP configuration related behaviors
 type HTTPConfig interface {
 	GetHTTPListeningAddr() string
-	GetHTTPReadTimeout() uint
-	GetHTTPWriteTimeout() uint
+	GetHTTPReadTimeout() time.Duration
+	GetHTTPWriteTimeout() time.Duration
 }
 
 // LogConfig represents the interface for log related configuration
@@ -192,8 +192,8 @@ type Config struct {
 	DBMaxIdleConnections      uint16
 	DBMaxOpenConnections      uint16
 	HTTPListeningAddr         string
-	HTTPReadTimeout           uint
-	HTTPWriteTimeout          uint
+	HTTPReadTimeout           time.Duration
+	HTTPWriteTimeout          time.Duration
 	LogFilename               string
 	MaxFileSize               uint
 	MaxBackups                uint
@@ -248,12 +248,12 @@ func (config *Config) GetHTTPListeningAddr() string {
 }
 
 // GetHTTPReadTimeout retrieves the connection read timeout
-func (config *Config) GetHTTPReadTimeout() uint {
+func (config *Config) GetHTTPReadTimeout() time.Duration {
 	return config.HTTPReadTimeout
 }
 
 // GetHTTPWriteTimeout retrieves the connection write timeout
-func (config *Config) GetHTTPWriteTimeout() uint {
+func (config *Config) GetHTTPWriteTimeout() time.Duration {
 	return config.HTTPWriteTimeout
 }
 
@@ -465,8 +465,8 @@ func setupHTTPConfiguration(cfg *ini.File, configuration *Config) {
 	httpReadTimeout, _ := httpSection.GetKey("read-timeout")
 	httpWriteTimeout, _ := httpSection.GetKey("write-timeout")
 	configuration.HTTPListeningAddr = httpListener.String()
-	configuration.HTTPReadTimeout = httpReadTimeout.MustUint(180)
-	configuration.HTTPWriteTimeout = httpWriteTimeout.MustUint(180)
+	configuration.HTTPReadTimeout = time.Duration(httpReadTimeout.MustUint(180)) * time.Second
+	configuration.HTTPWriteTimeout = time.Duration(httpWriteTimeout.MustUint(180)) * time.Second
 }
 
 func setupLogConfiguration(cfg *ini.File, configuration *Config) {
