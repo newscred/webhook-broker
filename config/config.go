@@ -1,7 +1,11 @@
 package config
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"net"
 	"net/url"
@@ -523,6 +527,11 @@ func setupSeedDataConfiguration(cfg *ini.File, configuration *Config) {
 		}
 	}
 	seedData.Consumers = seedConsumers
+
+	var buf bytes.Buffer
+	json.NewEncoder(&buf).Encode(seedData)
+	hashCalculator := sha256.New()
+	seedData.DataHash = base64.StdEncoding.EncodeToString(hashCalculator.Sum(buf.Bytes()))
 
 	configuration.SeedData = seedData
 }

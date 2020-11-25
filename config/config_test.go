@@ -97,6 +97,7 @@ func TestGetAutoConfiguration_Default(t *testing.T) {
 	assert.Equal(t, 1, len(seedData.Channels))
 	assert.Equal(t, 1, len(seedData.Producers))
 	assert.Equal(t, 1, len(seedData.Consumers))
+	assert.NotEmpty(t, seedData.DataHash)
 	seedChannel := seedData.Channels[0]
 	assert.Equal(t, "sample-channel", seedChannel.ID)
 	assert.Equal(t, "Sample Channel", seedChannel.Name)
@@ -210,6 +211,7 @@ func TestGetConfiguration(t *testing.T) {
 	assert.Equal(t, 3, len(seedData.Channels))
 	assert.Equal(t, 3, len(seedData.Producers))
 	assert.Equal(t, 3, len(seedData.Consumers))
+	assert.NotEmpty(t, seedData.DataHash)
 	seedChannel := seedData.Channels[0]
 	assert.Equal(t, "sample-channel", seedChannel.ID)
 	assert.Equal(t, "Sample Channel", seedChannel.Name)
