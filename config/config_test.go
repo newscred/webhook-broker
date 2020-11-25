@@ -1,19 +1,22 @@
 package config
 
 import (
+	"database/sql"
 	"errors"
+	"net"
 	"os/user"
 	"testing"
 	"time"
 
+	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-ini/ini"
 	"github.com/stretchr/testify/assert"
 )
 
 const (
 	wrongValueConfig = `[rdbms]
-	dialect=mysql
-	connection-url=webhook_broker:zxc909zxc@tcp(mysql:3306)/webhook-broker?charset=utf8&parseTime=True
+	dialect=sqlite3
+	connection-url=webhook_broker.sqlite3
 	connxn-max-idle-time-seconds=-10
 	connxn-max-lifetime-seconds=ascx0x
 	max-idle-connxns=as30
@@ -75,8 +78,8 @@ func TestGetAutoConfiguration_Default(t *testing.T) {
 	if cfgErr != nil {
 		t.Error("Auto Configuration failed", cfgErr)
 	}
-	assert.Equal(t, "mysql", config.GetDBDialect())
-	assert.Equal(t, "webhook_broker:zxc909zxc@tcp(mysql:3306)/webhook-broker?charset=utf8&parseTime=True", config.GetDBConnectionURL())
+	assert.Equal(t, "sqlite3", config.GetDBDialect())
+	assert.Equal(t, "webhook-broker.sqlite3", config.GetDBConnectionURL())
 	assert.Equal(t, time.Duration(0), config.GetDBConnectionMaxIdleTime())
 	assert.Equal(t, time.Duration(0), config.GetDBConnectionMaxLifetime())
 	assert.Equal(t, uint16(30), config.GetMaxIdleDBConnections())
@@ -155,7 +158,7 @@ func TestGetAutoConfiguration_WrongValues(t *testing.T) {
 	}()
 }
 
-func TestGetAutoConfiguration_Error(t *testing.T) {
+func TestGetAutoConfiguration_LoadConfigurationError(t *testing.T) {
 	loadConfiguration = func(location string) (*ini.File, error) {
 		return ini.InsensitiveLoad([]byte(errorConfig))
 	}
@@ -188,8 +191,8 @@ func TestGetConfiguration(t *testing.T) {
 	if cfgErr != nil {
 		t.Error("Auto Configuration failed", cfgErr)
 	}
-	assert.Equal(t, "mysql", config.GetDBDialect())
-	assert.Equal(t, "somesqliteurl", config.GetDBConnectionURL())
+	assert.Equal(t, "sqlite3", config.GetDBDialect())
+	assert.Equal(t, "database.sqlite3", config.GetDBConnectionURL())
 	assert.Equal(t, time.Duration(10)*time.Second, config.GetDBConnectionMaxIdleTime())
 	assert.Equal(t, time.Duration(10)*time.Second, config.GetDBConnectionMaxLifetime())
 	assert.Equal(t, uint16(300), config.GetMaxIdleDBConnections())
@@ -256,6 +259,126 @@ func TestGetConfiguration(t *testing.T) {
 	assert.Equal(t, uint8(7), config.GetMaxRetry())
 	assert.Equal(t, time.Duration(30)*time.Second, config.GetRationalDelay())
 	assert.Equal(t, []time.Duration{time.Duration(15) * time.Second, time.Duration(30) * time.Second, time.Duration(60) * time.Second, time.Duration(120) * time.Second}, config.GetRetryBackoffDelays())
+}
+
+func TestGetConfigurationFromParseConfig_ValueError(t *testing.T) {
+	loadTestConfiguration := func(testConfiguration string) *ini.File {
+		cfg, _ := ini.LooseLoad([]byte(DefaultConfiguration), DefaultSystemConfigFilePath, getUserHomeDirBasedDefaultConfigFileLocation(), DefaultCurrentDirConfigFilePath, []byte(testConfiguration))
+		return cfg
+	}
+	// Do not make it parallel
+	t.Run("ConfigErrorDueToSQLlite3", func(t *testing.T) {
+		oldPingSqlite3 := pingSqlite3
+		dbErr := errors.New("db error")
+		pingSqlite3 = func(db *sql.DB) error {
+			return dbErr
+		}
+		config, err := GetConfigurationFromParseConfig(loadTestConfiguration("[testConfig]"))
+		assert.Equal(t, EmptyConfigurationForError, config)
+		assert.Equal(t, dbErr, err)
+		pingSqlite3 = oldPingSqlite3
+	})
+	// Do not make it parallel
+	t.Run("ConfigErrorDueToMySQL", func(t *testing.T) {
+		oldPingMysql := pingMysql
+		dbErr := errors.New("db error")
+		pingMysql = func(db *sql.DB) error {
+			return dbErr
+		}
+		testConfig := `[rdbms]
+		dialect=mysql
+		connection-url=webhook_broker:zxc909zxc@tcp(mysql:3306)/webhook-broker?charset=utf8&parseTime=true
+		`
+		config, err := GetConfigurationFromParseConfig(loadTestConfiguration(testConfig))
+		assert.Equal(t, EmptyConfigurationForError, config)
+		assert.Equal(t, dbErr, err)
+		pingMysql = oldPingMysql
+	})
+	t.Run("RetriggerURLIsNotACorrectURL", func(t *testing.T) {
+		t.Parallel()
+		testConfig := `[broker]
+		retrigger-base-endpoint= &*3@$%
+		[http]
+		listener=:18080
+		`
+		config, err := GetConfigurationFromParseConfig(loadTestConfiguration(testConfig))
+		assert.Equal(t, EmptyConfigurationForError, config)
+		assert.NotNil(t, err)
+		assert.NotEqual(t, err.Error(), "Retrigger Base Endpoint is not in absolute URL form")
+	})
+	t.Run("RetriggerURLIsABlankString", func(t *testing.T) {
+		t.Parallel()
+		testConfig := `[broker]
+		retrigger-base-endpoint=
+		[http]
+		listener=:28080
+		`
+		config, err := GetConfigurationFromParseConfig(loadTestConfiguration(testConfig))
+		assert.Equal(t, EmptyConfigurationForError, config)
+		assert.NotNil(t, err)
+		assert.Equal(t, err.Error(), "Retrigger Base Endpoint is not in absolute URL form")
+	})
+	t.Run("RetriggerURLIsNotAAbsoluteURL", func(t *testing.T) {
+		t.Parallel()
+		testConfig := `[broker]
+		retrigger-base-endpoint=/relative-url
+		[http]
+		listener=:38080
+		`
+		config, err := GetConfigurationFromParseConfig(loadTestConfiguration(testConfig))
+		assert.Equal(t, EmptyConfigurationForError, config)
+		assert.NotNil(t, err)
+		assert.Equal(t, err.Error(), "Retrigger Base Endpoint is not in absolute URL form")
+	})
+	t.Run("DBDialectNotSupported", func(t *testing.T) {
+		t.Parallel()
+		testConfig := `[rdbms]
+		dialect=mockdb
+		[http]
+		listener=:48080
+		`
+		config, err := GetConfigurationFromParseConfig(loadTestConfiguration(testConfig))
+		assert.Equal(t, EmptyConfigurationForError, config)
+		assert.NotNil(t, err)
+	})
+	t.Run("HTTPListenerNotAvailable", func(t *testing.T) {
+		t.Parallel()
+		testConfig := `
+		[http]
+		listener=:47070
+		`
+		ln, netErr := net.Listen("tcp", ":47070")
+		if netErr == nil {
+			defer ln.Close()
+			config, err := GetConfigurationFromParseConfig(loadTestConfiguration(testConfig))
+			assert.Equal(t, EmptyConfigurationForError, config)
+			assert.NotNil(t, err)
+		}
+	})
+	t.Run("DBPingErrorSQLite3", func(t *testing.T) {
+		t.Parallel()
+		db, mock, _ := sqlmock.New()
+		mockedErr := errors.New("mock db error")
+		mock.ExpectQuery("SELECT name FROM sqlite_master WHERE type='table'").WillReturnError(mockedErr)
+		err := pingSqlite3(db)
+		assert.Equal(t, mockedErr, err)
+	})
+	t.Run("DBPingErrorMySQL", func(t *testing.T) {
+		t.Parallel()
+		db, mock, _ := sqlmock.New()
+		mockedErr := errors.New("mock db error")
+		mock.ExpectQuery("SHOW Tables").WillReturnError(mockedErr)
+		err := pingMysql(db)
+		assert.Equal(t, mockedErr, err)
+	})
+	t.Run("DBPingMySQL", func(t *testing.T) {
+		t.Parallel()
+		db, mock, _ := sqlmock.New()
+		rows := sqlmock.NewRows([]string{"ID", "Table Name"})
+		mock.ExpectQuery("SHOW Tables").WillReturnRows(rows)
+		err := pingMysql(db)
+		assert.Nil(t, err)
+	})
 }
 
 func TestGetVersion(t *testing.T) {

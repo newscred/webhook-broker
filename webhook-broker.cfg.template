@@ -2,8 +2,11 @@
 
 # Database connection settings
 [rdbms]
-dialect=mysql
-connection-url=webhook_broker:zxc909zxc@tcp(mysql:3306)/webhook-broker?charset=utf8&parseTime=True
+dialect=sqlite3
+connection-url=webhook-broker.sqlite
+# Use config akin to these for connecting to MySQL
+# dialect=mysql
+# connection-url=webhook_broker:zxc909zxc@tcp(mysql:3306)/webhook-broker?charset=utf8&parseTime=true
 connxn-max-idle-time-seconds=0
 connxn-max-lifetime-seconds=0
 max-idle-connxns=30

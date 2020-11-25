@@ -1,6 +1,9 @@
 package config
 
 import (
+	"database/sql"
+	"errors"
+	"net"
 	"net/url"
 	"os/user"
 	"strconv"
@@ -8,6 +11,10 @@ import (
 	"time"
 
 	"github.com/go-ini/ini"
+	// MySQL DB Driver
+	_ "github.com/go-sql-driver/mysql"
+	// SQLite3 DB Driver
+	_ "github.com/mattn/go-sqlite3"
 )
 
 // AppVersion is the version string type
@@ -27,8 +34,8 @@ const (
 	DefaultCurrentDirConfigFilePath = ConfigFilename
 	// DefaultConfiguration is the configuration that will be in effect if no configuration is loaded from any of the expected locations
 	DefaultConfiguration = `[rdbms]
-	dialect=mysql
-	connection-url=webhook_broker:zxc909zxc@tcp(mysql:3306)/webhook-broker?charset=utf8&parseTime=True
+	dialect=sqlite3
+	connection-url=webhook-broker.sqlite3
 	connxn-max-idle-time-seconds=0
 	connxn-max-lifetime-seconds=0
 	max-idle-connxns=30
@@ -341,11 +348,16 @@ func GetAutoConfiguration() (*Config, error) {
 
 // GetConfiguration gets the current state of application configuration
 func GetConfiguration(configFilePath string) (*Config, error) {
-	configuration := &Config{}
 	cfg, err := loadConfiguration(configFilePath)
 	if err != nil {
 		return EmptyConfigurationForError, err
 	}
+	return GetConfigurationFromParseConfig(cfg)
+}
+
+// GetConfigurationFromParseConfig returns configuration from parsed configuration
+func GetConfigurationFromParseConfig(cfg *ini.File) (*Config, error) {
+	configuration := &Config{}
 	setupStorageConfiguration(cfg, configuration)
 	setupHTTPConfiguration(cfg, configuration)
 	setupLogConfiguration(cfg, configuration)
@@ -369,10 +381,63 @@ func validateConfigurationState(configuration *Config) error {
 		configuration.HTTPListeningAddr = ":8080"
 	}
 	// Check Listener Address port is open
+	ln, netErr := net.Listen("tcp", configuration.HTTPListeningAddr)
+	if netErr != nil {
+		return netErr
+	}
+	defer ln.Close()
 	// Check DB Connection is valid
+	db, dbConnectionErr := sql.Open(configuration.DBDialect, configuration.DBConnectionURL)
+	if dbConnectionErr != nil {
+		return dbConnectionErr
+	}
+	defer db.Close()
+	db.SetConnMaxLifetime(configuration.DBConnectionMaxLifetime)
+	db.SetMaxIdleConns(int(configuration.DBMaxIdleConnections))
+	db.SetMaxOpenConns(int(configuration.DBMaxOpenConnections))
+	db.SetConnMaxIdleTime(configuration.DBConnectionMaxIdleTime)
+	switch configuration.DBDialect {
+	case "sqlite3":
+		dbErr := pingSqlite3(db)
+		if dbErr != nil {
+			return dbErr
+		}
+	case "mysql":
+		dbErr := pingMysql(db)
+		if dbErr != nil {
+			return dbErr
+		}
+	}
 	// Check retrigger endpoint is a valid Absolute URL
+	retriggerEndpoint, endpointErr := url.Parse(configuration.RetriggerBaseEndpoint)
+	if endpointErr != nil {
+		return endpointErr
+	}
+	if !retriggerEndpoint.IsAbs() {
+		return errors.New("Retrigger Base Endpoint is not in absolute URL form")
+	}
 	return nil
 }
+
+var (
+	pingSqlite3 = func(db *sql.DB) error {
+		rows, queryErr := db.Query("SELECT name FROM sqlite_master WHERE type='table'")
+		if queryErr != nil {
+			return queryErr
+		}
+		defer rows.Close()
+		return nil
+	}
+
+	pingMysql = func(db *sql.DB) error {
+		rows, queryErr := db.Query("SHOW Tables")
+		if queryErr != nil {
+			return queryErr
+		}
+		defer rows.Close()
+		return nil
+	}
+)
 
 func setupStorageConfiguration(cfg *ini.File, configuration *Config) {
 	dbSection, _ := cfg.GetSection("rdbms")
