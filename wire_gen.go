@@ -6,7 +6,6 @@
 package main
 
 import (
-	"github.com/google/wire"
 	"github.com/imyousuf/webhook-broker/config"
 	"github.com/imyousuf/webhook-broker/controllers"
 	"github.com/imyousuf/webhook-broker/storage"
@@ -19,22 +18,18 @@ func GetAppVersion() config.AppVersion {
 	return appVersion
 }
 
-func GetHTTPServer() (*HTTPServiceContainer, error) {
+func GetHTTPServer(cliConfig *config.CLIConfig) (*HTTPServiceContainer, error) {
+	configConfig, err := config.GetConfigurationFromCLIConfig(cliConfig)
+	if err != nil {
+		return nil, err
+	}
 	serverLifecycleListenerImpl := NewServerListener()
-	configConfig := GetConfig()
-	migrationConfig := GetMigrationConfig()
+	migrationConfig := GetMigrationConfig(cliConfig)
 	dataAccessor, err := storage.NewDataAccessor(configConfig, migrationConfig, configConfig)
 	if err != nil {
 		return nil, err
 	}
 	server := controllers.ConfigureAPI(configConfig, serverLifecycleListenerImpl, dataAccessor)
-	httpServiceContainer := NewHTTPServiceContainer(serverLifecycleListenerImpl, server)
+	httpServiceContainer := NewHTTPServiceContainer(configConfig, serverLifecycleListenerImpl, server)
 	return httpServiceContainer, nil
 }
-
-// wire.go:
-
-var (
-	configInjectorSet             = wire.NewSet(GetConfig, wire.Bind(new(config.SeedDataConfig), new(*config.Config)), wire.Bind(new(config.HTTPConfig), new(*config.Config)), wire.Bind(new(config.RelationalDatabaseConfig), new(*config.Config)))
-	relationalDBWithControllerSet = wire.NewSet(NewHTTPServiceContainer, NewServerListener, configInjectorSet, GetMigrationConfig, wire.Bind(new(controllers.ServerLifecycleListener), new(*ServerLifecycleListenerImpl)), controllers.ConfigureAPI, storage.NewDataAccessor)
-)
