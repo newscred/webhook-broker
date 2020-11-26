@@ -6,7 +6,10 @@
 package main
 
 import (
+	"github.com/google/wire"
 	"github.com/imyousuf/webhook-broker/config"
+	"github.com/imyousuf/webhook-broker/controllers"
+	"github.com/imyousuf/webhook-broker/storage"
 )
 
 // Injectors from wire.go:
@@ -15,3 +18,23 @@ func GetAppVersion() config.AppVersion {
 	appVersion := config.GetVersion()
 	return appVersion
 }
+
+func GetHTTPServer() (*HTTPServiceContainer, error) {
+	serverLifecycleListenerImpl := NewServerListener()
+	configConfig := GetConfig()
+	migrationConfig := GetMigrationConfig()
+	dataAccessor, err := storage.NewDataAccessor(configConfig, migrationConfig, configConfig)
+	if err != nil {
+		return nil, err
+	}
+	server := controllers.ConfigureAPI(configConfig, serverLifecycleListenerImpl, dataAccessor)
+	httpServiceContainer := NewHTTPServiceContainer(serverLifecycleListenerImpl, server)
+	return httpServiceContainer, nil
+}
+
+// wire.go:
+
+var (
+	configInjectorSet             = wire.NewSet(GetConfig, wire.Bind(new(config.SeedDataConfig), new(*config.Config)), wire.Bind(new(config.HTTPConfig), new(*config.Config)), wire.Bind(new(config.RelationalDatabaseConfig), new(*config.Config)))
+	relationalDBWithControllerSet = wire.NewSet(NewHTTPServiceContainer, NewServerListener, configInjectorSet, GetMigrationConfig, wire.Bind(new(controllers.ServerLifecycleListener), new(*ServerLifecycleListenerImpl)), controllers.ConfigureAPI, storage.NewDataAccessor)
+)

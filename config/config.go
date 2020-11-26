@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -166,6 +167,19 @@ type SeedData struct {
 	Producers []SeedProducer
 	Channels  []SeedChannel
 	Consumers []SeedConsumer
+}
+
+// Scan de-serializes SeedData for reading from DB
+func (u *SeedData) Scan(value interface{}) error {
+	err := json.NewDecoder(strings.NewReader(value.(string))).Decode(u)
+	return err
+}
+
+// Value serializes SeedData to write to DB
+func (u SeedData) Value() (driver.Value, error) {
+	var buf bytes.Buffer
+	err := json.NewEncoder(&buf).Encode(u)
+	return buf.String(), err
 }
 
 // SeedDataConfig provides the interface for working with SeedData in configuration
