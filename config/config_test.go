@@ -82,7 +82,7 @@ func TestGetAutoConfiguration_Default(t *testing.T) {
 	if cfgErr != nil {
 		t.Error("Auto Configuration failed", cfgErr)
 	}
-	assert.Equal(t, "sqlite3", config.GetDBDialect())
+	assert.Equal(t, SQLite3Dialect, config.GetDBDialect())
 	assert.Equal(t, "webhook-broker.sqlite3", config.GetDBConnectionURL())
 	assert.Equal(t, time.Duration(0), config.GetDBConnectionMaxIdleTime())
 	assert.Equal(t, time.Duration(0), config.GetDBConnectionMaxLifetime())
@@ -196,7 +196,7 @@ func TestGetConfiguration(t *testing.T) {
 	if cfgErr != nil {
 		t.Error("Auto Configuration failed", cfgErr)
 	}
-	assert.Equal(t, "sqlite3", config.GetDBDialect())
+	assert.Equal(t, SQLite3Dialect, config.GetDBDialect())
 	assert.Equal(t, "database.sqlite3", config.GetDBConnectionURL())
 	assert.Equal(t, toSecond(10), config.GetDBConnectionMaxIdleTime())
 	assert.Equal(t, toSecond(10), config.GetDBConnectionMaxLifetime())
@@ -340,6 +340,19 @@ func TestGetConfigurationFromParseConfig_ValueError(t *testing.T) {
 		t.Parallel()
 		testConfig := `[rdbms]
 		dialect=mockdb
+		[http]
+		listener=:48080
+		`
+		config, err := GetConfigurationFromParseConfig(loadTestConfiguration(testConfig))
+		assert.Equal(t, EmptyConfigurationForError, config)
+		assert.NotNil(t, err)
+		assert.Equal(t, errDBDialect, err)
+	})
+	t.Run("DBConnectionError", func(t *testing.T) {
+		t.Parallel()
+		testConfig := `[rdbms]
+		dialect=mysql
+		connection-url=expect dsn error
 		[http]
 		listener=:48080
 		`

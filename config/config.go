@@ -24,12 +24,19 @@ import (
 // AppVersion is the version string type
 type AppVersion string
 
+// DBDialect allows us to define constants for supported DB drivers
+type DBDialect string
+
 // GetVersion provides the current version of the project
 func GetVersion() AppVersion {
 	return "0.1-dev"
 }
 
 const (
+	// SQLite3Dialect represents the DB Dialect for SQLite3
+	SQLite3Dialect = DBDialect("sqlite3")
+	// MySQLDialect represents the DB Dialect for MySQL
+	MySQLDialect = DBDialect("mysql")
 	// ConfigFilename is the default config file name
 	ConfigFilename = "webhook-broker.cfg"
 	// DefaultSystemConfigFilePath is the default system location of the configuration
@@ -93,6 +100,7 @@ var (
 		return ini.LooseLoad([]byte(DefaultConfiguration), DefaultSystemConfigFilePath, getUserHomeDirBasedDefaultConfigFileLocation(), DefaultCurrentDirConfigFilePath)
 	}
 	loadConfiguration = defaultLoadFunc
+	errDBDialect      = errors.New("DB Dialect not supported")
 )
 
 var currentUser = user.Current
@@ -107,7 +115,7 @@ func getUserHomeDirBasedDefaultConfigFileLocation() string {
 
 // RelationalDatabaseConfig represents DB configuration related behaviors
 type RelationalDatabaseConfig interface {
-	GetDBDialect() string
+	GetDBDialect() DBDialect
 	GetDBConnectionURL() string
 	GetDBConnectionMaxIdleTime() time.Duration
 	GetDBConnectionMaxLifetime() time.Duration
@@ -185,7 +193,7 @@ type BrokerConfig interface {
 
 //Config represents the application configuration
 type Config struct {
-	DBDialect                 string
+	DBDialect                 DBDialect
 	DBConnectionURL           string
 	DBConnectionMaxIdleTime   time.Duration
 	DBConnectionMaxLifetime   time.Duration
@@ -213,7 +221,7 @@ type Config struct {
 }
 
 // GetDBDialect returns the DB dialect of the configuration
-func (config *Config) GetDBDialect() string {
+func (config *Config) GetDBDialect() DBDialect {
 	return config.DBDialect
 }
 
@@ -391,7 +399,16 @@ func validateConfigurationState(configuration *Config) error {
 	}
 	defer ln.Close()
 	// Check DB Connection is valid
-	db, dbConnectionErr := sql.Open(configuration.DBDialect, configuration.DBConnectionURL)
+	var ping func(*sql.DB) error
+	switch configuration.DBDialect {
+	case SQLite3Dialect:
+		ping = pingSqlite3
+	case MySQLDialect:
+		ping = pingMysql
+	default:
+		return errDBDialect
+	}
+	db, dbConnectionErr := sql.Open(string(configuration.DBDialect), configuration.DBConnectionURL)
 	if dbConnectionErr != nil {
 		return dbConnectionErr
 	}
@@ -400,17 +417,9 @@ func validateConfigurationState(configuration *Config) error {
 	db.SetMaxIdleConns(int(configuration.DBMaxIdleConnections))
 	db.SetMaxOpenConns(int(configuration.DBMaxOpenConnections))
 	db.SetConnMaxIdleTime(configuration.DBConnectionMaxIdleTime)
-	switch configuration.DBDialect {
-	case "sqlite3":
-		dbErr := pingSqlite3(db)
-		if dbErr != nil {
-			return dbErr
-		}
-	case "mysql":
-		dbErr := pingMysql(db)
-		if dbErr != nil {
-			return dbErr
-		}
+	dbErr := ping(db)
+	if dbErr != nil {
+		return dbErr
 	}
 	// Check retrigger endpoint is a valid Absolute URL
 	retriggerEndpoint, endpointErr := url.Parse(configuration.RetriggerBaseEndpoint)
@@ -451,7 +460,7 @@ func setupStorageConfiguration(cfg *ini.File, configuration *Config) {
 	dbMaxLifetimeInSec, _ := dbSection.GetKey("connxn-max-lifetime-seconds")
 	dbMaxIdleConnections, _ := dbSection.GetKey("max-idle-connxns")
 	dbMaxOpenConnections, _ := dbSection.GetKey("max-open-connxns")
-	configuration.DBDialect = dbDialect.String()
+	configuration.DBDialect = DBDialect(dbDialect.String())
 	configuration.DBConnectionURL = dbConnection.String()
 	configuration.DBConnectionMaxIdleTime = time.Duration(dbMaxIdleTimeInSec.MustUint(0)) * time.Second
 	configuration.DBConnectionMaxLifetime = time.Duration(dbMaxLifetimeInSec.MustUint(0)) * time.Second
