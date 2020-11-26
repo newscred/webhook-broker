@@ -17,5 +17,8 @@ ADD main.go .
 ADD wire.go .
 ADD wire_gen.go .
 ADD config ./config
+ADD controllers ./controllers
+ADD migration ./migration
+ADD storage ./storage
 
 RUN make build test

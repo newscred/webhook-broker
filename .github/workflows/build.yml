@@ -19,7 +19,7 @@ jobs:
     - name: Create dist
       run: mkdir ./dist/
     - name: Run Test & Build
-      run: make dep-tools deps build test
+      run: make dep-tools deps build ci-test
     - name: Upload build artifact
       uses: actions/upload-artifact@v2
       with:
@@ -46,7 +46,7 @@ jobs:
       env:
         CC_TEST_REPORTER_ID: ${{ secrets.CODECLIMATE_REPORTER_ID }}
       with:
-        coverageCommand: go test -coverprofile=cover.out ./...
+        coverageCommand: go test -coverprofile=cover.out ./... -short
         debug: true
         prefix: github.com/imyousuf/webhook-broker/
         coverageLocations: |
