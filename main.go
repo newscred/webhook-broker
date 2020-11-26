@@ -51,6 +51,9 @@ var (
 		fmt.Println(output)
 	}
 
+	// ErrMigrationSrcNotDir for error when migration source specified is not a directory
+	ErrMigrationSrcNotDir = errors.New("migration source not a dir")
+
 	parseArgs = func(programName string, args []string) (cliConfig *config.CLIConfig, output string, err error) {
 		flags := flag.NewFlagSet(programName, flag.ContinueOnError)
 		var buf bytes.Buffer
@@ -71,7 +74,7 @@ var (
 				return nil, "Could not determine migration source details", err
 			}
 			if !fileInfo.IsDir() {
-				return nil, "Migration source must be a dir", errors.New("migration source not a dir")
+				return nil, "Migration source must be a dir", ErrMigrationSrcNotDir
 			}
 			if !filepath.IsAbs(conf.MigrationSource) {
 				conf.MigrationSource, _ = filepath.Abs(conf.MigrationSource)
@@ -89,7 +92,7 @@ func main() {
 	if cliCfgErr != nil {
 		consolePrintln(output)
 		if cliCfgErr != flag.ErrHelp {
-			log.Fatalln(cliCfgErr)
+			log.Println(cliCfgErr)
 		}
 		exit(1)
 	}
@@ -97,7 +100,7 @@ func main() {
 	// Setup HTTP Server and listen (implicitly init DB and run migration if arg passed)
 	httpServiceContainer, err := GetHTTPServer(inConfig)
 	if err != nil {
-		log.Fatalln(err)
+		log.Println(err)
 		exit(3)
 	}
 	var buf bytes.Buffer

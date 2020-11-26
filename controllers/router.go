@@ -39,9 +39,15 @@ func (rLogger RequestLogger) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
+// NotifyOnInterrupt registers channel to get notified when interrupt is captured
+var NotifyOnInterrupt = func(stop *chan os.Signal) {
+	signal.Notify(*stop, os.Interrupt)
+}
+
 // ConfigureAPI configures API Server with interrupt handling
-func ConfigureAPI(httpConfig config.HTTPConfig, listener ServerLifecycleListener, accessor storage.DataAccessor) *http.Server {
+func ConfigureAPI(httpConfig config.HTTPConfig, iListener ServerLifecycleListener, accessor storage.DataAccessor) *http.Server {
 	dataAccessor = accessor
+	listener = iListener
 	routerInitializer.Do(func() {
 		apiRouter = httprouter.New()
 		setupAPIRoutes(apiRouter)
@@ -52,16 +58,16 @@ func ConfigureAPI(httpConfig config.HTTPConfig, listener ServerLifecycleListener
 		ReadTimeout:  httpConfig.GetHTTPReadTimeout(),
 		WriteTimeout: httpConfig.GetHTTPWriteTimeout(),
 	}
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt)
 	go func() {
 		log.Println("Listening to http at -", httpConfig.GetHTTPListeningAddr())
-		listener.StartingServer()
+		iListener.StartingServer()
 		if serverListenErr := server.ListenAndServe(); serverListenErr != nil {
-			listener.ServerStartFailed(serverListenErr)
-			log.Fatal(serverListenErr)
+			iListener.ServerStartFailed(serverListenErr)
+			log.Println(serverListenErr)
 		}
 	}()
+	stop := make(chan os.Signal, 1)
+	NotifyOnInterrupt(&stop)
 	go func() {
 		<-stop
 		handleExit()

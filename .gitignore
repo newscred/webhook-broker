@@ -14,6 +14,9 @@
 # SQLlite3 DB files
 *.sqlite3
 
+# Log outputs
+*.log
+
 # IDE
 .vscode
 
