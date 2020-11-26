@@ -41,6 +41,10 @@ generate:
 
 dep-tools:
 	go get github.com/google/wire/cmd/wire
+ifneq ($(OS),Alpine Linux)
+	go get github.com/golang-migrate/migrate/v4/cmd/migrate
+endif
+
 
 build:
 	go build -mod=readonly

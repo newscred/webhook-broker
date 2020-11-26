@@ -22,6 +22,8 @@ If you find any bug, please report it [here](https://github.com/imyousuf/webhook
 
 For all support and discussion please use the Slack Channel **`#webhook-broker`** in the [Gophers](https://gophers.slack.com/) workspace. For direct invite please email to `webhook-broker at imytech.net`.
 
+Please check [Developers](./docs/developers.md) for more developer note.
+
 ## License
 
 The project is released under [ASL 2.0](./LICENSE)
