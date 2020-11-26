@@ -400,6 +400,30 @@ func TestGetConfigurationFromParseConfig_ValueError(t *testing.T) {
 	})
 }
 
+func TestGetConfigurationFromCLIConfig(t *testing.T) {
+	t.Run("EmptyPath", func(t *testing.T) {
+		_, err := GetConfigurationFromCLIConfig(&CLIConfig{})
+		assert.Nil(t, err)
+	})
+	t.Run("WithPath", func(t *testing.T) {
+		_, err := GetConfigurationFromCLIConfig(&CLIConfig{ConfigPath: "./test-webhook-broker.cfg"})
+		assert.Nil(t, err)
+	})
+}
+
+func TestMigrationEnabled(t *testing.T) {
+	t.Run("MigrationEnabled", func(t *testing.T) {
+		t.Parallel()
+		cliConfig := &CLIConfig{}
+		assert.False(t, cliConfig.IsMigrationEnabled())
+	})
+	t.Run("MigrationDisabled", func(t *testing.T) {
+		t.Parallel()
+		cliConfig := &CLIConfig{MigrationSource: "file:///test/"}
+		assert.True(t, cliConfig.IsMigrationEnabled())
+	})
+}
+
 func TestGetVersion(t *testing.T) {
 	assert.NotEmpty(t, GetVersion())
 }

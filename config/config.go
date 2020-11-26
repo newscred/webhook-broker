@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/go-ini/ini"
+	"github.com/google/wire"
+
 	// MySQL DB Driver
 	_ "github.com/go-sql-driver/mysql"
 	// SQLite3 DB Driver
@@ -102,6 +104,8 @@ var (
 	}
 	loadConfiguration = defaultLoadFunc
 	errDBDialect      = errors.New("DB Dialect not supported")
+	// ConfigInjector sets up configuration related bindings
+	ConfigInjector = wire.NewSet(GetConfigurationFromCLIConfig, wire.Bind(new(SeedDataConfig), new(*Config)), wire.Bind(new(HTTPConfig), new(*Config)), wire.Bind(new(RelationalDatabaseConfig), new(*Config)), wire.Bind(new(LogConfig), new(*Config)))
 )
 
 var currentUser = user.Current
@@ -370,6 +374,25 @@ func (config *Config) GetRetryBackoffDelays() []time.Duration {
 // /etc/webhook-broker/webhook-broker.cfg, {USER_HOME}/.webhook-broker/webhook-broker.cfg, webhook-broker.cfg (current dir)
 func GetAutoConfiguration() (*Config, error) {
 	return GetConfiguration("")
+}
+
+// CLIConfig represents the Command Line Args config
+type CLIConfig struct {
+	ConfigPath      string
+	MigrationSource string
+}
+
+// IsMigrationEnabled returns whether migration is enabled
+func (conf *CLIConfig) IsMigrationEnabled() bool {
+	return len(conf.MigrationSource) > 0
+}
+
+// GetConfigurationFromCLIConfig from CLIConfig.
+func GetConfigurationFromCLIConfig(cliConfig *CLIConfig) (*Config, error) {
+	if len(cliConfig.ConfigPath) > 0 {
+		return GetConfiguration(cliConfig.ConfigPath)
+	}
+	return GetAutoConfiguration()
 }
 
 // GetConfiguration gets the current state of application configuration
