@@ -45,13 +45,10 @@ var panicExit = func(code int) {
 
 func TestMainFunc(t *testing.T) {
 	t.Run("SuccessRun", func(t *testing.T) {
-		if testing.Short() {
-			t.Skip("skipping test in short mode.")
-		}
 		var buf bytes.Buffer
 		log.SetOutput(&buf)
 		oldArgs := os.Args
-		os.Args = []string{"webhook-broker"}
+		os.Args = []string{"webhook-broker", "-migrate", "./migration/sqls/"}
 		oldNotify := controllers.NotifyOnInterrupt
 		controllers.NotifyOnInterrupt = mainFunctionBreaker
 		defer func() {
