@@ -21,7 +21,10 @@ write-timeout=240
 
 # Log settings
 [log]
-filename=/var/log/webhook-broker.log
+# default is console logging, signified by passing empty value
+filename=
+# Enable file logging by uncommenting the following line
+# filename=/var/log/webhook-broker.log
 max-file-size-in-mb=200
 max-backups=3
 max-age-in-days=28

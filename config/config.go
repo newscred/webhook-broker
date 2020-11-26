@@ -49,7 +49,7 @@ const (
 	read-timeout=240
 	write-timeout=240
 	[log]
-	filename=/var/log/webhook-broker.log
+	filename=
 	max-file-size-in-mb=200
 	max-backups=3
 	max-age-in-days=28
