@@ -53,7 +53,7 @@ build:
 	(cd dist && tar cjvf webhook-broker-$(shell git log --pretty=format:'%h' -n 1).tar.bz2 ./webhook-broker)
 
 ci-test:
-	go test -mod=readonly -v ./... -short
+	go test -timeout 30s -mod=readonly -v ./... -short
 
 test:
 	go test -mod=readonly -v ./...
