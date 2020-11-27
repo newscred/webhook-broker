@@ -10,11 +10,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/google/wire"
 	"github.com/imyousuf/webhook-broker/config"
 	"github.com/imyousuf/webhook-broker/controllers"
 	"github.com/imyousuf/webhook-broker/storage"
+	"github.com/imyousuf/webhook-broker/storage/data"
 	lumberjack "gopkg.in/natefinch/lumberjack.v2"
 )
 
@@ -40,6 +42,7 @@ func (impl *ServerLifecycleListenerImpl) ServerShutdownCompleted() {
 type HTTPServiceContainer struct {
 	Configuration *config.Config
 	Server        *http.Server
+	DataAccessor  storage.DataAccessor
 	Listener      *ServerLifecycleListenerImpl
 }
 
@@ -84,6 +87,51 @@ var (
 
 		return &conf, buf.String(), nil
 	}
+
+	getApp = func(httpServiceContainer *HTTPServiceContainer) (*data.App, error) {
+		return httpServiceContainer.DataAccessor.GetAppRepository().GetApp()
+	}
+
+	startAppInit = func(httpServiceContainer *HTTPServiceContainer, seedData *config.SeedData) error {
+		return httpServiceContainer.DataAccessor.GetAppRepository().StartAppInit(seedData)
+	}
+
+	initApp = func(httpServiceContainer *HTTPServiceContainer) {
+		app, err := getApp(httpServiceContainer)
+		var initFinished chan bool = make(chan bool)
+		timeout := time.After(time.Second * 10)
+		if err == nil && app.GetStatus() == data.NotInitialized || (app.GetStatus() == data.Initialized && app.GetSeedData().DataHash != httpServiceContainer.Configuration.GetSeedData().DataHash) {
+			go func() {
+				run := true
+				for run {
+					select {
+					case <-timeout:
+						initFinished <- true
+						run = false
+					default:
+						seedData := httpServiceContainer.Configuration.GetSeedData()
+						initErr := startAppInit(httpServiceContainer, &seedData)
+						switch initErr {
+						case nil:
+							log.Println("Creating seed data")
+							// TODO: Add Creates here
+							log.Println(httpServiceContainer.DataAccessor.GetAppRepository().CompleteAppInit())
+							run = false
+						case storage.ErrAppInitializing:
+							run = false
+						case storage.ErrOptimisticAppInit:
+							run = false
+						default:
+							log.Println(initErr)
+							time.Sleep(1 * time.Second)
+						}
+					}
+				}
+				initFinished <- true
+			}()
+			<-initFinished
+		}
+	}
 )
 
 func main() {
@@ -102,6 +150,13 @@ func main() {
 	if err != nil {
 		log.Println(err)
 		exit(3)
+	}
+	_, err = getApp(httpServiceContainer)
+	if err == nil {
+		initApp(httpServiceContainer)
+	} else {
+		log.Println(err)
+		exit(4)
 	}
 	var buf bytes.Buffer
 	json.NewEncoder(&buf).Encode(httpServiceContainer.Configuration)
@@ -136,8 +191,8 @@ func GetMigrationConfig(cliConfig *config.CLIConfig) *storage.MigrationConfig {
 }
 
 // NewHTTPServiceContainer is provider for http service container
-func NewHTTPServiceContainer(config *config.Config, listener *ServerLifecycleListenerImpl, server *http.Server) *HTTPServiceContainer {
-	return &HTTPServiceContainer{Configuration: config, Server: server, Listener: listener}
+func NewHTTPServiceContainer(config *config.Config, listener *ServerLifecycleListenerImpl, server *http.Server, dataAccessor storage.DataAccessor) *HTTPServiceContainer {
+	return &HTTPServiceContainer{Configuration: config, Server: server, Listener: listener, DataAccessor: dataAccessor}
 }
 
 var (

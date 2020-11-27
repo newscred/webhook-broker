@@ -30,6 +30,6 @@ func GetHTTPServer(cliConfig *config.CLIConfig) (*HTTPServiceContainer, error) {
 		return nil, err
 	}
 	server := controllers.ConfigureAPI(configConfig, serverLifecycleListenerImpl, dataAccessor)
-	httpServiceContainer := NewHTTPServiceContainer(configConfig, serverLifecycleListenerImpl, server)
+	httpServiceContainer := NewHTTPServiceContainer(configConfig, serverLifecycleListenerImpl, server, dataAccessor)
 	return httpServiceContainer, nil
 }

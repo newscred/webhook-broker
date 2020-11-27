@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -12,7 +14,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/imyousuf/webhook-broker/config"
 	"github.com/imyousuf/webhook-broker/controllers"
+	"github.com/imyousuf/webhook-broker/storage"
+	"github.com/imyousuf/webhook-broker/storage/data"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -44,6 +49,73 @@ var panicExit = func(code int) {
 }
 
 func TestMainFunc(t *testing.T) {
+	os.Remove("./webhook-broker.sqlite3")
+	t.Run("GetAppErr", func(t *testing.T) {
+		oldExit := exit
+		oldArgs := os.Args
+		oldGetApp := getApp
+		getApp = func(httpServiceContainer *HTTPServiceContainer) (*data.App, error) {
+			serverShutdownContext, shutdownTimeoutCancelFunc := context.WithTimeout(context.Background(), 15*time.Second)
+			defer shutdownTimeoutCancelFunc()
+			httpServiceContainer.Server.Shutdown(serverShutdownContext)
+			return nil, errors.New("No App Error")
+		}
+		exit = panicExit
+		os.Args = []string{"webhook-broker", "-migrate", "./migration/sqls/"}
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					assert.Equal(t, 4, r.(int))
+				} else {
+					t.Fail()
+				}
+			}()
+			main()
+		}()
+		defer func() {
+			exit = oldExit
+			os.Args = oldArgs
+			getApp = oldGetApp
+		}()
+	})
+	t.Run("StartInitRaceErrInBetween", func(t *testing.T) {
+		oldExit := exit
+		oldArgs := os.Args
+		oldStartAppInit := startAppInit
+		oldNotify := controllers.NotifyOnInterrupt
+		controllers.NotifyOnInterrupt = mainFunctionBreaker
+		startAppInit = func(httpServiceContainer *HTTPServiceContainer, seedData *config.SeedData) error {
+			return storage.ErrAppInitializing
+		}
+		exit = panicExit
+		os.Args = []string{"webhook-broker"}
+		main()
+		defer func() {
+			exit = oldExit
+			os.Args = oldArgs
+			startAppInit = oldStartAppInit
+			controllers.NotifyOnInterrupt = oldNotify
+		}()
+	})
+	t.Run("StartInitRaceErrDuringUpdate", func(t *testing.T) {
+		oldExit := exit
+		oldArgs := os.Args
+		oldStartAppInit := startAppInit
+		oldNotify := controllers.NotifyOnInterrupt
+		controllers.NotifyOnInterrupt = mainFunctionBreaker
+		startAppInit = func(httpServiceContainer *HTTPServiceContainer, seedData *config.SeedData) error {
+			return storage.ErrOptimisticAppInit
+		}
+		exit = panicExit
+		os.Args = []string{"webhook-broker"}
+		main()
+		defer func() {
+			exit = oldExit
+			os.Args = oldArgs
+			startAppInit = oldStartAppInit
+			controllers.NotifyOnInterrupt = oldNotify
+		}()
+	})
 	t.Run("SuccessRun", func(t *testing.T) {
 		var buf bytes.Buffer
 		log.SetOutput(&buf)
@@ -77,6 +149,8 @@ func TestMainFunc(t *testing.T) {
 			defer func() {
 				if r := recover(); r != nil {
 					assert.Equal(t, 1, r.(int))
+				} else {
+					t.Fail()
 				}
 			}()
 			main()
@@ -96,6 +170,8 @@ func TestMainFunc(t *testing.T) {
 			defer func() {
 				if r := recover(); r != nil {
 					assert.Equal(t, 1, r.(int))
+				} else {
+					t.Fail()
 				}
 			}()
 			main()
@@ -117,6 +193,8 @@ func TestMainFunc(t *testing.T) {
 				defer func() {
 					if r := recover(); r != nil {
 						assert.Equal(t, 3, r.(int))
+					} else {
+						t.Fail()
 					}
 				}()
 				main()

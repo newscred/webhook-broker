@@ -44,7 +44,7 @@ const (
 	insertStatement                 = "INSERT INTO app (id, seedData, appStatus) VALUES ($1, $2, $3)"
 	selectStatement                 = "SELECT seedData, appStatus FROM app WHERE id = 1"
 	startInitUpdateStatement        = `UPDATE app SET seedData = $1, appStatus = $2 WHERE id = 1 AND appStatus != $2`
-	completeInitUpdateStatement     = `UPDATE app SET appStatus = $1 WHERE id = 1 AND appStatus != $2`
+	completeInitUpdateStatement     = `UPDATE app SET appStatus = $1 WHERE id = 1 AND appStatus == $2`
 	optimisticLockInitAppErrMsg     = "Initializing began in another app in the meantime"
 	optimisticLockCompleteAppErrMsg = "Initializing not started so can not complete"
 )
