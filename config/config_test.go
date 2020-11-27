@@ -1,10 +1,13 @@
 package config
 
 import (
+	"bytes"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net"
 	"os/user"
+	"reflect"
 	"testing"
 	"time"
 
@@ -16,7 +19,7 @@ import (
 const (
 	wrongValueConfig = `[rdbms]
 	dialect=sqlite3
-	connection-url=webhook_broker.sqlite3
+	connection-url=webhook-broker.sqlite3
 	connxn-max-idle-time-seconds=-10
 	connxn-max-lifetime-seconds=ascx0x
 	max-idle-connxns=as30
@@ -421,6 +424,26 @@ func TestMigrationEnabled(t *testing.T) {
 		t.Parallel()
 		cliConfig := &CLIConfig{MigrationSource: "file:///test/"}
 		assert.True(t, cliConfig.IsMigrationEnabled())
+	})
+}
+
+func TestSeedDataDBDriverFuncs(t *testing.T) {
+	configuration, _ := GetAutoConfiguration()
+	var buf bytes.Buffer
+	_ = json.NewEncoder(&buf).Encode(configuration.GetSeedData())
+	jsonSeedData := buf.String()
+	t.Run("Scan", func(t *testing.T) {
+		t.Parallel()
+		seedData := &SeedData{}
+		seedData.Scan(jsonSeedData)
+		assert.Equal(t, configuration.GetSeedData(), *seedData)
+	})
+	t.Run("Value", func(t *testing.T) {
+		t.Parallel()
+		jsonDBVal, err := configuration.GetSeedData().Value()
+		assert.Nil(t, err)
+		assert.IsType(t, reflect.TypeOf(jsonSeedData).Name(), jsonDBVal)
+		assert.Equal(t, jsonSeedData, jsonDBVal.(string))
 	})
 }
 

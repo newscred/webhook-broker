@@ -3,7 +3,7 @@
 # Database connection settings
 [rdbms]
 dialect=sqlite3
-connection-url=webhook-broker.sqlite
+connection-url=webhook-broker.sqlite3
 # Use config akin to these for connecting to MySQL
 # dialect=mysql
 # connection-url=webhook_broker:zxc909zxc@tcp(mysql:3306)/webhook-broker?charset=utf8&parseTime=true

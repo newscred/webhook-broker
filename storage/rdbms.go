@@ -38,12 +38,13 @@ func (rdbmsDataAccessor *RelationalDBDataAccessor) GetAppRepository() AppReposit
 
 // Close closes the connection to DB
 func (rdbmsDataAccessor *RelationalDBDataAccessor) Close() {
-
 }
 
 const (
 	insertStatement                 = "INSERT INTO app (id, seedData, appStatus) VALUES ($1, $2, $3)"
 	selectStatement                 = "SELECT seedData, appStatus FROM app WHERE id = 1"
+	startInitUpdateStatement        = `UPDATE app SET seedData = $1, appStatus = $2 WHERE id = 1 AND appStatus != $2`
+	completeInitUpdateStatement     = `UPDATE app SET appStatus = $1 WHERE id = 1 AND appStatus != $2`
 	optimisticLockInitAppErrMsg     = "Initializing began in another app in the meantime"
 	optimisticLockCompleteAppErrMsg = "Initializing not started so can not complete"
 )
@@ -53,6 +54,12 @@ var (
 	ErrOptimisticAppInit = errors.New(optimisticLockInitAppErrMsg)
 	// ErrOptimisticAppComplete represents the Error when app complete attempted from not initializing state
 	ErrOptimisticAppComplete = errors.New(optimisticLockCompleteAppErrMsg)
+	// ErrAppInitializing is returned when app is being initialized by another thread.
+	ErrAppInitializing = errors.New("App is in initializing")
+	// ErrNoDataChangeFromInitialized is returned when initialization is attempted without any seed data change while app has been initialized
+	ErrNoDataChangeFromInitialized = errors.New("No data change on initialized App")
+	// ErrCompleteWhileNotBeingInitialized is returned when complete is called without being initialized
+	ErrCompleteWhileNotBeingInitialized = errors.New("App not initializing to complete initializing")
 )
 
 // AppDBRepository is the repository to access App data
@@ -68,8 +75,17 @@ func (appRep *AppDBRepository) InitAppData(seedData *config.SeedData) error {
 	}
 	// INSERT SQL
 	initialState := data.NotInitialized
-	_, err = appRep.db.Exec(insertStatement, 1, seedData, &initialState)
-	return err
+	tx, err := appRep.db.Begin()
+	var appErr error
+	if appErr = err; appErr == nil {
+		_, err = appRep.db.Exec(insertStatement, 1, seedData, &initialState)
+		if appErr = err; appErr == nil {
+			tx.Commit()
+		} else {
+			tx.Rollback()
+		}
+	}
+	return appErr
 }
 
 // GetApp retrieves the App from storage, it will never return nil
@@ -83,27 +99,33 @@ func (appRep *AppDBRepository) GetApp() (*data.App, error) {
 
 // StartAppInit stores state that App initialization started. It will return error if App is in Initializing state or if data hash is equal and app in initialized state
 func (appRep *AppDBRepository) StartAppInit(seedData *config.SeedData) error {
+	var appErr error
 	currentApp, err := appRep.GetApp()
 	if err != nil {
 		return err
 	}
 	if currentApp.GetStatus() == data.Initializing {
-		return errors.New("App is in initialized")
+		return ErrAppInitializing
 	}
 	if currentApp.GetSeedData().DataHash == seedData.DataHash && currentApp.GetStatus() == data.Initialized {
-		return errors.New("No data change on initialized App")
+		return ErrNoDataChangeFromInitialized
 	}
 	// UPDATE SQL with condition
-	updateStatement := `UPDATE app
-	SET seedData = $1, appStatus = $2
-	WHERE id = 1 AND appStatus != $2`
-	result, err := appRep.db.Exec(updateStatement, seedData, data.Initializing)
-	if err == nil {
-		if rowsChanged, err := result.RowsAffected(); err == nil && rowsChanged <= 0 {
-			err = ErrOptimisticAppInit
+	tx, err := appRep.db.Begin()
+	appErr = err
+	if appErr == nil {
+		result, err := appRep.db.Exec(startInitUpdateStatement, *seedData, data.Initializing)
+		appErr = err
+		if appErr == nil {
+			if rowsChanged, err := result.RowsAffected(); err == nil && rowsChanged <= 0 {
+				appErr = ErrOptimisticAppInit
+			}
+			tx.Commit()
+		} else {
+			tx.Rollback()
 		}
 	}
-	return err
+	return appErr
 }
 
 // CompleteAppInit stores that App initialization completed; it will return error if app is not in initializing state before the update is made
@@ -113,24 +135,30 @@ func (appRep *AppDBRepository) CompleteAppInit() error {
 		return err
 	}
 	if currentApp.GetStatus() != data.Initializing {
-		return errors.New("App not initializing to complete initializing")
+		return ErrCompleteWhileNotBeingInitialized
 	}
 	// UPDATE SQL with condition
-	updateStatement := `UPDATE app
-	SET appStatus = $1
-	WHERE id = 1 AND appStatus != $2`
-	result, err := appRep.db.Exec(updateStatement, data.Initialized, data.Initializing)
-	if err == nil {
-		if rowsChanged, err := result.RowsAffected(); err == nil && rowsChanged <= 0 {
-			err = ErrOptimisticAppComplete
+	var appErr error
+	tx, err := appRep.db.Begin()
+	if appErr = err; appErr == nil {
+		result, err := appRep.db.Exec(completeInitUpdateStatement, data.Initialized, data.Initializing)
+		if appErr = err; appErr == nil {
+			if rowsChanged, err := result.RowsAffected(); err == nil && rowsChanged <= 0 {
+				appErr = ErrOptimisticAppComplete
+			}
+			tx.Commit()
+		} else {
+			tx.Rollback()
 		}
 	}
-	return err
+	return appErr
 }
 
 var (
 	dataAccessor            *RelationalDBDataAccessor
 	dataAccessorInitializer sync.Once
+	// ErrDBConnectionNeverInitialized is returned when same NewDataAccessor is called the first time and it failed to connec to DB; in all subsequent calls the accessor will remain nil
+	ErrDBConnectionNeverInitialized = errors.New("DB Connection never initialized")
 )
 
 // NewDataAccessor retrieves the DB accessor
@@ -139,7 +167,7 @@ func NewDataAccessor(dbConfig config.RelationalDatabaseConfig, migrationConf *Mi
 	dataAccessorInitializer.Do(func() {
 		var db *sql.DB
 		// Initialize DB Connection
-		db, err = sql.Open(string(dbConfig.GetDBDialect()), dbConfig.GetDBConnectionURL())
+		db, err = getDB(string(dbConfig.GetDBDialect()), dbConfig.GetDBConnectionURL())
 		if err == nil {
 			db.SetConnMaxLifetime(dbConfig.GetDBConnectionMaxLifetime())
 			db.SetMaxIdleConns(int(dbConfig.GetMaxIdleDBConnections()))
@@ -156,29 +184,41 @@ func NewDataAccessor(dbConfig config.RelationalDatabaseConfig, migrationConf *Mi
 			}
 		}
 	})
+	if dataAccessor == nil && err == nil {
+		err = ErrDBConnectionNeverInitialized
+	}
 	return dataAccessor, err
 }
 
-func runMigration(db *sql.DB, dbConfig config.RelationalDatabaseConfig, migrationConf *MigrationConfig) error {
-	if migrationConf.MigrationEnabled {
-		driver, err := getMigrationDriver(db, dbConfig)
-		if err != nil {
-			return err
-		}
-		migration, err := migrate.NewWithDatabaseInstance(migrationConf.MigrationSource, string(dbConfig.GetDBDialect()), driver)
-		if err != nil {
-			return err
-		}
-		migration.Steps(2)
+var (
+	getDB = func(dialect, connectionURL string) (*sql.DB, error) {
+		return sql.Open(string(dialect), connectionURL)
 	}
-	return nil
-}
+	runMigration = func(db *sql.DB, dbConfig config.RelationalDatabaseConfig, migrationConf *MigrationConfig) error {
+		if migrationConf.MigrationEnabled {
+			driver, err := getMigrationDriver(db, dbConfig)
+			if err != nil {
+				return err
+			}
+			migration, err := getMigration(migrationConf.MigrationSource, string(dbConfig.GetDBDialect()), driver)
+			if err != nil {
+				return err
+			}
+			migration.Steps(2)
+		}
+		return nil
+	}
 
-func getMigrationDriver(db *sql.DB, dbConfig config.RelationalDatabaseConfig) (database.Driver, error) {
-	switch dbConfig.GetDBDialect() {
-	case config.MySQLDialect:
-		return migrate_mysql.WithInstance(db, &migrate_mysql.Config{})
-	default:
-		return migrate_sqlite3.WithInstance(db, &migrate_sqlite3.Config{})
+	getMigration = func(source, dialect string, driver database.Driver) (*migrate.Migrate, error) {
+		return migrate.NewWithDatabaseInstance(source, dialect, driver)
 	}
-}
+
+	getMigrationDriver = func(db *sql.DB, dbConfig config.RelationalDatabaseConfig) (database.Driver, error) {
+		switch dbConfig.GetDBDialect() {
+		case config.MySQLDialect:
+			return migrate_mysql.WithInstance(db, &migrate_mysql.Config{})
+		default:
+			return migrate_sqlite3.WithInstance(db, &migrate_sqlite3.Config{})
+		}
+	}
+)
