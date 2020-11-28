@@ -133,6 +133,13 @@ func TestMainFunc(t *testing.T) {
 		assert.Contains(t, logString, "Webhook Broker")
 		assert.Contains(t, logString, string(GetAppVersion()))
 		t.Log(logString)
+		// Assert App initialization completed
+		configuration, _ := config.GetAutoConfiguration()
+		migrationConf := &storage.MigrationConfig{MigrationEnabled: false}
+		dataAccessor, _ := storage.NewDataAccessor(configuration, migrationConf, configuration)
+		app, err := dataAccessor.GetAppRepository().GetApp()
+		assert.Nil(t, err)
+		assert.Equal(t, data.Initialized, app.GetStatus())
 	})
 	t.Run("HelpError", func(t *testing.T) {
 		oldExit := exit
@@ -244,11 +251,6 @@ func TestParseArgs(t *testing.T) {
 const testLogFile = "./log-setup-test-output.log"
 
 type MockLogConfig struct {
-	// Filename:   config.GetLogFilename(),
-	// 		MaxSize:    int(config.GetMaxLogFileSize()), // megabytes
-	// 		MaxBackups: int(config.GetMaxLogBackups()),
-	// 		MaxAge:     int(config.GetMaxAgeForALogFile()),        //days
-	// 		Compress:   config.IsCompressionEnabledOnLogBackups(), // disabled by default
 }
 
 func (m MockLogConfig) GetLogFilename() string                 { return testLogFile }

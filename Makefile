@@ -56,7 +56,7 @@ ci-test:
 	go test -timeout 30s -mod=readonly -v ./... -short
 
 test:
-	go test -mod=readonly -v ./...
+	go test -mod=readonly ./...
 
 install: build-web
 	go install -mod=readonly
