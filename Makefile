@@ -46,6 +46,8 @@ ifneq ($(OS),Alpine Linux)
 	go get github.com/golang-migrate/migrate/v4/cmd/migrate
 endif
 
+build-docker-iamge:
+	docker build . --tag=imyousuf/webhook-broker:latest
 
 build:
 	go build -mod=readonly

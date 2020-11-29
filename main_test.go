@@ -228,7 +228,7 @@ func TestParseArgs(t *testing.T) {
 	})
 	t.Run("MigrationSourceNotDir", func(t *testing.T) {
 		t.Parallel()
-		_, _, err := parseArgs("webhook-broker", []string{"-migrate", "./LICENSE"})
+		_, _, err := parseArgs("webhook-broker", []string{"-migrate", "./Makefile"})
 		assert.NotNil(t, err)
 		assert.Equal(t, err, ErrMigrationSrcNotDir)
 	})

@@ -25,7 +25,7 @@ const (
 	max-idle-connxns=as30
 	max-open-connxns=-100
 	[http]
-	listener=
+	listener=:7050
 	read-timeout=asd240
 	write-timeout=zf240
 	[log]
@@ -84,6 +84,7 @@ func TestGetAutoConfiguration_Default(t *testing.T) {
 	config, cfgErr := GetAutoConfiguration()
 	if cfgErr != nil {
 		t.Error("Auto Configuration failed", cfgErr)
+		t.Fail()
 	}
 	assert.Equal(t, SQLite3Dialect, config.GetDBDialect())
 	assert.Equal(t, "webhook-broker.sqlite3", config.GetDBConnectionURL())
@@ -91,7 +92,7 @@ func TestGetAutoConfiguration_Default(t *testing.T) {
 	assert.Equal(t, time.Duration(0), config.GetDBConnectionMaxLifetime())
 	assert.Equal(t, uint16(30), config.GetMaxIdleDBConnections())
 	assert.Equal(t, uint16(100), config.GetMaxOpenDBConnections())
-	assert.Equal(t, ":8080", config.GetHTTPListeningAddr())
+	assert.Equal(t, ":7050", config.GetHTTPListeningAddr())
 	assert.Equal(t, toSecond(uint(240)), config.GetHTTPReadTimeout())
 	assert.Equal(t, toSecond(uint(240)), config.GetHTTPWriteTimeout())
 	assert.Equal(t, "", config.GetLogFilename())
@@ -137,12 +138,13 @@ func TestGetAutoConfiguration_WrongValues(t *testing.T) {
 	config, cfgErr := GetAutoConfiguration()
 	if cfgErr != nil {
 		t.Error("Auto Configuration failed", cfgErr)
+		t.Fail()
 	}
 	assert.Equal(t, time.Duration(0), config.GetDBConnectionMaxIdleTime())
 	assert.Equal(t, time.Duration(0), config.GetDBConnectionMaxLifetime())
 	assert.Equal(t, uint16(10), config.GetMaxIdleDBConnections())
 	assert.Equal(t, uint16(50), config.GetMaxOpenDBConnections())
-	assert.Equal(t, ":8080", config.GetHTTPListeningAddr())
+	assert.Equal(t, ":7050", config.GetHTTPListeningAddr())
 	assert.Equal(t, toSecond(uint(180)), config.GetHTTPReadTimeout())
 	assert.Equal(t, toSecond(uint(180)), config.GetHTTPWriteTimeout())
 	assert.Equal(t, "/var/log/webhook-broker.log", config.GetLogFilename())
@@ -198,6 +200,7 @@ func TestGetConfiguration(t *testing.T) {
 	config, cfgErr := GetConfiguration("./test-webhook-broker.cfg")
 	if cfgErr != nil {
 		t.Error("Auto Configuration failed", cfgErr)
+		t.Fail()
 	}
 	assert.Equal(t, SQLite3Dialect, config.GetDBDialect())
 	assert.Equal(t, "database.sqlite3", config.GetDBConnectionURL())
@@ -357,7 +360,7 @@ func TestGetConfigurationFromParseConfig_ValueError(t *testing.T) {
 		dialect=mysql
 		connection-url=expect dsn error
 		[http]
-		listener=:48080
+		listener=:48090
 		`
 		config, err := GetConfigurationFromParseConfig(loadTestConfiguration(testConfig))
 		assert.Equal(t, EmptyConfigurationForError, config)

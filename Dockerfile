@@ -14,6 +14,7 @@ ADD go.sum .
 RUN make deps
 
 ADD main.go .
+ADD main_test.go .
 ADD wire.go .
 ADD wire_gen.go .
 ADD config ./config
@@ -21,4 +22,5 @@ ADD controllers ./controllers
 ADD migration ./migration
 ADD storage ./storage
 
-RUN make build test
+RUN make build
+RUN make test
