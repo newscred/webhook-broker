@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/imyousuf/webhook-broker/config"
+	"github.com/imyousuf/webhook-broker/storage"
 	"github.com/imyousuf/webhook-broker/storage/data"
 	"github.com/julienschmidt/httprouter"
 )
@@ -20,9 +21,20 @@ var getJSON = func(buf *bytes.Buffer, app *data.App) error {
 	return json.NewEncoder(buf).Encode(AppData{SeedData: app.GetSeedData(), AppStatus: app.GetStatus()})
 }
 
-// Status represents the endpoint for /_status
-func Status(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	app, err := dataAccessor.GetAppRepository().GetApp()
+// NewStatusController Factory for new StatusController
+func NewStatusController(appRepo storage.AppRepository) *StatusController {
+	statusController := &StatusController{appRepository: appRepo}
+	return statusController
+}
+
+// StatusController is the controller for `/_status` endpoint
+type StatusController struct {
+	appRepository storage.AppRepository
+}
+
+// Get is the GET /_status endpoint controller
+func (cont *StatusController) Get(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	app, err := cont.appRepository.GetApp()
 	if err != nil {
 		// return error
 		w.WriteHeader(500)

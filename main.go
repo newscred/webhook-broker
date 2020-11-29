@@ -197,5 +197,5 @@ func NewHTTPServiceContainer(config *config.Config, listener *ServerLifecycleLis
 
 var (
 	configInjectorSet             = wire.NewSet(NewHTTPServiceContainer, NewServerListener, GetMigrationConfig, wire.Bind(new(controllers.ServerLifecycleListener), new(*ServerLifecycleListenerImpl)), config.ConfigInjector)
-	relationalDBWithControllerSet = wire.NewSet(controllers.ConfigureAPI, storage.NewDataAccessor)
+	relationalDBWithControllerSet = wire.NewSet(controllers.ControllerInjector, storage.RDBMSStorageSet)
 )

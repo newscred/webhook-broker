@@ -47,7 +47,7 @@ func (m *RelationalDatabaseConfigMockImpl) GetMaxOpenDBConnections() uint16 {
 	return args.Get(0).(uint16)
 }
 
-func TestNewDataAccessor(t *testing.T) {
+func TestGetNewDataAccessor(t *testing.T) {
 	// Clear DB before starting test
 	os.Remove("./webhook-broker.sqlite3")
 	configuration, _ := config.GetAutoConfiguration()
@@ -61,17 +61,17 @@ func TestNewDataAccessor(t *testing.T) {
 		getDB = func(dialect, connectionURL string) (*sql.DB, error) {
 			return nil, dbConnectionErr
 		}
-		_, err := NewDataAccessor(configuration, defaultMigrationConf, configuration)
+		_, err := GetNewDataAccessor(configuration, defaultMigrationConf, configuration)
 		assert.Equal(t, dbConnectionErr, err)
 		t.Run("RetryingAfterConnectionErr", func(t *testing.T) {
-			_, err := NewDataAccessor(configuration, defaultMigrationConf, configuration)
+			_, err := GetNewDataAccessor(configuration, defaultMigrationConf, configuration)
 			assert.Equal(t, ErrDBConnectionNeverInitialized, err)
 		})
 	})
 	t.Run("MigrationDisabled", func(t *testing.T) {
 		dataAccessorInitializer = sync.Once{}
 		migrationConf := &MigrationConfig{MigrationEnabled: false, MigrationSource: "file://" + migrationLocation}
-		_, err := NewDataAccessor(configuration, migrationConf, configuration)
+		_, err := GetNewDataAccessor(configuration, migrationConf, configuration)
 		assert.NotNil(t, err)
 	})
 	t.Run("MigrationDriverErr", func(t *testing.T) {
@@ -82,7 +82,7 @@ func TestNewDataAccessor(t *testing.T) {
 		getMigrationDriver = func(db *sql.DB, dbConfig config.RelationalDatabaseConfig) (database.Driver, error) {
 			return nil, migrationErr
 		}
-		_, err := NewDataAccessor(configuration, defaultMigrationConf, configuration)
+		_, err := GetNewDataAccessor(configuration, defaultMigrationConf, configuration)
 		assert.Equal(t, migrationErr, err)
 	})
 	t.Run("MigrationRunErr", func(t *testing.T) {
@@ -94,7 +94,7 @@ func TestNewDataAccessor(t *testing.T) {
 		getMigration = func(source, dialect string, driver database.Driver) (*migrate.Migrate, error) {
 			return nil, migrationErr
 		}
-		_, err := NewDataAccessor(configuration, defaultMigrationConf, configuration)
+		_, err := GetNewDataAccessor(configuration, defaultMigrationConf, configuration)
 		assert.Equal(t, migrationErr, err)
 	})
 	t.Run("MigrationDriverMySQL", func(t *testing.T) {
@@ -122,7 +122,7 @@ func TestNewDataAccessor(t *testing.T) {
 	})
 	t.Run("SuccessRun", func(t *testing.T) {
 		dataAccessorInitializer = sync.Once{}
-		dataAccessor, err := NewDataAccessor(configuration, defaultMigrationConf, configuration)
+		dataAccessor, err := GetNewDataAccessor(configuration, defaultMigrationConf, configuration)
 		assert.Nil(t, err)
 		assert.NotNil(t, dataAccessor)
 		assert.NotNil(t, dataAccessor.GetAppRepository())
@@ -130,10 +130,22 @@ func TestNewDataAccessor(t *testing.T) {
 		dataAccessor.Close()
 		t.Run("InitAppSkip", func(t *testing.T) {
 			dataAccessorInitializer = sync.Once{}
-			dataAccessor, err := NewDataAccessor(configuration, defaultMigrationConf, configuration)
+			dataAccessor, err := GetNewDataAccessor(configuration, defaultMigrationConf, configuration)
 			assert.Nil(t, err)
 			assert.NotNil(t, dataAccessor)
 		})
+	})
+	t.Run("NewDataAccessorWithNilDB", func(t *testing.T) {
+		t.Parallel()
+		_, err := NewDataAccessor(nil, nil)
+		assert.NotNil(t, err)
+		assert.Equal(t, ErrDBConnectionNeverInitialized, err)
+	})
+	t.Run("NewAppRepositoryWithNilDB", func(t *testing.T) {
+		t.Parallel()
+		_, err := NewAppRepository(nil)
+		assert.NotNil(t, err)
+		assert.Equal(t, ErrDBConnectionNeverInitialized, err)
 	})
 }
 

@@ -136,7 +136,7 @@ func TestMainFunc(t *testing.T) {
 		// Assert App initialization completed
 		configuration, _ := config.GetAutoConfiguration()
 		migrationConf := &storage.MigrationConfig{MigrationEnabled: false}
-		dataAccessor, _ := storage.NewDataAccessor(configuration, migrationConf, configuration)
+		dataAccessor, _ := storage.GetNewDataAccessor(configuration, migrationConf, configuration)
 		app, err := dataAccessor.GetAppRepository().GetApp()
 		assert.Nil(t, err)
 		assert.Equal(t, data.Initialized, app.GetStatus())

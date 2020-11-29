@@ -16,15 +16,13 @@ import (
 )
 
 func TestStatus(t *testing.T) {
+	t.Parallel()
 	configuration, _ := config.GetAutoConfiguration()
 	defaultApp := data.NewApp(&configuration.SeedData, data.Initialized)
 	mAppRepo := new(AppRepositoryMockImpl)
-	mDataAccessor := new(DataAccessorMockImpl)
-	mDataAccessor.On("GetAppRepository").Return(mAppRepo)
-	mAppRepo.On("GetApp").Return(defaultApp, nil)
-	dataAccessor = mDataAccessor
 	testRouter := httprouter.New()
-	setupAPIRoutes(testRouter)
+	setupAPIRoutes(testRouter, NewStatusController(mAppRepo))
+	mAppRepo.On("GetApp").Return(defaultApp, nil)
 	req, _ := http.NewRequest("GET", "/_status", nil)
 	rr := httptest.NewRecorder()
 	testRouter.ServeHTTP(rr, req)
@@ -34,37 +32,33 @@ func TestStatus(t *testing.T) {
 	t.Log(body)
 	json.NewDecoder(strings.NewReader(body)).Decode(outAppData)
 	assert.Equal(t, AppData{SeedData: defaultApp.GetSeedData(), AppStatus: defaultApp.GetStatus()}, *outAppData)
-	mDataAccessor.AssertExpectations(t)
 	mAppRepo.AssertExpectations(t)
 }
 
 func TestStatus_AppDataError(t *testing.T) {
+	t.Parallel()
 	configuration, _ := config.GetAutoConfiguration()
 	defaultApp := data.NewApp(&configuration.SeedData, data.Initialized)
 	mAppRepo := new(AppRepositoryMockImpl)
-	mDataAccessor := new(DataAccessorMockImpl)
-	dataAccessor = mDataAccessor
-	mDataAccessor.On("GetAppRepository").Return(mAppRepo)
+	testRouter := httprouter.New()
+	setupAPIRoutes(testRouter, NewStatusController(mAppRepo))
 	err := errors.New("App could not be returned")
 	mAppRepo.On("GetApp").Return(defaultApp, err)
-	testRouter := httprouter.New()
-	setupAPIRoutes(testRouter)
 	req, _ := http.NewRequest("GET", "/_status", nil)
 	rr := httptest.NewRecorder()
 	testRouter.ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusInternalServerError, rr.Code)
 	assert.Equal(t, err.Error(), rr.Body.String())
-	mDataAccessor.AssertExpectations(t)
 	mAppRepo.AssertExpectations(t)
 }
 
 func TestStatus_JSONMarshalError(t *testing.T) {
+	t.Parallel()
 	configuration, _ := config.GetAutoConfiguration()
 	defaultApp := data.NewApp(&configuration.SeedData, data.Initialized)
 	mAppRepo := new(AppRepositoryMockImpl)
-	mDataAccessor := new(DataAccessorMockImpl)
-	dataAccessor = mDataAccessor
-	mDataAccessor.On("GetAppRepository").Return(mAppRepo)
+	testRouter := httprouter.New()
+	setupAPIRoutes(testRouter, NewStatusController(mAppRepo))
 	mAppRepo.On("GetApp").Return(defaultApp, nil)
 	err := errors.New("App could not be returned")
 	oldGetJSON := getJSON
@@ -74,13 +68,10 @@ func TestStatus_JSONMarshalError(t *testing.T) {
 	defer func() {
 		getJSON = oldGetJSON
 	}()
-	testRouter := httprouter.New()
-	setupAPIRoutes(testRouter)
 	req, _ := http.NewRequest("GET", "/_status", nil)
 	rr := httptest.NewRecorder()
 	testRouter.ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusInternalServerError, rr.Code)
 	assert.Equal(t, err.Error(), rr.Body.String())
-	mDataAccessor.AssertExpectations(t)
 	mAppRepo.AssertExpectations(t)
 }

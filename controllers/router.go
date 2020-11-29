@@ -9,18 +9,18 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/wire"
 	"github.com/gorilla/handlers"
 	"github.com/imyousuf/webhook-broker/config"
-	"github.com/imyousuf/webhook-broker/storage"
 	"github.com/julienschmidt/httprouter"
 )
 
 var (
-	apiRouter         *httprouter.Router
 	listener          ServerLifecycleListener
 	routerInitializer sync.Once
 	server            *http.Server
-	dataAccessor      storage.DataAccessor
+	// ControllerInjector for binding controllers
+	ControllerInjector = wire.NewSet(ConfigureAPI, NewRouter, NewStatusController)
 )
 
 // ServerLifecycleListener listens to key server lifecycle error
@@ -28,6 +28,26 @@ type ServerLifecycleListener interface {
 	StartingServer()
 	ServerStartFailed(err error)
 	ServerShutdownCompleted()
+}
+
+// Get represents GET Method Call to a resource
+type Get interface {
+	Get(w http.ResponseWriter, r *http.Request, ps httprouter.Params)
+}
+
+// Put represents PUT Method Call to a resource
+type Put interface {
+	Put(w http.ResponseWriter, r *http.Request, ps httprouter.Params)
+}
+
+// Post represents POST Method Call to a resource
+type Post interface {
+	Post(w http.ResponseWriter, r *http.Request, ps httprouter.Params)
+}
+
+// Delete represents DELETE Method Call to a resource
+type Delete interface {
+	Delete(w http.ResponseWriter, r *http.Request, ps httprouter.Params)
 }
 
 // RequestLogger is a simple io.Writer that allows requests to be logged
@@ -45,13 +65,8 @@ var NotifyOnInterrupt = func(stop *chan os.Signal) {
 }
 
 // ConfigureAPI configures API Server with interrupt handling
-func ConfigureAPI(httpConfig config.HTTPConfig, iListener ServerLifecycleListener, accessor storage.DataAccessor) *http.Server {
-	dataAccessor = accessor
+func ConfigureAPI(httpConfig config.HTTPConfig, iListener ServerLifecycleListener, apiRouter *httprouter.Router) *http.Server {
 	listener = iListener
-	routerInitializer.Do(func() {
-		apiRouter = httprouter.New()
-		setupAPIRoutes(apiRouter)
-	})
 	server = &http.Server{
 		Handler:      handlers.LoggingHandler(RequestLogger{}, apiRouter),
 		Addr:         httpConfig.GetHTTPListeningAddr(),
@@ -84,6 +99,13 @@ func handleExit() {
 	listener.ServerShutdownCompleted()
 }
 
-func setupAPIRoutes(apiRouter *httprouter.Router) {
-	apiRouter.GET("/_status", Status)
+// NewRouter returns a new instance of the router
+func NewRouter(statusController *StatusController) *httprouter.Router {
+	apiRouter := httprouter.New()
+	setupAPIRoutes(apiRouter, statusController)
+	return apiRouter
+}
+
+func setupAPIRoutes(apiRouter *httprouter.Router, statusController Get) {
+	apiRouter.GET("/_status", statusController.Get)
 }

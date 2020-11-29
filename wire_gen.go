@@ -25,11 +25,21 @@ func GetHTTPServer(cliConfig *config.CLIConfig) (*HTTPServiceContainer, error) {
 	}
 	serverLifecycleListenerImpl := NewServerListener()
 	migrationConfig := GetMigrationConfig(cliConfig)
-	dataAccessor, err := storage.NewDataAccessor(configConfig, migrationConfig, configConfig)
+	db, err := storage.GetConnectionPool(configConfig, migrationConfig, configConfig)
 	if err != nil {
 		return nil, err
 	}
-	server := controllers.ConfigureAPI(configConfig, serverLifecycleListenerImpl, dataAccessor)
+	appRepository, err := storage.NewAppRepository(db)
+	if err != nil {
+		return nil, err
+	}
+	statusController := controllers.NewStatusController(appRepository)
+	router := controllers.NewRouter(statusController)
+	server := controllers.ConfigureAPI(configConfig, serverLifecycleListenerImpl, router)
+	dataAccessor, err := storage.NewDataAccessor(db, appRepository)
+	if err != nil {
+		return nil, err
+	}
 	httpServiceContainer := NewHTTPServiceContainer(configConfig, serverLifecycleListenerImpl, server, dataAccessor)
 	return httpServiceContainer, nil
 }

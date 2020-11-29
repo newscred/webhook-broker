@@ -9,6 +9,7 @@ import (
 	"github.com/golang-migrate/migrate/v4/database"
 	migrate_mysql "github.com/golang-migrate/migrate/v4/database/mysql"
 	migrate_sqlite3 "github.com/golang-migrate/migrate/v4/database/sqlite3"
+	"github.com/google/wire"
 	"github.com/imyousuf/webhook-broker/config"
 	"github.com/imyousuf/webhook-broker/storage/data"
 
@@ -28,7 +29,8 @@ type MigrationConfig struct {
 
 // RelationalDBDataAccessor represents the DataAccessor implementation for RDBMS
 type RelationalDBDataAccessor struct {
-	appRepository *AppDBRepository
+	appRepository AppRepository
+	db            *sql.DB
 }
 
 // GetAppRepository returns the AppRepository to be used for App ops
@@ -38,6 +40,7 @@ func (rdbmsDataAccessor *RelationalDBDataAccessor) GetAppRepository() AppReposit
 
 // Close closes the connection to DB
 func (rdbmsDataAccessor *RelationalDBDataAccessor) Close() {
+	db.Close()
 }
 
 const (
@@ -155,42 +158,72 @@ func (appRep *AppDBRepository) CompleteAppInit() error {
 }
 
 var (
-	dataAccessor            *RelationalDBDataAccessor
+	db                      *sql.DB
 	dataAccessorInitializer sync.Once
 	// ErrDBConnectionNeverInitialized is returned when same NewDataAccessor is called the first time and it failed to connec to DB; in all subsequent calls the accessor will remain nil
 	ErrDBConnectionNeverInitialized = errors.New("DB Connection never initialized")
+	// RDBMSStorageSet injector for data storage related implementation
+	RDBMSStorageSet = wire.NewSet(GetConnectionPool, NewAppRepository, NewDataAccessor)
 )
 
 // NewDataAccessor retrieves the DB accessor
-func NewDataAccessor(dbConfig config.RelationalDatabaseConfig, migrationConf *MigrationConfig, seedDataConfig config.SeedDataConfig) (DataAccessor, error) {
-	var err error = nil
-	dataAccessorInitializer.Do(func() {
-		var db *sql.DB
-		// Initialize DB Connection
-		db, err = getDB(string(dbConfig.GetDBDialect()), dbConfig.GetDBConnectionURL())
+func NewDataAccessor(db *sql.DB, appRepo AppRepository) (DataAccessor, error) {
+	var err error
+	if db == nil {
+		err = ErrDBConnectionNeverInitialized
+	}
+	dataAccessor := &RelationalDBDataAccessor{db: db, appRepository: appRepo}
+	return dataAccessor, err
+}
+
+// NewAppRepository retrieves App Repository
+func NewAppRepository(db *sql.DB) (AppRepository, error) {
+	var err error
+	if db == nil {
+		err = ErrDBConnectionNeverInitialized
+	}
+	appRepo := &AppDBRepository{db: db}
+	return appRepo, err
+}
+
+// GetConnectionPool Gets the DB Connection Pool for the App
+func GetConnectionPool(dbConfig config.RelationalDatabaseConfig, migrationConf *MigrationConfig, seedDataConfig config.SeedDataConfig) (*sql.DB, error) {
+	return getConnectionPoolImpl(dbConfig, migrationConf, seedDataConfig)
+}
+
+var (
+	getConnectionPoolImpl = func(dbConfig config.RelationalDatabaseConfig, migrationConf *MigrationConfig, seedDataConfig config.SeedDataConfig) (*sql.DB, error) {
+		var err error = nil
+		dataAccessorInitializer.Do(func() {
+			// Initialize DB Connection
+			db, err = createDBConnectionPool(dbConfig)
+			if err == nil {
+				// Run Migration
+				err = runMigration(db, dbConfig, migrationConf)
+				if err == nil {
+					appRepo := &AppDBRepository{db: db}
+					seedData := seedDataConfig.GetSeedData()
+					err = appRepo.InitAppData(&seedData)
+				}
+			}
+		})
+		if db == nil && err == nil {
+			err = ErrDBConnectionNeverInitialized
+		}
+		return db, err
+	}
+
+	createDBConnectionPool = func(dbConfig config.RelationalDatabaseConfig) (*sql.DB, error) {
+		db, err := getDB(string(dbConfig.GetDBDialect()), dbConfig.GetDBConnectionURL())
 		if err == nil {
 			db.SetConnMaxLifetime(dbConfig.GetDBConnectionMaxLifetime())
 			db.SetMaxIdleConns(int(dbConfig.GetMaxIdleDBConnections()))
 			db.SetMaxOpenConns(int(dbConfig.GetMaxOpenDBConnections()))
 			db.SetConnMaxIdleTime(dbConfig.GetDBConnectionMaxIdleTime())
-			// Run Migration
-			err = runMigration(db, dbConfig, migrationConf)
-			if err == nil {
-				appRepo := &AppDBRepository{db: db}
-				seedData := seedDataConfig.GetSeedData()
-				err = appRepo.InitAppData(&seedData)
-				// Set Data accessor
-				dataAccessor = &RelationalDBDataAccessor{appRepository: appRepo}
-			}
 		}
-	})
-	if dataAccessor == nil && err == nil {
-		err = ErrDBConnectionNeverInitialized
+		return db, err
 	}
-	return dataAccessor, err
-}
 
-var (
 	getDB = func(dialect, connectionURL string) (*sql.DB, error) {
 		return sql.Open(string(dialect), connectionURL)
 	}

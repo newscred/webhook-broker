@@ -38,6 +38,7 @@ endif
 
 generate:
 	go generate -mod=readonly
+	(cd storage && go generate -mod=readonly)
 
 dep-tools:
 	go get github.com/google/wire/cmd/wire

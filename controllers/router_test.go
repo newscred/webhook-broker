@@ -32,7 +32,6 @@ func (m *AppRepositoryMockImpl) CompleteAppInit() error {
 
 type DataAccessorMockImpl struct {
 	mock.Mock
-	appRepo storage.AppRepository
 }
 
 func (m *DataAccessorMockImpl) GetAppRepository() storage.AppRepository {
@@ -76,18 +75,15 @@ func TestConfigureAPI(t *testing.T) {
 	configuration, _ := config.GetAutoConfiguration()
 	defaultApp := data.NewApp(&configuration.SeedData, data.Initialized)
 	mAppRepo := new(AppRepositoryMockImpl)
-	mDataAccessor := new(DataAccessorMockImpl)
 	oldNotify := NotifyOnInterrupt
 	NotifyOnInterrupt = forceServerExiter
 	mListener.On("StartingServer").Return()
 	mListener.On("ServerStartFailed", mock.Anything).Return()
 	mListener.On("ServerShutdownCompleted").Return()
-	mDataAccessor.On("GetAppRepository").Return(mAppRepo)
 	mAppRepo.On("GetApp").Return(defaultApp, nil)
-	ConfigureAPI(configuration, mListener, mDataAccessor)
+	ConfigureAPI(configuration, mListener, NewRouter(NewStatusController(mAppRepo)))
 	<-mListener.serverListener
 	mListener.AssertExpectations(t)
-	mDataAccessor.AssertExpectations(t)
 	mAppRepo.AssertExpectations(t)
 	defer func() { NotifyOnInterrupt = oldNotify }()
 }
