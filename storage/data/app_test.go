@@ -8,6 +8,7 @@ import (
 )
 
 func TestNewApp(t *testing.T) {
+	t.Parallel()
 	configuration, _ := config.GetAutoConfiguration()
 	seedData := configuration.GetSeedData()
 	app := NewApp(&seedData, Initialized)
