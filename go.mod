@@ -11,6 +11,7 @@ require (
 	github.com/gorilla/handlers v1.5.1
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/mattn/go-sqlite3 v1.14.5
+	github.com/rs/xid v1.2.1
 	github.com/smartystreets/goconvey v1.6.4 // indirect
 	github.com/stretchr/testify v1.6.1
 	gopkg.in/ini.v1 v1.62.0 // indirect
