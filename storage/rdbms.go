@@ -29,13 +29,19 @@ type MigrationConfig struct {
 
 // RelationalDBDataAccessor represents the DataAccessor implementation for RDBMS
 type RelationalDBDataAccessor struct {
-	appRepository AppRepository
-	db            *sql.DB
+	appRepository      AppRepository
+	producerRepository ProducerRepository
+	db                 *sql.DB
 }
 
 // GetAppRepository returns the AppRepository to be used for App ops
 func (rdbmsDataAccessor *RelationalDBDataAccessor) GetAppRepository() AppRepository {
 	return rdbmsDataAccessor.appRepository
+}
+
+// GetProducerRepository returns the ProducerRepository to be used for Producer ops
+func (rdbmsDataAccessor *RelationalDBDataAccessor) GetProducerRepository() ProducerRepository {
+	return rdbmsDataAccessor.producerRepository
 }
 
 // Close closes the connection to DB
@@ -50,6 +56,7 @@ const (
 	completeInitUpdateStatement     = `UPDATE app SET appStatus = $1 WHERE id = 1 AND appStatus == $2`
 	optimisticLockInitAppErrMsg     = "Initializing began in another app in the meantime"
 	optimisticLockCompleteAppErrMsg = "Initializing not started so can not complete"
+	pageSizeWithOrder               = "ORDER BY createdAt desc, ID desc LIMIT 25"
 )
 
 var (
@@ -63,6 +70,12 @@ var (
 	ErrNoDataChangeFromInitialized = errors.New("No data change on initialized App")
 	// ErrCompleteWhileNotBeingInitialized is returned when complete is called without being initialized
 	ErrCompleteWhileNotBeingInitialized = errors.New("App not initializing to complete initializing")
+	// ErrNoRowsUpdated is returned when a UPDATE query does not change any row which is unexpected
+	ErrNoRowsUpdated = errors.New("No rows updated on UPDATE query")
+	// ErrInvalidStateToSave is returned when a data is not in a state we can send it to the repo as
+	ErrInvalidStateToSave = errors.New("Data model in invalid state to be stored")
+	// ErrPaginationDeadlock is returned if both after and before is provided in pagination
+	ErrPaginationDeadlock = errors.New("Can not decide on pagination direction! Both after and before provided or pagination is nil")
 )
 
 // AppDBRepository is the repository to access App data
@@ -163,27 +176,27 @@ var (
 	// ErrDBConnectionNeverInitialized is returned when same NewDataAccessor is called the first time and it failed to connec to DB; in all subsequent calls the accessor will remain nil
 	ErrDBConnectionNeverInitialized = errors.New("DB Connection never initialized")
 	// RDBMSStorageSet injector for data storage related implementation
-	RDBMSStorageSet = wire.NewSet(GetConnectionPool, NewAppRepository, NewDataAccessor)
+	RDBMSStorageSet = wire.NewSet(GetConnectionPool, NewAppRepository, NewDataAccessor, NewProducerRepository)
 )
 
-// NewDataAccessor retrieves the DB accessor
-func NewDataAccessor(db *sql.DB, appRepo AppRepository) (DataAccessor, error) {
-	var err error
+func panicIfNoDBConnectionPool(db *sql.DB) {
 	if db == nil {
-		err = ErrDBConnectionNeverInitialized
+		panic(ErrDBConnectionNeverInitialized)
 	}
-	dataAccessor := &RelationalDBDataAccessor{db: db, appRepository: appRepo}
-	return dataAccessor, err
+}
+
+// NewDataAccessor retrieves the DB accessor
+func NewDataAccessor(db *sql.DB, appRepo AppRepository, producerRepo ProducerRepository) DataAccessor {
+	panicIfNoDBConnectionPool(db)
+	dataAccessor := &RelationalDBDataAccessor{db: db, appRepository: appRepo, producerRepository: producerRepo}
+	return dataAccessor
 }
 
 // NewAppRepository retrieves App Repository
-func NewAppRepository(db *sql.DB) (AppRepository, error) {
-	var err error
-	if db == nil {
-		err = ErrDBConnectionNeverInitialized
-	}
+func NewAppRepository(db *sql.DB) AppRepository {
+	panicIfNoDBConnectionPool(db)
 	appRepo := &AppDBRepository{db: db}
-	return appRepo, err
+	return appRepo
 }
 
 // GetConnectionPool Gets the DB Connection Pool for the App

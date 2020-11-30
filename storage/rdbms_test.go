@@ -47,12 +47,20 @@ func (m *RelationalDatabaseConfigMockImpl) GetMaxOpenDBConnections() uint16 {
 	return args.Get(0).(uint16)
 }
 
+func dbPanicDeferAssert(t *testing.T) {
+	r := recover()
+	assert.Equal(t, ErrDBConnectionNeverInitialized, r)
+}
+
+var (
+	migrationLocation, _ = filepath.Abs("../migration/sqls/")
+	defaultMigrationConf = &MigrationConfig{MigrationEnabled: true, MigrationSource: "file://" + migrationLocation}
+)
+
 func TestGetNewDataAccessor(t *testing.T) {
 	// Clear DB before starting test
 	os.Remove("./webhook-broker.sqlite3")
 	configuration, _ := config.GetAutoConfiguration()
-	migrationLocation, _ := filepath.Abs("../migration/sqls/")
-	defaultMigrationConf := &MigrationConfig{MigrationEnabled: true, MigrationSource: "file://" + migrationLocation}
 	t.Run("DBConnectionErr", func(t *testing.T) {
 		dataAccessorInitializer = sync.Once{}
 		oldGetDB := getDB
@@ -126,6 +134,7 @@ func TestGetNewDataAccessor(t *testing.T) {
 		assert.Nil(t, err)
 		assert.NotNil(t, dataAccessor)
 		assert.NotNil(t, dataAccessor.GetAppRepository())
+		assert.NotNil(t, dataAccessor.GetProducerRepository())
 		// Does nothing
 		dataAccessor.Close()
 		t.Run("InitAppSkip", func(t *testing.T) {
@@ -137,15 +146,13 @@ func TestGetNewDataAccessor(t *testing.T) {
 	})
 	t.Run("NewDataAccessorWithNilDB", func(t *testing.T) {
 		t.Parallel()
-		_, err := NewDataAccessor(nil, nil)
-		assert.NotNil(t, err)
-		assert.Equal(t, ErrDBConnectionNeverInitialized, err)
+		defer dbPanicDeferAssert(t)
+		NewDataAccessor(nil, nil, nil)
 	})
 	t.Run("NewAppRepositoryWithNilDB", func(t *testing.T) {
 		t.Parallel()
-		_, err := NewAppRepository(nil)
-		assert.NotNil(t, err)
-		assert.Equal(t, ErrDBConnectionNeverInitialized, err)
+		defer dbPanicDeferAssert(t)
+		NewAppRepository(nil)
 	})
 }
 

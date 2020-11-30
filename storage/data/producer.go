@@ -7,14 +7,26 @@ import (
 	"github.com/rs/xid"
 )
 
+// BasePaginateable provides common functionalities around paginateable objects
+type BasePaginateable struct {
+	ID        xid.ID
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+// GetCursor returns the cursor value for this producer
+func (paginateable *BasePaginateable) GetCursor() (*Cursor, error) {
+	text, err := paginateable.ID.Value()
+	cursor := Cursor(text.(string))
+	return &cursor, err
+}
+
 // Producer represents generator of messages
 type Producer struct {
-	ID         xid.ID
+	BasePaginateable
 	ProducerID string
 	Name       string
 	Token      string
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
 }
 
 // QuickFix fixes the model to set default ID, name same as producer id, created and updated at to current time.
@@ -47,13 +59,6 @@ func (prod *Producer) IsInValidState() bool {
 	return true
 }
 
-// GetCursor returns the cursor value for this producer
-func (prod *Producer) GetCursor() (*Cursor, error) {
-	text, err := prod.ID.MarshalText()
-	cursor := Cursor(string(text))
-	return &cursor, err
-}
-
 var (
 	// ErrInsufficientInformationForCreatingProducer is returned when NewProducer is called with insufficient information
 	ErrInsufficientInformationForCreatingProducer = errors.New("Producer ID and Token is must for creating a Producer")
@@ -64,6 +69,6 @@ func NewProducer(producerID string, token string) (*Producer, error) {
 	if len(producerID) <= 0 || len(token) <= 0 {
 		return nil, ErrInsufficientInformationForCreatingProducer
 	}
-	producer := Producer{ID: xid.New(), ProducerID: producerID, Name: producerID, Token: token}
+	producer := Producer{BasePaginateable: BasePaginateable{ID: xid.New()}, ProducerID: producerID, Name: producerID, Token: token}
 	return &producer, nil
 }

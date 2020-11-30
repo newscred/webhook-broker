@@ -22,13 +22,8 @@ func GetNewDataAccessor(dbConfig config.RelationalDatabaseConfig, migrationConf 
 	if err != nil {
 		return nil, err
 	}
-	appRepository, err := NewAppRepository(sqlDB)
-	if err != nil {
-		return nil, err
-	}
-	dataAccessor, err := NewDataAccessor(sqlDB, appRepository)
-	if err != nil {
-		return nil, err
-	}
+	appRepository := NewAppRepository(sqlDB)
+	producerRepository := NewProducerRepository(sqlDB)
+	dataAccessor := NewDataAccessor(sqlDB, appRepository, producerRepository)
 	return dataAccessor, nil
 }

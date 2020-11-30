@@ -8,6 +8,7 @@ import (
 // DataAccessor is the facade to all the data repository
 type DataAccessor interface {
 	GetAppRepository() AppRepository
+	GetProducerRepository() ProducerRepository
 	Close()
 }
 
