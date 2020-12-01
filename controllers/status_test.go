@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,10 +16,25 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+var (
+	configuration *config.Config
+	seedData      *config.SeedData
+	defaultApp    *data.App
+)
+
+func TestMain(m *testing.M) {
+	var err error
+	configuration, err = config.GetAutoConfiguration()
+	if err == nil {
+		seedData = &configuration.SeedData
+		defaultApp = data.NewApp(seedData, data.Initialized)
+		m.Run()
+	} else {
+		log.Fatalln(err)
+	}
+}
+
 func TestStatus(t *testing.T) {
-	t.Parallel()
-	configuration, _ := config.GetAutoConfiguration()
-	defaultApp := data.NewApp(&configuration.SeedData, data.Initialized)
 	mAppRepo := new(AppRepositoryMockImpl)
 	testRouter := httprouter.New()
 	setupAPIRoutes(testRouter, NewStatusController(mAppRepo))
@@ -36,9 +52,6 @@ func TestStatus(t *testing.T) {
 }
 
 func TestStatus_AppDataError(t *testing.T) {
-	t.Parallel()
-	configuration, _ := config.GetAutoConfiguration()
-	defaultApp := data.NewApp(&configuration.SeedData, data.Initialized)
 	mAppRepo := new(AppRepositoryMockImpl)
 	testRouter := httprouter.New()
 	setupAPIRoutes(testRouter, NewStatusController(mAppRepo))
@@ -53,9 +66,6 @@ func TestStatus_AppDataError(t *testing.T) {
 }
 
 func TestStatus_JSONMarshalError(t *testing.T) {
-	t.Parallel()
-	configuration, _ := config.GetAutoConfiguration()
-	defaultApp := data.NewApp(&configuration.SeedData, data.Initialized)
 	mAppRepo := new(AppRepositoryMockImpl)
 	testRouter := httprouter.New()
 	setupAPIRoutes(testRouter, NewStatusController(mAppRepo))
