@@ -95,7 +95,7 @@ var forceServerExiter = func(stop *chan os.Signal) {
 			client.CloseIdleConnections()
 		}()
 		for {
-			response, err := client.Get("http://localhost:8080/_status")
+			response, err := client.Get("http://localhost:17654/_status")
 			if err == nil {
 				if response.StatusCode == 200 {
 					break
@@ -108,10 +108,6 @@ var forceServerExiter = func(stop *chan os.Signal) {
 
 func TestConfigureAPI(t *testing.T) {
 	mListener := &ServerLifecycleListenerMockImpl{serverListener: make(chan bool)}
-	configuration, err := config.GetAutoConfiguration()
-	if err != nil {
-		t.Fatal(err)
-	}
 	defaultApp := data.NewApp(&configuration.SeedData, data.Initialized)
 	mAppRepo := new(AppRepositoryMockImpl)
 	oldNotify := NotifyOnInterrupt

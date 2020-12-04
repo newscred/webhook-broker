@@ -29,7 +29,7 @@ var (
 
 func TestMain(m *testing.M) {
 	var err error
-	configuration, err = config.GetAutoConfiguration()
+	configuration, err = config.GetConfiguration("./controller-test-config.cfg")
 	if err == nil {
 		seedData = &configuration.SeedData
 		defaultApp = data.NewApp(seedData, data.Initialized)
