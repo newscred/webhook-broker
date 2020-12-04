@@ -108,7 +108,10 @@ var forceServerExiter = func(stop *chan os.Signal) {
 
 func TestConfigureAPI(t *testing.T) {
 	mListener := &ServerLifecycleListenerMockImpl{serverListener: make(chan bool)}
-	configuration, _ := config.GetAutoConfiguration()
+	configuration, err := config.GetAutoConfiguration()
+	if err != nil {
+		t.Fatal(err)
+	}
 	defaultApp := data.NewApp(&configuration.SeedData, data.Initialized)
 	mAppRepo := new(AppRepositoryMockImpl)
 	oldNotify := NotifyOnInterrupt

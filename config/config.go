@@ -454,19 +454,21 @@ func validateConfigurationState(configuration *Config) error {
 	db.SetMaxIdleConns(int(configuration.DBMaxIdleConnections))
 	db.SetMaxOpenConns(int(configuration.DBMaxOpenConnections))
 	db.SetConnMaxIdleTime(configuration.DBConnectionMaxIdleTime)
+	var typicalErr error
 	dbErr := ping(db)
 	if dbErr != nil {
-		return dbErr
+		typicalErr = dbErr
 	}
-	// Check retrigger endpoint is a valid Absolute URL
-	retriggerEndpoint, endpointErr := url.Parse(configuration.RetriggerBaseEndpoint)
-	if endpointErr != nil {
-		return endpointErr
+	if typicalErr == nil {
+		// Check retrigger endpoint is a valid Absolute URL
+		retriggerEndpoint, endpointErr := url.Parse(configuration.RetriggerBaseEndpoint)
+		if endpointErr != nil {
+			typicalErr = endpointErr
+		} else if !retriggerEndpoint.IsAbs() {
+			typicalErr = errors.New("Retrigger Base Endpoint is not in absolute URL form")
+		}
 	}
-	if !retriggerEndpoint.IsAbs() {
-		return errors.New("Retrigger Base Endpoint is not in absolute URL form")
-	}
-	return nil
+	return typicalErr
 }
 
 var (
@@ -534,28 +536,16 @@ func setupSeedDataConfiguration(cfg *ini.File, configuration *Config) {
 
 	initialChannels, _ := cfg.GetSection("initial-channels")
 	initialChannelTokens, _ := cfg.GetSection("initial-channel-tokens")
-	seedChannels := make([]SeedChannel, len(initialChannels.Keys()))
-	for chanIndex, channel := range initialChannels.Keys() {
-		token, tokenErr := initialChannelTokens.GetKey(channel.Name())
-		seedChannel := SeedChannel{ID: channel.Name(), Name: channel.MustString("")}
-		if tokenErr == nil {
-			seedChannel.Token = token.MustString("")
-		}
-		seedChannels[chanIndex] = seedChannel
+	seedChannelsAsProducers := parseProducers(initialChannels, initialChannelTokens)
+	seedChannels := make([]SeedChannel, len(seedChannelsAsProducers))
+	for index, producer := range seedChannelsAsProducers {
+		seedChannels[index] = SeedChannel(producer)
 	}
 	seedData.Channels = seedChannels
 
 	initialProducers, _ := cfg.GetSection("initial-producers")
 	initialProducerTokens, _ := cfg.GetSection("initial-producer-tokens")
-	seedProducers := make([]SeedProducer, len(initialProducers.Keys()))
-	for prodIndex, channel := range initialProducers.Keys() {
-		token, tokenErr := initialProducerTokens.GetKey(channel.Name())
-		seedProducer := SeedProducer{ID: channel.Name(), Name: channel.MustString("")}
-		if tokenErr == nil {
-			seedProducer.Token = token.MustString("")
-		}
-		seedProducers[prodIndex] = seedProducer
-	}
+	seedProducers := parseProducers(initialProducers, initialProducerTokens)
 	seedData.Producers = seedProducers
 
 	initialConsumers, _ := cfg.GetSection("initial-consumers")
@@ -580,6 +570,19 @@ func setupSeedDataConfiguration(cfg *ini.File, configuration *Config) {
 	seedData.DataHash = base64.StdEncoding.EncodeToString(hashCalculator.Sum(buf.Bytes()))
 
 	configuration.SeedData = seedData
+}
+
+func parseProducers(initialProducers *ini.Section, initialProducerTokens *ini.Section) []SeedProducer {
+	seedProducers := make([]SeedProducer, len(initialProducers.Keys()))
+	for prodIndex, channel := range initialProducers.Keys() {
+		token, tokenErr := initialProducerTokens.GetKey(channel.Name())
+		seedProducer := SeedProducer{ID: channel.Name(), Name: channel.MustString("")}
+		if tokenErr == nil {
+			seedProducer.Token = token.MustString("")
+		}
+		seedProducers[prodIndex] = seedProducer
+	}
+	return seedProducers
 }
 
 func setupConsumerConnectionConfiguration(cfg *ini.File, configuration *Config) {
