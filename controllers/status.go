@@ -11,14 +11,18 @@ import (
 	"github.com/julienschmidt/httprouter"
 )
 
+const (
+	statusPath = "/_status"
+)
+
 // AppData to deserialize in status endpoint
 type AppData struct {
 	SeedData  *config.SeedData
 	AppStatus data.AppStatus
 }
 
-var getJSON = func(buf *bytes.Buffer, app *data.App) error {
-	return json.NewEncoder(buf).Encode(AppData{SeedData: app.GetSeedData(), AppStatus: app.GetStatus()})
+var getJSON = func(buf *bytes.Buffer, data interface{}) error {
+	return json.NewEncoder(buf).Encode(data)
 }
 
 // NewStatusController Factory for new StatusController
@@ -32,25 +36,24 @@ type StatusController struct {
 	appRepository storage.AppRepository
 }
 
+// GetPath returns the endpoint path
+func (cont *StatusController) GetPath() string {
+	return statusPath
+}
+
+// FormatAsRelativeLink Format as relative URL of this resource based on the params
+func (cont *StatusController) FormatAsRelativeLink(params ...httprouter.Param) string {
+	return statusPath
+}
+
 // Get is the GET /_status endpoint controller
 func (cont *StatusController) Get(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	app, err := cont.appRepository.GetApp()
 	if err != nil {
 		// return error
-		w.WriteHeader(500)
-		w.Write([]byte(err.Error()))
+		writeErr(w, err)
 		return
 	}
-	// Write Config JSON
-	var buf bytes.Buffer
-	err = getJSON(&buf, app)
-	if err != nil {
-		// return error
-		w.WriteHeader(500)
-		w.Write([]byte(err.Error()))
-		return
-	}
-	w.WriteHeader(200)
-	w.Header().Add("Content-Type", "application/json")
-	w.Write(buf.Bytes())
+	data := AppData{SeedData: app.GetSeedData(), AppStatus: app.GetStatus()}
+	writeJSON(w, data)
 }

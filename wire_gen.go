@@ -31,9 +31,11 @@ func GetHTTPServer(cliConfig *config.CLIConfig) (*HTTPServiceContainer, error) {
 	}
 	appRepository := storage.NewAppRepository(db)
 	statusController := controllers.NewStatusController(appRepository)
-	router := controllers.NewRouter(statusController)
-	server := controllers.ConfigureAPI(configConfig, serverLifecycleListenerImpl, router)
 	producerRepository := storage.NewProducerRepository(db)
+	producerController := controllers.NewProducerController(producerRepository)
+	producersController := controllers.NewProducersController(producerRepository, producerController)
+	router := controllers.NewRouter(statusController, producersController, producerController)
+	server := controllers.ConfigureAPI(configConfig, serverLifecycleListenerImpl, router)
 	dataAccessor := storage.NewDataAccessor(db, appRepository, producerRepository)
 	httpServiceContainer := NewHTTPServiceContainer(configConfig, serverLifecycleListenerImpl, server, dataAccessor)
 	return httpServiceContainer, nil

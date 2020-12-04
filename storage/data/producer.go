@@ -21,6 +21,20 @@ func (paginateable *BasePaginateable) GetCursor() (*Cursor, error) {
 	return &cursor, err
 }
 
+// QuickFix fixes base paginatable model's attribute
+func (paginateable *BasePaginateable) QuickFix() bool {
+	madeChanges := false
+	if paginateable.CreatedAt.IsZero() {
+		paginateable.CreatedAt = time.Now()
+		madeChanges = true
+	}
+	if paginateable.UpdatedAt.IsZero() {
+		paginateable.UpdatedAt = time.Now()
+		madeChanges = true
+	}
+	return madeChanges
+}
+
 // Producer represents generator of messages
 type Producer struct {
 	BasePaginateable
@@ -31,21 +45,13 @@ type Producer struct {
 
 // QuickFix fixes the model to set default ID, name same as producer id, created and updated at to current time.
 func (prod *Producer) QuickFix() bool {
-	madeChanges := false
+	madeChanges := prod.BasePaginateable.QuickFix()
 	if prod.ID.IsNil() {
 		prod.ID = xid.New()
 		madeChanges = true
 	}
 	if len(prod.Name) <= 0 && len(prod.ProducerID) > 0 {
 		prod.Name = prod.ProducerID
-		madeChanges = true
-	}
-	if prod.CreatedAt.IsZero() {
-		prod.CreatedAt = time.Now()
-		madeChanges = true
-	}
-	if prod.UpdatedAt.IsZero() {
-		prod.UpdatedAt = time.Now()
 		madeChanges = true
 	}
 	return madeChanges

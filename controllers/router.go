@@ -1,9 +1,12 @@
 package controllers
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"sync"
@@ -12,6 +15,7 @@ import (
 	"github.com/google/wire"
 	"github.com/gorilla/handlers"
 	"github.com/imyousuf/webhook-broker/config"
+	"github.com/imyousuf/webhook-broker/storage/data"
 	"github.com/julienschmidt/httprouter"
 )
 
@@ -20,7 +24,20 @@ var (
 	routerInitializer sync.Once
 	server            *http.Server
 	// ControllerInjector for binding controllers
-	ControllerInjector = wire.NewSet(ConfigureAPI, NewRouter, NewStatusController)
+	ControllerInjector = wire.NewSet(ConfigureAPI, NewRouter, NewStatusController, NewProducersController, NewProducerController)
+	// ErrUnsupportedMediaType is returned when client does not provide appropriate `Content-Type` header
+	ErrUnsupportedMediaType = errors.New("Media type not supported")
+	// ErrConditionalFailed is returned when update is missing `If-Unmodified-Since` header
+	ErrConditionalFailed = errors.New("Update failed due to mismatch of `If-Unmodified-Since` header value")
+	// ErrNotFound is returned when resource is not found
+	ErrNotFound = errors.New("Request resource not found")
+	// ErrBadRequest is returned when protocol for a PUT/POST/DELETE request is not met
+	ErrBadRequest = errors.New("Bad Request: Update is missing `If-Unmodified-Since` header ")
+)
+
+const (
+	previousPaginationQueryParamKey = "previous"
+	nextPaginationQueryParamKey     = "next"
 )
 
 // ServerLifecycleListener listens to key server lifecycle error
@@ -28,6 +45,12 @@ type ServerLifecycleListener interface {
 	StartingServer()
 	ServerStartFailed(err error)
 	ServerShutdownCompleted()
+}
+
+// EndpointController represents very basic functionality of an endpoint
+type EndpointController interface {
+	GetPath() string
+	FormatAsRelativeLink(params ...httprouter.Param) string
 }
 
 // Get represents GET Method Call to a resource
@@ -100,12 +123,114 @@ func handleExit() {
 }
 
 // NewRouter returns a new instance of the router
-func NewRouter(statusController *StatusController) *httprouter.Router {
+func NewRouter(statusController *StatusController, producersController *ProducersController, producerController *ProducerController) *httprouter.Router {
 	apiRouter := httprouter.New()
-	setupAPIRoutes(apiRouter, statusController)
+	setupAPIRoutes(apiRouter, statusController, producersController, producerController)
 	return apiRouter
 }
 
-func setupAPIRoutes(apiRouter *httprouter.Router, statusController Get) {
-	apiRouter.GET("/_status", statusController.Get)
+func getPagination(req *http.Request) *data.Pagination {
+	result := &data.Pagination{}
+	originalURL := req.URL
+	previous := originalURL.Query().Get(previousPaginationQueryParamKey)
+	if len(previous) > 0 {
+		prevCursor := data.Cursor(previous)
+		result.Previous = &prevCursor
+	}
+	next := originalURL.Query().Get(nextPaginationQueryParamKey)
+	if len(next) > 0 {
+		nextCursor := data.Cursor(next)
+		result.Next = &nextCursor
+	}
+	return result
+}
+
+func getPaginationLinks(req *http.Request, pagination *data.Pagination) map[string]string {
+	links := make(map[string]string)
+	if pagination != nil {
+		originalURL := req.URL
+		if pagination.Previous != nil {
+			previous := cloneBaseURL(originalURL)
+			prevQueries := make(url.Values)
+			prevQueries.Set(previousPaginationQueryParamKey, string(*pagination.Previous))
+			previous.RawQuery = prevQueries.Encode()
+			links[previousPaginationQueryParamKey] = previous.String()
+		}
+		if pagination.Next != nil {
+			next := cloneBaseURL(originalURL)
+			nextQueries := make(url.Values)
+			nextQueries.Set(nextPaginationQueryParamKey, string(*pagination.Next))
+			next.RawQuery = nextQueries.Encode()
+			links[nextPaginationQueryParamKey] = next.String()
+		}
+	}
+	return links
+}
+
+func cloneBaseURL(originalURL *url.URL) *url.URL {
+	newURL := &url.URL{}
+	newURL.Scheme = originalURL.Scheme
+	newURL.Host = originalURL.Host
+	newURL.Path = originalURL.Path
+	newURL.RawPath = originalURL.RawPath
+	return newURL
+}
+
+func setupAPIRoutes(apiRouter *httprouter.Router, endpoints ...EndpointController) {
+	for _, endpoint := range endpoints {
+		getEndpoint, ok := endpoint.(Get)
+		if ok {
+			apiRouter.GET(endpoint.GetPath(), getEndpoint.Get)
+		}
+		putEndpoint, ok := endpoint.(Put)
+		if ok {
+			apiRouter.PUT(endpoint.GetPath(), putEndpoint.Put)
+		}
+		postEndpoint, ok := endpoint.(Post)
+		if ok {
+			apiRouter.POST(endpoint.GetPath(), postEndpoint.Post)
+		}
+		deleteEndpoint, ok := endpoint.(Delete)
+		if ok {
+			apiRouter.DELETE(endpoint.GetPath(), deleteEndpoint.Delete)
+		}
+	}
+}
+func writeErr(w http.ResponseWriter, err error) {
+	writeStatus(w, http.StatusInternalServerError, err)
+}
+
+func writeNotFound(w http.ResponseWriter) {
+	writeStatus(w, http.StatusNotFound, ErrNotFound)
+}
+
+func writeBadRequest(w http.ResponseWriter) {
+	writeStatus(w, http.StatusBadRequest, ErrBadRequest)
+}
+
+func writeUnsupportedMediaType(w http.ResponseWriter) {
+	writeStatus(w, http.StatusUnsupportedMediaType, ErrUnsupportedMediaType)
+}
+
+func writePreconditionFailed(w http.ResponseWriter) {
+	writeStatus(w, http.StatusPreconditionFailed, ErrUnsupportedMediaType)
+}
+
+func writeStatus(w http.ResponseWriter, code int, err error) {
+	w.WriteHeader(code)
+	w.Write([]byte(err.Error()))
+}
+
+func writeJSON(w http.ResponseWriter, data interface{}) {
+	// Write JSON
+	var buf bytes.Buffer
+	err := getJSON(&buf, data)
+	if err != nil {
+		// return error
+		writeErr(w, err)
+		return
+	}
+	w.WriteHeader(200)
+	w.Header().Add("Content-Type", "application/json")
+	w.Write(buf.Bytes())
 }

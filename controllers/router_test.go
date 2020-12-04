@@ -14,7 +14,6 @@ import (
 
 type AppRepositoryMockImpl struct {
 	mock.Mock
-	defaultApp *data.App
 }
 
 func (m *AppRepositoryMockImpl) GetApp() (*data.App, error) {
@@ -28,6 +27,43 @@ func (m *AppRepositoryMockImpl) StartAppInit(data *config.SeedData) error {
 func (m *AppRepositoryMockImpl) CompleteAppInit() error {
 	m.Called()
 	return nil
+}
+
+type ProducerRepositoryMockImpl struct {
+	mock.Mock
+}
+
+func (m *ProducerRepositoryMockImpl) Store(producer *data.Producer) (*data.Producer, error) {
+	args := m.Called()
+	arg0 := args.Get(0)
+	var rProducer *data.Producer
+	if arg0 != nil {
+		rProducer = arg0.(*data.Producer)
+	}
+	return rProducer, args.Error(1)
+}
+func (m *ProducerRepositoryMockImpl) Get(producerID string) (*data.Producer, error) {
+	args := m.Called()
+	arg0 := args.Get(0)
+	var rProducer *data.Producer
+	if arg0 != nil {
+		rProducer = arg0.(*data.Producer)
+	}
+	return rProducer, args.Error(1)
+}
+func (m *ProducerRepositoryMockImpl) GetList(page *data.Pagination) ([]*data.Producer, *data.Pagination, error) {
+	args := m.Called()
+	var producers []*data.Producer
+	arg0 := args.Get(0)
+	if arg0 != nil {
+		producers = arg0.([]*data.Producer)
+	}
+	var pagination *data.Pagination
+	arg1 := args.Get(1)
+	if arg1 != nil {
+		pagination = arg1.(*data.Pagination)
+	}
+	return producers, pagination, args.Error(2)
 }
 
 type DataAccessorMockImpl struct {
@@ -81,7 +117,7 @@ func TestConfigureAPI(t *testing.T) {
 	mListener.On("ServerStartFailed", mock.Anything).Return()
 	mListener.On("ServerShutdownCompleted").Return()
 	mAppRepo.On("GetApp").Return(defaultApp, nil)
-	ConfigureAPI(configuration, mListener, NewRouter(NewStatusController(mAppRepo)))
+	ConfigureAPI(configuration, mListener, NewRouter(NewStatusController(mAppRepo), &ProducersController{}, &ProducerController{}))
 	<-mListener.serverListener
 	mListener.AssertExpectations(t)
 	mAppRepo.AssertExpectations(t)
