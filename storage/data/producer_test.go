@@ -15,12 +15,12 @@ func TestNewProducer(t *testing.T) {
 	t.Run("EmptyID", func(t *testing.T) {
 		t.Parallel()
 		_, err := NewProducer("", "")
-		assert.Equal(t, ErrInsufficientInformationForCreatingProducer, err)
+		assert.Equal(t, ErrInsufficientInformationForCreating, err)
 	})
 	t.Run("EmptyToken", func(t *testing.T) {
 		t.Parallel()
 		_, err := NewProducer(someID, "")
-		assert.Equal(t, ErrInsufficientInformationForCreatingProducer, err)
+		assert.Equal(t, ErrInsufficientInformationForCreating, err)
 	})
 	t.Run("Valid", func(t *testing.T) {
 		t.Parallel()
@@ -46,42 +46,55 @@ func TestGetCursor(t *testing.T) {
 
 func TestQuickFix(t *testing.T) {
 	t.Parallel()
-	producer := Producer{ProducerID: someID, Token: someToken}
+	producer := Producer{ProducerID: someID}
+	producer.Token = someToken
 	assert.False(t, producer.IsInValidState())
 	assert.True(t, producer.ID.IsNil())
 	assert.True(t, producer.CreatedAt.IsZero())
 	assert.True(t, producer.UpdatedAt.IsZero())
-	assert.True(t, len(producer.Name) <= 0)
 	producer.QuickFix()
 	assert.True(t, producer.IsInValidState())
 	assert.False(t, producer.ID.IsNil())
 	assert.False(t, producer.CreatedAt.IsZero())
 	assert.False(t, producer.UpdatedAt.IsZero())
-	assert.Equal(t, someID, producer.Name)
 }
 
 func TestIsInValidState(t *testing.T) {
-	t.Run("True", func(t *testing.T) {
-		t.Parallel()
-		producer, _ := NewProducer(someID, someToken)
-		assert.True(t, producer.IsInValidState())
-	})
 	t.Run("EmptyNameFalse", func(t *testing.T) {
 		t.Parallel()
 		producer, _ := NewProducer(someID, someToken)
 		producer.Name = ""
 		assert.False(t, producer.IsInValidState())
 	})
-	t.Run("EmptyIDFalse", func(t *testing.T) {
-		t.Parallel()
-		producer, _ := NewProducer(someID, someToken)
-		producer.ProducerID = ""
-		assert.False(t, producer.IsInValidState())
-	})
 	t.Run("EmptyTokenFalse", func(t *testing.T) {
 		t.Parallel()
 		producer, _ := NewProducer(someID, someToken)
 		producer.Token = ""
+		assert.False(t, producer.IsInValidState())
+	})
+}
+
+func TestProducerQuickFix(t *testing.T) {
+	t.Parallel()
+	producer := Producer{ProducerID: someID}
+	producer.Token = someToken
+	assert.False(t, producer.IsInValidState())
+	assert.True(t, len(producer.Name) <= 0)
+	producer.QuickFix()
+	assert.True(t, producer.IsInValidState())
+	assert.Equal(t, someID, producer.Name)
+}
+
+func TestProducerIsInValidState(t *testing.T) {
+	t.Run("True", func(t *testing.T) {
+		t.Parallel()
+		producer, _ := NewProducer(someID, someToken)
+		assert.True(t, producer.IsInValidState())
+	})
+	t.Run("EmptyIDFalse", func(t *testing.T) {
+		t.Parallel()
+		producer, _ := NewProducer(someID, someToken)
+		producer.ProducerID = ""
 		assert.False(t, producer.IsInValidState())
 	})
 }
