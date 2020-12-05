@@ -9,10 +9,7 @@ type Channel struct {
 // QuickFix fixes the model to set default ID, name same as channel id, created and updated at to current time.
 func (channel *Channel) QuickFix() bool {
 	madeChanges := channel.BasePaginateable.QuickFix()
-	if len(channel.Name) <= 0 && len(channel.ChannelID) > 0 {
-		channel.Name = channel.ChannelID
-		madeChanges = true
-	}
+	madeChanges = setValIfBothNotEmpty(&channel.Name, &channel.ChannelID)
 	return madeChanges
 }
 

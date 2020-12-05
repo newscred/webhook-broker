@@ -80,7 +80,7 @@ func TestProducerQuickFix(t *testing.T) {
 	producer.Token = someToken
 	assert.False(t, producer.IsInValidState())
 	assert.True(t, len(producer.Name) <= 0)
-	producer.QuickFix()
+	assert.True(t, producer.QuickFix())
 	assert.True(t, producer.IsInValidState())
 	assert.Equal(t, someID, producer.Name)
 }

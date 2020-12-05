@@ -52,36 +52,36 @@ func TestNewConsumer(t *testing.T) {
 func TestConsumerIsInValidState(t *testing.T) {
 	t.Run("True", func(t *testing.T) {
 		t.Parallel()
-		producer, _ := NewConsumer(sampleChannel, someID, someToken, sampleCallbackURL)
-		assert.True(t, producer.IsInValidState())
+		consumer, _ := NewConsumer(sampleChannel, someID, someToken, sampleCallbackURL)
+		assert.True(t, consumer.IsInValidState())
 	})
 	t.Run("EmptyIDFalse", func(t *testing.T) {
 		t.Parallel()
-		producer, _ := NewConsumer(sampleChannel, someID, someToken, sampleCallbackURL)
-		producer.ConsumerID = ""
-		assert.False(t, producer.IsInValidState())
+		consumer, _ := NewConsumer(sampleChannel, someID, someToken, sampleCallbackURL)
+		consumer.ConsumerID = ""
+		assert.False(t, consumer.IsInValidState())
 	})
 	t.Run("NilChannelFalse", func(t *testing.T) {
 		t.Parallel()
-		producer, _ := NewConsumer(sampleChannel, someID, someToken, sampleCallbackURL)
-		producer.ConsumingFrom = nil
-		assert.False(t, producer.IsInValidState())
+		consumer, _ := NewConsumer(sampleChannel, someID, someToken, sampleCallbackURL)
+		consumer.ConsumingFrom = nil
+		assert.False(t, consumer.IsInValidState())
 	})
 	t.Run("RelativeURLFalse", func(t *testing.T) {
 		t.Parallel()
-		producer, _ := NewConsumer(sampleChannel, someID, someToken, sampleCallbackURL)
-		producer.CallbackURL = sampleRelativeCallbackURL.String()
-		assert.False(t, producer.IsInValidState())
+		consumer, _ := NewConsumer(sampleChannel, someID, someToken, sampleCallbackURL)
+		consumer.CallbackURL = sampleRelativeCallbackURL.String()
+		assert.False(t, consumer.IsInValidState())
 	})
 }
 
 func TestConsumerQuickFix(t *testing.T) {
 	t.Parallel()
-	producer, _ := NewConsumer(sampleChannel, someID, someToken, sampleCallbackURL)
-	producer.Name = ""
-	assert.False(t, producer.IsInValidState())
-	assert.True(t, len(producer.Name) <= 0)
-	producer.QuickFix()
-	assert.True(t, producer.IsInValidState())
-	assert.Equal(t, someID, producer.Name)
+	consumer, _ := NewConsumer(sampleChannel, someID, someToken, sampleCallbackURL)
+	consumer.Name = ""
+	assert.False(t, consumer.IsInValidState())
+	assert.True(t, len(consumer.Name) <= 0)
+	assert.True(t, consumer.QuickFix())
+	assert.True(t, consumer.IsInValidState())
+	assert.Equal(t, someID, consumer.Name)
 }

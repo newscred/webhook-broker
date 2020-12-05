@@ -1,5 +1,16 @@
 package data
 
+import (
+	"errors"
+
+	"github.com/rs/xid"
+)
+
+var (
+	// ErrInsufficientInformationForCreating is returned when NewProducer is called with insufficient information
+	ErrInsufficientInformationForCreating = errors.New("ID and Token is must for creating")
+)
+
 // Cursor represents a string used for pagination
 type Cursor string
 
@@ -37,4 +48,17 @@ func NewPagination(after Paginateable, before Paginateable) *Pagination {
 		}
 	}
 	return &Pagination{Next: next, Previous: previous}
+}
+
+func setValIfBothNotEmpty(src *string, fallback *string) bool {
+	madeChanges := false
+	if len(*src) <= 0 && len(*fallback) > 0 {
+		*src = *fallback
+		madeChanges = true
+	}
+	return madeChanges
+}
+
+func createMessageStakeholder(name string, token string) MessageStakeholder {
+	return MessageStakeholder{BasePaginateable: BasePaginateable{ID: xid.New()}, Name: name, Token: token}
 }
