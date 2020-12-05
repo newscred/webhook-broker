@@ -248,6 +248,39 @@ func TestParseArgs(t *testing.T) {
 	})
 }
 
+func TestInitAppTime(t *testing.T) {
+	oldGetTimeoutTimer := getTimeoutTimer
+	oldGetApp := getApp
+	oldStartAppInit := startAppInit
+	oldGetWaitDuration := waitDuration
+	getTimeoutTimer = func() <-chan time.Time {
+		return time.After(time.Millisecond * 100)
+	}
+	waitDuration = 110 * time.Millisecond
+	getApp = func(httpServiceContainer *HTTPServiceContainer) (*data.App, error) {
+		seedData := &config.SeedData{}
+		seedData.DataHash = "TEST"
+		return data.NewApp(seedData, data.Initialized), nil
+	}
+	initErr := errors.New("test err")
+	startAppInit = func(httpServiceContainer *HTTPServiceContainer, seedData *config.SeedData) error {
+		return initErr
+	}
+	defaultConfig, err := config.GetAutoConfiguration()
+	if err != nil {
+		t.Fatal(err)
+	}
+	container := &HTTPServiceContainer{Configuration: defaultConfig}
+	initApp(container)
+	// Test finishing without error is itself success as no DB call is attempted
+	defer func() {
+		getTimeoutTimer = oldGetTimeoutTimer
+		getApp = oldGetApp
+		startAppInit = oldStartAppInit
+		waitDuration = oldGetWaitDuration
+	}()
+}
+
 const testLogFile = "./log-setup-test-output.log"
 
 type MockLogConfig struct {

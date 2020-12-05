@@ -96,10 +96,16 @@ var (
 		return httpServiceContainer.DataAccessor.GetAppRepository().StartAppInit(seedData)
 	}
 
+	getTimeoutTimer = func() <-chan time.Time {
+		return time.After(time.Second * 10)
+	}
+
+	waitDuration = 1 * time.Second
+
 	initApp = func(httpServiceContainer *HTTPServiceContainer) {
 		app, err := getApp(httpServiceContainer)
 		var initFinished chan bool = make(chan bool)
-		timeout := time.After(time.Second * 10)
+		timeout := getTimeoutTimer()
 		if err == nil && app.GetStatus() == data.NotInitialized || (app.GetStatus() == data.Initialized && app.GetSeedData().DataHash != httpServiceContainer.Configuration.GetSeedData().DataHash) {
 			go func() {
 				run := true
@@ -123,7 +129,7 @@ var (
 							run = false
 						default:
 							log.Println(initErr)
-							time.Sleep(1 * time.Second)
+							time.Sleep(waitDuration)
 						}
 					}
 				}
