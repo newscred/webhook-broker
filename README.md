@@ -1,6 +1,10 @@
 # webhook-broker
 
-![webhook-broker CI](https://github.com/imyousuf/webhook-broker/workflows/webhook-broker%20CI/badge.svg?branch=main) ![webhook-broker Container CI](https://github.com/imyousuf/webhook-broker/workflows/webhook-broker%20Container%20CI/badge.svg) [![Maintainability](https://api.codeclimate.com/v1/badges/bf5ba73ffe2743c7c7ad/maintainability)](https://codeclimate.com/github/imyousuf/webhook-broker/maintainability)[![Test Coverage](https://api.codeclimate.com/v1/badges/bf5ba73ffe2743c7c7ad/test_coverage)](https://codeclimate.com/github/imyousuf/webhook-broker/test_coverage)
+![webhook-broker CI](https://github.com/imyousuf/webhook-broker/workflows/webhook-broker%20CI/badge.svg?branch=main)
+![webhook-broker Container CI](https://github.com/imyousuf/webhook-broker/workflows/webhook-broker%20Container%20CI/badge.svg)
+[![Test Coverage](https://api.codeclimate.com/v1/badges/bf5ba73ffe2743c7c7ad/test_coverage)](https://codeclimate.com/github/imyousuf/webhook-broker/test_coverage)
+[![Maintainability](https://api.codeclimate.com/v1/badges/bf5ba73ffe2743c7c7ad/maintainability)](https://codeclimate.com/github/imyousuf/webhook-broker/maintainability)
+[![Go Report Card](https://goreportcard.com/badge/github.com/imyousuf/webhook-broker)](https://goreportcard.com/report/github.com/imyousuf/webhook-broker)
 
 This is a fully HTTP based Pub/Sub Broker with a goal to simplify systems architected in SOA or Microservice architecture. It aims to solve the inter service communication problem.
 
