@@ -24,6 +24,7 @@ func GetNewDataAccessor(dbConfig config.RelationalDatabaseConfig, migrationConf 
 	}
 	appRepository := NewAppRepository(sqlDB)
 	producerRepository := NewProducerRepository(sqlDB)
-	dataAccessor := NewDataAccessor(sqlDB, appRepository, producerRepository)
+	channelRepository := NewChannelRepository(sqlDB)
+	dataAccessor := NewDataAccessor(sqlDB, appRepository, producerRepository, channelRepository)
 	return dataAccessor, nil
 }

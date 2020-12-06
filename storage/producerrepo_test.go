@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var producerRepoDB *sql.DB
+var testDB *sql.DB
 
 const (
 	successfulGetTestProducerID      = "get-test"
@@ -34,19 +34,19 @@ func TestMain(m *testing.M) {
 	os.Remove("./webhook-broker.sqlite3")
 	configuration, _ := config.GetAutoConfiguration()
 	var dbErr error
-	producerRepoDB, dbErr = GetConnectionPool(configuration, defaultMigrationConf, configuration)
+	testDB, dbErr = GetConnectionPool(configuration, defaultMigrationConf, configuration)
 	if dbErr == nil {
 		m.Run()
 	}
-	producerRepoDB.Close()
+	testDB.Close()
 }
 
 func getProducerRepo() ProducerRepository {
-	producerRepo := NewProducerRepository(producerRepoDB)
+	producerRepo := NewProducerRepository(testDB)
 	return producerRepo
 }
 
-func TestGet(t *testing.T) {
+func TestProducerGet(t *testing.T) {
 	t.Run("GetExisting", func(t *testing.T) {
 		t.Parallel()
 		repo := getProducerRepo()
@@ -76,7 +76,7 @@ func TestGet(t *testing.T) {
 	})
 }
 
-func TestStore(t *testing.T) {
+func TestProducerStore(t *testing.T) {
 	t.Run("Create:InvalidState", func(t *testing.T) {
 		t.Parallel()
 		producer, err := data.NewProducer(successfulInsertTestProducerID, successfulGetTestToken)
@@ -193,7 +193,7 @@ func TestNewProducerRepository(t *testing.T) {
 	NewProducerRepository(nil)
 }
 
-func TestGetList(t *testing.T) {
+func TestProducerGetList(t *testing.T) {
 	repo := getProducerRepo()
 	for index := 99; index > -1; index = index - 1 {
 		indexString := strconv.Itoa(index)

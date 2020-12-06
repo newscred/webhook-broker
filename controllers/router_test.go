@@ -66,6 +66,43 @@ func (m *ProducerRepositoryMockImpl) GetList(page *data.Pagination) ([]*data.Pro
 	return producers, pagination, args.Error(2)
 }
 
+type ChannelRepositoryMockImpl struct {
+	mock.Mock
+}
+
+func (m *ChannelRepositoryMockImpl) Store(channel *data.Channel) (*data.Channel, error) {
+	args := m.Called()
+	arg0 := args.Get(0)
+	var rChannel *data.Channel
+	if arg0 != nil {
+		rChannel = arg0.(*data.Channel)
+	}
+	return rChannel, args.Error(1)
+}
+func (m *ChannelRepositoryMockImpl) Get(producerID string) (*data.Channel, error) {
+	args := m.Called()
+	arg0 := args.Get(0)
+	var rChannel *data.Channel
+	if arg0 != nil {
+		rChannel = arg0.(*data.Channel)
+	}
+	return rChannel, args.Error(1)
+}
+func (m *ChannelRepositoryMockImpl) GetList(page *data.Pagination) ([]*data.Channel, *data.Pagination, error) {
+	args := m.Called()
+	var channels []*data.Channel
+	arg0 := args.Get(0)
+	if arg0 != nil {
+		channels = arg0.([]*data.Channel)
+	}
+	var pagination *data.Pagination
+	arg1 := args.Get(1)
+	if arg1 != nil {
+		pagination = arg1.(*data.Pagination)
+	}
+	return channels, pagination, args.Error(2)
+}
+
 type DataAccessorMockImpl struct {
 	mock.Mock
 }
@@ -74,6 +111,12 @@ func (m *DataAccessorMockImpl) GetAppRepository() storage.AppRepository {
 	args := m.Called()
 	return args.Get(0).(storage.AppRepository)
 }
+
+func (m *DataAccessorMockImpl) GetChannelRepository() storage.ChannelRepository {
+	args := m.Called()
+	return args.Get(0).(storage.ChannelRepository)
+}
+
 func (m *DataAccessorMockImpl) Close() { m.Called() }
 
 type ServerLifecycleListenerMockImpl struct {

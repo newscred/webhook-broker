@@ -31,6 +31,7 @@ type MigrationConfig struct {
 type RelationalDBDataAccessor struct {
 	appRepository      AppRepository
 	producerRepository ProducerRepository
+	channelRepository  ChannelRepository
 	db                 *sql.DB
 }
 
@@ -42,6 +43,11 @@ func (rdbmsDataAccessor *RelationalDBDataAccessor) GetAppRepository() AppReposit
 // GetProducerRepository returns the ProducerRepository to be used for Producer ops
 func (rdbmsDataAccessor *RelationalDBDataAccessor) GetProducerRepository() ProducerRepository {
 	return rdbmsDataAccessor.producerRepository
+}
+
+// GetChannelRepository returns the ProducerRepository to be used for Producer ops
+func (rdbmsDataAccessor *RelationalDBDataAccessor) GetChannelRepository() ChannelRepository {
+	return rdbmsDataAccessor.channelRepository
 }
 
 // Close closes the connection to DB
@@ -91,9 +97,7 @@ func (appRep *AppDBRepository) InitAppData(seedData *config.SeedData) error {
 	}
 	// INSERT SQL
 	initialState := data.NotInitialized
-	var appErr error = transactionalExec(appRep.db, func() {}, insertStatement, func() []interface{} {
-		return []interface{}{1, seedData, &initialState}
-	})
+	var appErr error = transactionalExec(appRep.db, emptyOps, insertStatement, args2SliceFnWrapper(1, seedData, &initialState))
 	return appErr
 }
 
@@ -101,9 +105,7 @@ func (appRep *AppDBRepository) InitAppData(seedData *config.SeedData) error {
 func (appRep *AppDBRepository) GetApp() (*data.App, error) {
 	seedData := &config.SeedData{}
 	appStatus := data.NotInitialized
-	err := querySingleRow(appRep.db, selectStatement, nilArgs, func() []interface{} {
-		return []interface{}{seedData, &appStatus}
-	})
+	err := querySingleRow(appRep.db, selectStatement, nilArgs, args2SliceFnWrapper(seedData, &appStatus))
 	return data.NewApp(seedData, appStatus), err
 }
 
@@ -121,9 +123,7 @@ func (appRep *AppDBRepository) StartAppInit(seedData *config.SeedData) error {
 		appErr = ErrNoDataChangeFromInitialized
 	}
 	if appErr == nil {
-		appErr = transactionalExec(appRep.db, func() {}, startInitUpdateStatement, func() []interface{} {
-			return []interface{}{*seedData, data.Initializing}
-		})
+		appErr = transactionalExec(appRep.db, emptyOps, startInitUpdateStatement, args2SliceFnWrapper(*seedData, data.Initializing))
 		if appErr == ErrNoRowsUpdated {
 			appErr = ErrOptimisticAppInit
 		}
@@ -141,7 +141,7 @@ func (appRep *AppDBRepository) CompleteAppInit() error {
 		return ErrCompleteWhileNotBeingInitialized
 	}
 	// UPDATE SQL with condition
-	var appErr error = transactionalExec(appRep.db, func() {}, completeInitUpdateStatement, func() []interface{} { return []interface{}{data.Initialized, data.Initializing} })
+	var appErr error = transactionalExec(appRep.db, emptyOps, completeInitUpdateStatement, args2SliceFnWrapper(data.Initialized, data.Initializing))
 	if appErr == ErrNoRowsUpdated {
 		appErr = ErrOptimisticAppComplete
 	}
@@ -154,7 +154,7 @@ var (
 	// ErrDBConnectionNeverInitialized is returned when same NewDataAccessor is called the first time and it failed to connec to DB; in all subsequent calls the accessor will remain nil
 	ErrDBConnectionNeverInitialized = errors.New("DB Connection never initialized")
 	// RDBMSStorageSet injector for data storage related implementation
-	RDBMSStorageSet = wire.NewSet(GetConnectionPool, NewAppRepository, NewDataAccessor, NewProducerRepository)
+	RDBMSStorageSet = wire.NewSet(GetConnectionPool, NewAppRepository, NewDataAccessor, NewProducerRepository, NewChannelRepository)
 )
 
 func panicIfNoDBConnectionPool(db *sql.DB) {
@@ -164,9 +164,9 @@ func panicIfNoDBConnectionPool(db *sql.DB) {
 }
 
 // NewDataAccessor retrieves the DB accessor
-func NewDataAccessor(db *sql.DB, appRepo AppRepository, producerRepo ProducerRepository) DataAccessor {
+func NewDataAccessor(db *sql.DB, appRepo AppRepository, producerRepo ProducerRepository, channelRepository ChannelRepository) DataAccessor {
 	panicIfNoDBConnectionPool(db)
-	dataAccessor := &RelationalDBDataAccessor{db: db, appRepository: appRepo, producerRepository: producerRepo}
+	dataAccessor := &RelationalDBDataAccessor{db: db, appRepository: appRepo, producerRepository: producerRepo, channelRepository: channelRepository}
 	return dataAccessor
 }
 
@@ -308,5 +308,9 @@ var (
 		return err
 	}
 
-	nilArgs = func() []interface{} { return nil }
+	nilArgs             = func() []interface{} { return nil }
+	emptyOps            = func() {}
+	args2SliceFnWrapper = func(args ...interface{}) func() []interface{} {
+		return func() []interface{} { return args }
+	}
 )

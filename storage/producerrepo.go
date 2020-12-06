@@ -32,9 +32,8 @@ func (repo *ProducerDBRepository) updateProducer(producer *data.Producer, name, 
 		producer.Name = name
 		producer.Token = token
 		producer.UpdatedAt = time.Now()
-	}, "UPDATE producer SET name = $1, token = $2, updatedAt = $3 WHERE producerId = $4", func() []interface{} {
-		return []interface{}{producer.Name, producer.Token, producer.UpdatedAt, producer.ProducerID}
-	})
+	}, "UPDATE producer SET name = $1, token = $2, updatedAt = $3 WHERE producerId = $4",
+		args2SliceFnWrapper(producer.Name, producer.Token, producer.UpdatedAt, producer.ProducerID))
 	return producer, err
 }
 
@@ -43,20 +42,16 @@ func (repo *ProducerDBRepository) insertProducer(producer *data.Producer) (*data
 	if !producer.IsInValidState() {
 		return nil, ErrInvalidStateToSave
 	}
-	err := transactionalExec(repo.db, func() {}, "INSERT INTO producer (id, producerId, name, token, createdAt, updatedAt) VALUES ($1, $2, $3, $4, $5, $6)", func() []interface{} {
-		return []interface{}{producer.ID, producer.ProducerID, producer.Name, producer.Token, producer.CreatedAt, producer.UpdatedAt}
-	})
+	err := transactionalExec(repo.db, emptyOps, "INSERT INTO producer (id, producerId, name, token, createdAt, updatedAt) VALUES ($1, $2, $3, $4, $5, $6)",
+		args2SliceFnWrapper(producer.ID, producer.ProducerID, producer.Name, producer.Token, producer.CreatedAt, producer.UpdatedAt))
 	return producer, err
 }
 
 // Get retrieves the producer with matching producer id
 func (repo *ProducerDBRepository) Get(producerID string) (*data.Producer, error) {
 	producer := &data.Producer{}
-	err := querySingleRow(repo.db, "SELECT ID, producerID, name, token, createdAt, updatedAt FROM producer WHERE producerID like $1", func() []interface{} {
-		return []interface{}{producerID}
-	}, func() []interface{} {
-		return []interface{}{&producer.ID, &producer.ProducerID, &producer.Name, &producer.Token, &producer.CreatedAt, &producer.UpdatedAt}
-	})
+	err := querySingleRow(repo.db, "SELECT ID, producerID, name, token, createdAt, updatedAt FROM producer WHERE producerID like $1", args2SliceFnWrapper(producerID),
+		args2SliceFnWrapper(&producer.ID, &producer.ProducerID, &producer.Name, &producer.Token, &producer.CreatedAt, &producer.UpdatedAt))
 	return producer, err
 }
 
