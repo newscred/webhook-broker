@@ -91,16 +91,9 @@ func (appRep *AppDBRepository) InitAppData(seedData *config.SeedData) error {
 	}
 	// INSERT SQL
 	initialState := data.NotInitialized
-	tx, err := appRep.db.Begin()
-	var appErr error
-	if appErr = err; appErr == nil {
-		_, err = appRep.db.Exec(insertStatement, 1, seedData, &initialState)
-		if appErr = err; appErr == nil {
-			tx.Commit()
-		} else {
-			tx.Rollback()
-		}
-	}
+	var appErr error = transactionalExec(appRep.db, func() {}, insertStatement, func() []interface{} {
+		return []interface{}{1, seedData, &initialState}
+	})
 	return appErr
 }
 
@@ -108,8 +101,9 @@ func (appRep *AppDBRepository) InitAppData(seedData *config.SeedData) error {
 func (appRep *AppDBRepository) GetApp() (*data.App, error) {
 	seedData := &config.SeedData{}
 	appStatus := data.NotInitialized
-	row := appRep.db.QueryRow(selectStatement)
-	err := row.Scan(seedData, &appStatus)
+	err := querySingleRow(appRep.db, selectStatement, nilArgs, func() []interface{} {
+		return []interface{}{seedData, &appStatus}
+	})
 	return data.NewApp(seedData, appStatus), err
 }
 
@@ -121,24 +115,17 @@ func (appRep *AppDBRepository) StartAppInit(seedData *config.SeedData) error {
 		return err
 	}
 	if currentApp.GetStatus() == data.Initializing {
-		return ErrAppInitializing
+		appErr = ErrAppInitializing
 	}
 	if currentApp.GetSeedData().DataHash == seedData.DataHash && currentApp.GetStatus() == data.Initialized {
-		return ErrNoDataChangeFromInitialized
+		appErr = ErrNoDataChangeFromInitialized
 	}
-	// UPDATE SQL with condition
-	tx, err := appRep.db.Begin()
-	appErr = err
 	if appErr == nil {
-		result, err := appRep.db.Exec(startInitUpdateStatement, *seedData, data.Initializing)
-		appErr = err
-		if appErr == nil {
-			if rowsChanged, err := result.RowsAffected(); err == nil && rowsChanged <= 0 {
-				appErr = ErrOptimisticAppInit
-			}
-			tx.Commit()
-		} else {
-			tx.Rollback()
+		appErr = transactionalExec(appRep.db, func() {}, startInitUpdateStatement, func() []interface{} {
+			return []interface{}{*seedData, data.Initializing}
+		})
+		if appErr == ErrNoRowsUpdated {
+			appErr = ErrOptimisticAppInit
 		}
 	}
 	return appErr
@@ -154,18 +141,9 @@ func (appRep *AppDBRepository) CompleteAppInit() error {
 		return ErrCompleteWhileNotBeingInitialized
 	}
 	// UPDATE SQL with condition
-	var appErr error
-	tx, err := appRep.db.Begin()
-	if appErr = err; appErr == nil {
-		result, err := appRep.db.Exec(completeInitUpdateStatement, data.Initialized, data.Initializing)
-		if appErr = err; appErr == nil {
-			if rowsChanged, err := result.RowsAffected(); err == nil && rowsChanged <= 0 {
-				appErr = ErrOptimisticAppComplete
-			}
-			tx.Commit()
-		} else {
-			tx.Rollback()
-		}
+	var appErr error = transactionalExec(appRep.db, func() {}, completeInitUpdateStatement, func() []interface{} { return []interface{}{data.Initialized, data.Initializing} })
+	if appErr == ErrNoRowsUpdated {
+		appErr = ErrOptimisticAppComplete
 	}
 	return appErr
 }
@@ -267,4 +245,68 @@ var (
 			return migrate_sqlite3.WithInstance(db, &migrate_sqlite3.Config{})
 		}
 	}
+	transactionalExec = func(db *sql.DB, prequeryOps func(), query string, arguments func() []interface{}) error {
+		var tx *sql.Tx
+		var err error
+		tx, err = db.Begin()
+		if err == nil {
+			prequeryOps()
+			var result sql.Result
+			result, err = db.Exec(query, arguments()...)
+			if err == nil {
+				var rowsAffected int64
+				if rowsAffected, err = result.RowsAffected(); rowsAffected <= 0 && err == nil {
+					err = ErrNoRowsUpdated
+				}
+				tx.Commit()
+			} else {
+				tx.Rollback()
+			}
+		}
+		return err
+	}
+
+	getPaginationQueryFragment = func(page *data.Pagination, append bool) string {
+		query := " "
+		if page.Next != nil {
+			if append {
+				query = query + "AND "
+			} else {
+				query = query + "WHERE "
+			}
+			query = query + "ID < '" + string(*page.Next) + "' "
+		}
+		if page.Previous != nil {
+			if append {
+				query = query + "AND "
+			} else {
+				query = query + "WHERE "
+			}
+			query = query + "ID > '" + string(*page.Previous) + "' "
+		}
+		query = query + pageSizeWithOrder
+		return query
+	}
+
+	querySingleRow = func(db *sql.DB, query string, queryArgs func() []interface{}, scanArgs func() []interface{}) error {
+		row := db.QueryRow(query, queryArgs()...)
+		return row.Scan(scanArgs()...)
+	}
+
+	queryRows = func(db *sql.DB, query string, queryArgs func() []interface{}, scanArgs func() []interface{}) error {
+		rows, err := db.Query(query, queryArgs()...)
+		if err != nil {
+			return err
+		}
+		defer func() { rows.Close() }()
+		for rows.Next() {
+			err = rows.Scan(scanArgs()...)
+			if err != nil {
+				return err
+			}
+		}
+		return err
+	}
+
+	nilArgs = func() []interface{} { return nil }
 )
