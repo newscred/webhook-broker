@@ -20,7 +20,7 @@ func (repo *ProducerDBRepository) Store(producer *data.Producer) (*data.Producer
 	}
 	if producer.Name != inProducer.Name || producer.Token != inProducer.Token {
 		if !producer.IsInValidState() {
-			return nil, ErrInvalidStateToSave
+			return &data.Producer{}, ErrInvalidStateToSave
 		}
 		return repo.updateProducer(inProducer, producer.Name, producer.Token)
 	}
@@ -40,7 +40,7 @@ func (repo *ProducerDBRepository) updateProducer(producer *data.Producer, name, 
 func (repo *ProducerDBRepository) insertProducer(producer *data.Producer) (*data.Producer, error) {
 	producer.QuickFix()
 	if !producer.IsInValidState() {
-		return nil, ErrInvalidStateToSave
+		return producer, ErrInvalidStateToSave
 	}
 	err := transactionalExec(repo.db, emptyOps, "INSERT INTO producer (id, producerId, name, token, createdAt, updatedAt) VALUES ($1, $2, $3, $4, $5, $6)",
 		args2SliceFnWrapper(producer.ID, producer.ProducerID, producer.Name, producer.Token, producer.CreatedAt, producer.UpdatedAt))

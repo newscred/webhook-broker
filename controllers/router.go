@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"os"
@@ -38,6 +39,11 @@ var (
 const (
 	previousPaginationQueryParamKey = "previous"
 	nextPaginationQueryParamKey     = "next"
+	formDataContentTypeHeaderValue  = "application/x-www-form-urlencoded"
+	headerContentType               = "Content-Type"
+	headerUnmodifiedSince           = "If-Unmodified-Since"
+	headerLastModified              = "Last-Modified"
+	charset                         = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 )
 
 // ServerLifecycleListener listens to key server lifecycle error
@@ -233,4 +239,15 @@ func writeJSON(w http.ResponseWriter, data interface{}) {
 	w.WriteHeader(200)
 	w.Header().Add("Content-Type", "application/json")
 	w.Write(buf.Bytes())
+}
+
+var seededRand *rand.Rand = rand.New(
+	rand.NewSource(time.Now().UnixNano()))
+
+func randomToken() string {
+	b := make([]byte, 12)
+	for i := range b {
+		b[i] = charset[seededRand.Intn(len(charset))]
+	}
+	return string(b)
 }

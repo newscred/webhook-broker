@@ -26,7 +26,7 @@ func (repo *ChannelDBRepository) Store(channel *data.Channel) (*data.Channel, er
 	}
 	if channel.Name != inChannel.Name || channel.Token != inChannel.Token {
 		if !channel.IsInValidState() {
-			return nil, ErrInvalidStateToSave
+			return &data.Channel{}, ErrInvalidStateToSave
 		}
 		return repo.updateChannel(inChannel, channel.Name, channel.Token)
 	}
@@ -46,7 +46,7 @@ func (repo *ChannelDBRepository) updateChannel(channel *data.Channel, name, toke
 func (repo *ChannelDBRepository) insertChannel(channel *data.Channel) (*data.Channel, error) {
 	channel.QuickFix()
 	if !channel.IsInValidState() {
-		return nil, ErrInvalidStateToSave
+		return channel, ErrInvalidStateToSave
 	}
 	err := transactionalExec(repo.db, emptyOps, "INSERT INTO channel (id, channelId, name, token, createdAt, updatedAt) VALUES ($1, $2, $3, $4, $5, $6)",
 		args2SliceFnWrapper(channel.ID, channel.ChannelID, channel.Name, channel.Token, channel.CreatedAt, channel.UpdatedAt))

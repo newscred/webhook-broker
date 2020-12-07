@@ -38,6 +38,7 @@ func TestMain(m *testing.M) {
 		db, err = storage.GetConnectionPool(configuration, &storage.MigrationConfig{MigrationEnabled: true, MigrationSource: "file://" + migrationLocation}, configuration)
 		if err == nil {
 			ProducerTestSetup()
+			ChannelTestSetup()
 			m.Run()
 			db.Close()
 		}

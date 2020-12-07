@@ -53,9 +53,9 @@ func TestProducersControllerGet(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rr.Code)
 	body := rr.Body.String()
 	t.Log(body)
-	bodyProducers := &Producers{}
+	bodyProducers := &MsgStakeholders{}
 	json.NewDecoder(strings.NewReader(body)).Decode(bodyProducers)
-	assert.Equal(t, 25, len(bodyProducers.Producers))
+	assert.Equal(t, 25, len(bodyProducers.Result))
 
 	nextURL := bodyProducers.Pages[nextPaginationQueryParamKey]
 	previousURL := bodyProducers.Pages[previousPaginationQueryParamKey]
@@ -66,7 +66,7 @@ func TestProducersControllerGet(t *testing.T) {
 	testRouter.ServeHTTP(pr, preq)
 	assert.Equal(t, http.StatusOK, pr.Code)
 	json.NewDecoder(strings.NewReader(pr.Body.String())).Decode(bodyProducers)
-	assert.Equal(t, 0, len(bodyProducers.Producers))
+	assert.Equal(t, 0, len(bodyProducers.Result))
 
 	// Next of first page should have 25
 	nreq, _ := http.NewRequest("GET", nextURL, nil)
@@ -74,7 +74,7 @@ func TestProducersControllerGet(t *testing.T) {
 	testRouter.ServeHTTP(nr, nreq)
 	assert.Equal(t, http.StatusOK, nr.Code)
 	json.NewDecoder(strings.NewReader(nr.Body.String())).Decode(bodyProducers)
-	assert.Equal(t, 25, len(bodyProducers.Producers))
+	assert.Equal(t, 25, len(bodyProducers.Result))
 	nextURL = bodyProducers.Pages[nextPaginationQueryParamKey]
 	previousURL = bodyProducers.Pages[previousPaginationQueryParamKey]
 
@@ -84,7 +84,7 @@ func TestProducersControllerGet(t *testing.T) {
 	testRouter.ServeHTTP(pr, preq)
 	assert.Equal(t, http.StatusOK, pr.Code)
 	json.NewDecoder(strings.NewReader(pr.Body.String())).Decode(bodyProducers)
-	assert.Equal(t, 25, len(bodyProducers.Producers))
+	assert.Equal(t, 25, len(bodyProducers.Result))
 
 	// Next of second page should be empty
 	nreq, _ = http.NewRequest("GET", nextURL, nil)
@@ -92,7 +92,7 @@ func TestProducersControllerGet(t *testing.T) {
 	testRouter.ServeHTTP(nr, nreq)
 	assert.Equal(t, http.StatusOK, nr.Code)
 	json.NewDecoder(strings.NewReader(nr.Body.String())).Decode(bodyProducers)
-	assert.Equal(t, 0, len(bodyProducers.Producers))
+	assert.Equal(t, 0, len(bodyProducers.Result))
 }
 
 func TestProducersControllerGet_Error(t *testing.T) {
@@ -127,7 +127,7 @@ func TestProducerGet(t *testing.T) {
 		rr := httptest.NewRecorder()
 		testRouter.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusOK, rr.Code)
-		bodyProducer := &Producer{}
+		bodyProducer := &MsgStakeholder{}
 		json.NewDecoder(strings.NewReader(rr.Body.String())).Decode(bodyProducer)
 		assert.Contains(t, bodyProducer.ID, listTestProducerIDPrefix)
 		assert.Contains(t, bodyProducer.Name, listTestProducerIDPrefix)
@@ -161,7 +161,7 @@ func TestProducerPut(t *testing.T) {
 		rr := httptest.NewRecorder()
 		testRouter.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusOK, rr.Code)
-		bodyProducer := &Producer{}
+		bodyProducer := &MsgStakeholder{}
 		json.NewDecoder(strings.NewReader(rr.Body.String())).Decode(bodyProducer)
 		assert.Equal(t, createProducerIDWithData, bodyProducer.ID)
 		assert.Equal(t, "CREATE NAME", bodyProducer.Name)
@@ -177,7 +177,7 @@ func TestProducerPut(t *testing.T) {
 		rr := httptest.NewRecorder()
 		testRouter.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusOK, rr.Code)
-		bodyProducer := &Producer{}
+		bodyProducer := &MsgStakeholder{}
 		json.NewDecoder(strings.NewReader(rr.Body.String())).Decode(bodyProducer)
 		assert.Equal(t, createProducerIDWithoutData, bodyProducer.ID)
 		assert.Equal(t, createProducerIDWithoutData, bodyProducer.Name)
@@ -192,7 +192,7 @@ func TestProducerPut(t *testing.T) {
 		grr := httptest.NewRecorder()
 		testRouter.ServeHTTP(grr, greq)
 		assert.Equal(t, http.StatusOK, grr.Code)
-		bodyProducer := &Producer{}
+		bodyProducer := &MsgStakeholder{}
 		json.NewDecoder(strings.NewReader(grr.Body.String())).Decode(bodyProducer)
 		req, _ := http.NewRequest("PUT", "/producer/"+listTestProducerIDPrefix+"0", nil)
 		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
@@ -202,7 +202,7 @@ func TestProducerPut(t *testing.T) {
 		rr := httptest.NewRecorder()
 		testRouter.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusOK, rr.Code)
-		updatedBodyProducer := &Producer{}
+		updatedBodyProducer := &MsgStakeholder{}
 		json.NewDecoder(strings.NewReader(rr.Body.String())).Decode(updatedBodyProducer)
 		assert.Contains(t, updatedBodyProducer.Token, "Updated")
 		assert.True(t, bodyProducer.ChangedAt.Before(updatedBodyProducer.ChangedAt))
@@ -244,8 +244,8 @@ func TestProducerPut(t *testing.T) {
 		t.Parallel()
 		mockProducerRepo := new(ProducerRepositoryMockImpl)
 		expectedErr := errors.New("error")
-		mockProducerRepo.On("Get", mock.Anything).Return(nil, expectedErr)
-		mockProducerRepo.On("Store", mock.Anything).Return(nil, expectedErr)
+		mockProducerRepo.On("Get", mock.Anything).Return(&data.Producer{}, expectedErr)
+		mockProducerRepo.On("Store", mock.Anything).Return(&data.Producer{}, expectedErr)
 		testRouter := httprouter.New()
 		putController := NewProducerController(mockProducerRepo)
 		setupAPIRoutes(testRouter, putController)

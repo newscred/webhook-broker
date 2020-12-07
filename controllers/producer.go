@@ -1,7 +1,6 @@
 package controllers
 
 import (
-	"math/rand"
 	"net/http"
 	"strings"
 	"time"
@@ -12,21 +11,61 @@ import (
 )
 
 const (
-	producersPath                  = "/producers"
-	producerIDPathParamKey         = "producerId"
-	producerPath                   = "/producer/:" + producerIDPathParamKey
-	formDataContentTypeHeaderValue = "application/x-www-form-urlencoded"
-	headerContentType              = "Content-Type"
-	headerUnmodifiedSince          = "If-Unmodified-Since"
-	headerLastModified             = "Last-Modified"
+	producersPath          = "/producers"
+	producerIDPathParamKey = "producerId"
+	producerPath           = "/producer/:" + producerIDPathParamKey
 )
 
-// Producer is the
-type Producer struct {
+// MsgStakeholder is the
+type MsgStakeholder struct {
 	ID        string
 	Name      string
 	Token     string
 	ChangedAt time.Time
+}
+
+func getMessageStakeholder(id string, stakeholderModel *data.MessageStakeholder) *MsgStakeholder {
+	return &MsgStakeholder{ID: id, Name: stakeholderModel.Name, Token: stakeholderModel.Token, ChangedAt: stakeholderModel.UpdatedAt}
+}
+
+// MsgStakeholders is the resource returned by /producers endpoint
+type MsgStakeholders struct {
+	Result []string
+	Pages  map[string]string
+}
+
+func isConditionalUpdateCalled(w http.ResponseWriter, r *http.Request, channelModel *data.MessageStakeholder) bool {
+	validRequest := true
+	unmodifiedSince := r.Header.Get(headerUnmodifiedSince)
+	expectedHeader := channelModel.UpdatedAt.Format(http.TimeFormat)
+	if len(unmodifiedSince) <= 0 {
+		writeBadRequest(w)
+		validRequest = false
+	} else if unmodifiedSince != expectedHeader {
+		writePreconditionFailed(w)
+		validRequest = false
+	}
+	return validRequest
+}
+
+func writeGetResult(err error, errFn func(w http.ResponseWriter), w http.ResponseWriter, msg *MsgStakeholder) {
+	if err != nil {
+		errFn(w)
+	}
+	w.Header().Add(headerLastModified, msg.ChangedAt.Format(http.TimeFormat))
+	writeJSON(w, msg)
+}
+
+func getUpdateData(r *http.Request, defaultName string) (token string, name string) {
+	token = r.PostFormValue("token")
+	if len(token) < 1 {
+		token = randomToken()
+	}
+	name = r.PostFormValue("name")
+	if len(name) < 1 {
+		name = defaultName
+	}
+	return token, name
 }
 
 // ProducerController is for /producer/:prodId
@@ -38,58 +77,34 @@ type ProducerController struct {
 func (prodController *ProducerController) Get(w http.ResponseWriter, r *http.Request, param httprouter.Params) {
 	producerID := param.ByName(producerIDPathParamKey)
 	producerModel, err := prodController.ProducerRepo.Get(producerID)
-	if err != nil {
-		writeNotFound(w)
-		return
-	}
-	w.Header().Add(headerLastModified, producerModel.UpdatedAt.Format(http.TimeFormat))
-	writeJSON(w, getProducer(producerModel))
-}
-
-func getProducer(producerModel *data.Producer) *Producer {
-	x0 := &Producer{ID: producerModel.ProducerID, Name: producerModel.Name, Token: producerModel.Token, ChangedAt: producerModel.UpdatedAt}
-	return x0
+	writeGetResult(err, writeNotFound, w, getMessageStakeholder(producerID, &producerModel.MessageStakeholder))
 }
 
 // Put implements the /producer/:prodId PUT endpoint
 func (prodController *ProducerController) Put(w http.ResponseWriter, r *http.Request, param httprouter.Params) {
+	validRequest := checkFormContentType(r, w)
+	producerID := param.ByName(producerIDPathParamKey)
+	producerModel, err := prodController.ProducerRepo.Get(producerID)
+	if err == nil && validRequest {
+		validRequest = isConditionalUpdateCalled(w, r, &producerModel.MessageStakeholder)
+	}
+	if !validRequest {
+		return
+	}
+	token, name := getUpdateData(r, producerID)
+	producer, _ := data.NewProducer(producerID, token)
+	producer.Name = name
+	producer, err = prodController.ProducerRepo.Store(producer)
+	writeGetResult(err, func(w http.ResponseWriter) { writeErr(w, err) }, w, getMessageStakeholder(producerID, &producer.MessageStakeholder))
+}
+
+func checkFormContentType(r *http.Request, w http.ResponseWriter) bool {
 	validRequest := true
 	if r.Header.Get(headerContentType) != formDataContentTypeHeaderValue {
 		validRequest = false
 		writeUnsupportedMediaType(w)
 	}
-	producerID := param.ByName(producerIDPathParamKey)
-	producerModel, err := prodController.ProducerRepo.Get(producerID)
-	if err == nil {
-		unmodifiedSince := r.Header.Get(headerUnmodifiedSince)
-		expectedHeader := producerModel.UpdatedAt.Format(http.TimeFormat)
-		if len(unmodifiedSince) <= 0 {
-			writeBadRequest(w)
-			validRequest = false
-		} else if unmodifiedSince != expectedHeader {
-			writePreconditionFailed(w)
-			validRequest = false
-		}
-	}
-	if !validRequest {
-		return
-	}
-	token := r.PostFormValue("token")
-	if len(token) < 1 {
-		token = randomToken()
-	}
-	name := r.PostFormValue("name")
-	if len(name) < 1 {
-		name = producerID
-	}
-	producer, _ := data.NewProducer(producerID, token)
-	producer.Name = name
-	producer, err = prodController.ProducerRepo.Store(producer)
-	if err == nil {
-		writeJSON(w, getProducer(producer))
-	} else {
-		writeErr(w, err)
-	}
+	return validRequest
 }
 
 // GetPath returns the endpoint's path
@@ -105,12 +120,6 @@ func (prodController *ProducerController) FormatAsRelativeLink(params ...httprou
 		}
 	}
 	return producerPath
-}
-
-// Producers is the resource returned by /producers endpoint
-type Producers struct {
-	Producers []string
-	Pages     map[string]string
 }
 
 // ProducersController for handling `/producers` endpoint
@@ -130,7 +139,7 @@ func (prodController *ProducersController) Get(w http.ResponseWriter, r *http.Re
 	for index, producer := range producers {
 		producerURLs[index] = prodController.ProducerEndpoint.FormatAsRelativeLink(httprouter.Param{Key: producerIDPathParamKey, Value: producer.ProducerID})
 	}
-	data := Producers{Producers: producerURLs, Pages: getPaginationLinks(r, resultPagination)}
+	data := MsgStakeholders{Result: producerURLs, Pages: getPaginationLinks(r, resultPagination)}
 	writeJSON(w, data)
 }
 
@@ -152,17 +161,4 @@ func NewProducerController(producerRepo storage.ProducerRepository) *ProducerCon
 // NewProducersController initialize new producers controller
 func NewProducersController(producerRepo storage.ProducerRepository, producerController *ProducerController) *ProducersController {
 	return &ProducersController{ProducerRepo: producerRepo, ProducerEndpoint: producerController}
-}
-
-const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-
-var seededRand *rand.Rand = rand.New(
-	rand.NewSource(time.Now().UnixNano()))
-
-func randomToken() string {
-	b := make([]byte, 12)
-	for i := range b {
-		b[i] = charset[seededRand.Intn(len(charset))]
-	}
-	return string(b)
 }
