@@ -201,7 +201,23 @@ func NewHTTPServiceContainer(config *config.Config, listener *ServerLifecycleLis
 	return &HTTPServiceContainer{Configuration: config, Server: server, Listener: listener, DataAccessor: dataAccessor}
 }
 
+func newAppRepository(dataAccessor storage.DataAccessor) storage.AppRepository {
+	return dataAccessor.GetAppRepository()
+}
+
+func newProducerRepository(dataAccessor storage.DataAccessor) storage.ProducerRepository {
+	return dataAccessor.GetProducerRepository()
+}
+
+func newChannelRepository(dataAccessor storage.DataAccessor) storage.ChannelRepository {
+	return dataAccessor.GetChannelRepository()
+}
+
+func newConsumerRepository(dataAccessor storage.DataAccessor) storage.ConsumerRepository {
+	return dataAccessor.GetConsumerRepository()
+}
+
 var (
 	configInjectorSet             = wire.NewSet(NewHTTPServiceContainer, NewServerListener, GetMigrationConfig, wire.Bind(new(controllers.ServerLifecycleListener), new(*ServerLifecycleListenerImpl)), config.ConfigInjector)
-	relationalDBWithControllerSet = wire.NewSet(controllers.ControllerInjector, storage.RDBMSStorageSet)
+	relationalDBWithControllerSet = wire.NewSet(controllers.ControllerInjector, storage.GetNewDataAccessor, newAppRepository, newChannelRepository, newProducerRepository, newConsumerRepository)
 )

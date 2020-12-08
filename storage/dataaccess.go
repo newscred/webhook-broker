@@ -10,6 +10,7 @@ type DataAccessor interface {
 	GetAppRepository() AppRepository
 	GetProducerRepository() ProducerRepository
 	GetChannelRepository() ChannelRepository
+	GetConsumerRepository() ConsumerRepository
 	Close()
 }
 
@@ -32,4 +33,12 @@ type ChannelRepository interface {
 	Store(channel *data.Channel) (*data.Channel, error)
 	Get(channelID string) (*data.Channel, error)
 	GetList(page *data.Pagination) ([]*data.Channel, *data.Pagination, error)
+}
+
+// ConsumerRepository allows storage operation interaction for Consumer
+type ConsumerRepository interface {
+	Store(consumer *data.Consumer) (*data.Consumer, error)
+	Delete(consumer *data.Consumer) error
+	Get(channelID string, consumerID string) (*data.Consumer, error)
+	GetList(channelID string, page *data.Pagination) ([]*data.Consumer, *data.Pagination, error)
 }

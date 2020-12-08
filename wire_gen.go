@@ -25,19 +25,25 @@ func GetHTTPServer(cliConfig *config.CLIConfig) (*HTTPServiceContainer, error) {
 	}
 	serverLifecycleListenerImpl := NewServerListener()
 	migrationConfig := GetMigrationConfig(cliConfig)
-	db, err := storage.GetConnectionPool(configConfig, migrationConfig, configConfig)
+	dataAccessor, err := storage.GetNewDataAccessor(configConfig, migrationConfig, configConfig)
 	if err != nil {
 		return nil, err
 	}
-	appRepository := storage.NewAppRepository(db)
+	appRepository := newAppRepository(dataAccessor)
 	statusController := controllers.NewStatusController(appRepository)
-	producerRepository := storage.NewProducerRepository(db)
+	producerRepository := newProducerRepository(dataAccessor)
 	producerController := controllers.NewProducerController(producerRepository)
 	producersController := controllers.NewProducersController(producerRepository, producerController)
-	router := controllers.NewRouter(statusController, producersController, producerController)
+	channelRepository := newChannelRepository(dataAccessor)
+	channelController := controllers.NewChannelController(channelRepository)
+	controllersControllers := &controllers.Controllers{
+		StatusController:    statusController,
+		ProducersController: producersController,
+		ProducerController:  producerController,
+		ChannelController:   channelController,
+	}
+	router := controllers.NewRouter(controllersControllers)
 	server := controllers.ConfigureAPI(configConfig, serverLifecycleListenerImpl, router)
-	channelRepository := storage.NewChannelRepository(db)
-	dataAccessor := storage.NewDataAccessor(db, appRepository, producerRepository, channelRepository)
 	httpServiceContainer := NewHTTPServiceContainer(configConfig, serverLifecycleListenerImpl, server, dataAccessor)
 	return httpServiceContainer, nil
 }

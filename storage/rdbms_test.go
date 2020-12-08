@@ -136,6 +136,7 @@ func TestGetNewDataAccessor(t *testing.T) {
 		assert.NotNil(t, dataAccessor.GetAppRepository())
 		assert.NotNil(t, dataAccessor.GetProducerRepository())
 		assert.NotNil(t, dataAccessor.GetChannelRepository())
+		assert.NotNil(t, dataAccessor.GetConsumerRepository())
 		// Does nothing
 		dataAccessor.Close()
 		t.Run("InitAppSkip", func(t *testing.T) {
@@ -144,11 +145,6 @@ func TestGetNewDataAccessor(t *testing.T) {
 			assert.Nil(t, err)
 			assert.NotNil(t, dataAccessor)
 		})
-	})
-	t.Run("NewDataAccessorWithNilDB", func(t *testing.T) {
-		t.Parallel()
-		defer dbPanicDeferAssert(t)
-		NewDataAccessor(nil, nil, nil, nil)
 	})
 	t.Run("NewAppRepositoryWithNilDB", func(t *testing.T) {
 		t.Parallel()

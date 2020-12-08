@@ -32,6 +32,7 @@ type RelationalDBDataAccessor struct {
 	appRepository      AppRepository
 	producerRepository ProducerRepository
 	channelRepository  ChannelRepository
+	consumerRepository ConsumerRepository
 	db                 *sql.DB
 }
 
@@ -48,6 +49,11 @@ func (rdbmsDataAccessor *RelationalDBDataAccessor) GetProducerRepository() Produ
 // GetChannelRepository returns the ProducerRepository to be used for Producer ops
 func (rdbmsDataAccessor *RelationalDBDataAccessor) GetChannelRepository() ChannelRepository {
 	return rdbmsDataAccessor.channelRepository
+}
+
+// GetConsumerRepository returns the ProducerRepository to be used for Producer ops
+func (rdbmsDataAccessor *RelationalDBDataAccessor) GetConsumerRepository() ConsumerRepository {
+	return rdbmsDataAccessor.consumerRepository
 }
 
 // Close closes the connection to DB
@@ -153,21 +159,14 @@ var (
 	dataAccessorInitializer sync.Once
 	// ErrDBConnectionNeverInitialized is returned when same NewDataAccessor is called the first time and it failed to connec to DB; in all subsequent calls the accessor will remain nil
 	ErrDBConnectionNeverInitialized = errors.New("DB Connection never initialized")
-	// RDBMSStorageSet injector for data storage related implementation
-	RDBMSStorageSet = wire.NewSet(GetConnectionPool, NewAppRepository, NewDataAccessor, NewProducerRepository, NewChannelRepository)
+	// RDBMSStorageInternalInjector injector for data storage related implementation
+	RDBMSStorageInternalInjector = wire.NewSet(GetConnectionPool, NewAppRepository, NewProducerRepository, NewChannelRepository, NewConsumerRepository, wire.Struct(new(RelationalDBDataAccessor), "db", "appRepository", "producerRepository", "channelRepository", "consumerRepository"), wire.Bind(new(DataAccessor), new(*RelationalDBDataAccessor)))
 )
 
 func panicIfNoDBConnectionPool(db *sql.DB) {
 	if db == nil {
 		panic(ErrDBConnectionNeverInitialized)
 	}
-}
-
-// NewDataAccessor retrieves the DB accessor
-func NewDataAccessor(db *sql.DB, appRepo AppRepository, producerRepo ProducerRepository, channelRepository ChannelRepository) DataAccessor {
-	panicIfNoDBConnectionPool(db)
-	dataAccessor := &RelationalDBDataAccessor{db: db, appRepository: appRepo, producerRepository: producerRepo, channelRepository: channelRepository}
-	return dataAccessor
 }
 
 // NewAppRepository retrieves App Repository

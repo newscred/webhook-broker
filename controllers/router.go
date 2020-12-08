@@ -20,12 +20,20 @@ import (
 	"github.com/julienschmidt/httprouter"
 )
 
+// Controllers represents factory object containing all the controllers
+type Controllers struct {
+	StatusController    *StatusController
+	ProducersController *ProducersController
+	ProducerController  *ProducerController
+	ChannelController   *ChannelController
+}
+
 var (
 	listener          ServerLifecycleListener
 	routerInitializer sync.Once
 	server            *http.Server
 	// ControllerInjector for binding controllers
-	ControllerInjector = wire.NewSet(ConfigureAPI, NewRouter, NewStatusController, NewProducersController, NewProducerController)
+	ControllerInjector = wire.NewSet(ConfigureAPI, NewRouter, NewStatusController, NewProducersController, NewProducerController, NewChannelController, wire.Struct(new(Controllers), "StatusController", "ProducersController", "ProducerController", "ChannelController"))
 	// ErrUnsupportedMediaType is returned when client does not provide appropriate `Content-Type` header
 	ErrUnsupportedMediaType = errors.New("Media type not supported")
 	// ErrConditionalFailed is returned when update is missing `If-Unmodified-Since` header
@@ -129,9 +137,9 @@ func handleExit() {
 }
 
 // NewRouter returns a new instance of the router
-func NewRouter(statusController *StatusController, producersController *ProducersController, producerController *ProducerController) *httprouter.Router {
+func NewRouter(controllers *Controllers) *httprouter.Router {
 	apiRouter := httprouter.New()
-	setupAPIRoutes(apiRouter, statusController, producersController, producerController)
+	setupAPIRoutes(apiRouter, controllers.StatusController, controllers.ProducersController, controllers.ProducerController, controllers.ChannelController)
 	return apiRouter
 }
 

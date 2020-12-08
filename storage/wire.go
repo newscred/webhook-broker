@@ -9,7 +9,7 @@ import (
 
 // GetNewDataAccessor provides the facade for accessing all the object repositories
 func GetNewDataAccessor(dbConfig config.RelationalDatabaseConfig, migrationConf *MigrationConfig, seedDataConfig config.SeedDataConfig) (DataAccessor, error) {
-	wire.Build(RDBMSStorageSet)
+	wire.Build(RDBMSStorageInternalInjector)
 
 	return nil, nil
 }
