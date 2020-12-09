@@ -28,6 +28,14 @@ func (consumer *Consumer) IsInValidState() bool {
 	return true
 }
 
+// GetChannelIDSafely retrieves channel id account for the fact that ConsumingFrom may be null
+func (consumer *Consumer) GetChannelIDSafely() (channelID string) {
+	if consumer.ConsumingFrom != nil {
+		channelID = consumer.ConsumingFrom.ChannelID
+	}
+	return channelID
+}
+
 // NewConsumer creates new Consumer
 func NewConsumer(channel *Channel, consumerID, token string, callbackURL *url.URL) (*Consumer, error) {
 	if len(consumerID) <= 0 || len(token) <= 0 || channel == nil || !callbackURL.IsAbs() {

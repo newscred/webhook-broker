@@ -85,3 +85,11 @@ func TestConsumerQuickFix(t *testing.T) {
 	assert.True(t, consumer.IsInValidState())
 	assert.Equal(t, someID, consumer.Name)
 }
+
+func TestGetChannelIDSafely(t *testing.T) {
+	consumer, _ := NewConsumer(sampleChannel, "consumer-someID", someToken, sampleCallbackURL)
+	channel, _ := NewChannel(someID, someToken)
+	channel.QuickFix()
+	consumer.ConsumingFrom = channel
+	assert.Equal(t, someID, consumer.GetChannelIDSafely())
+}
