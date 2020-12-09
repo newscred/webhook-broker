@@ -56,7 +56,7 @@ func (repo *ChannelDBRepository) insertChannel(channel *data.Channel) (*data.Cha
 // Get retrieves the channel with matching channel id
 func (repo *ChannelDBRepository) Get(channelID string) (*data.Channel, error) {
 	channel := &data.Channel{}
-	err := querySingleRow(repo.db, "SELECT ID, channelID, name, token, createdAt, updatedAt FROM channel WHERE channelID like $1", args2SliceFnWrapper(channelID),
+	err := querySingleRow(repo.db, "SELECT id, channelId, name, token, createdAt, updatedAt FROM channel WHERE channelId like $1", args2SliceFnWrapper(channelID),
 		args2SliceFnWrapper(&channel.ID, &channel.ChannelID, &channel.Name, &channel.Token, &channel.CreatedAt, &channel.UpdatedAt))
 	return channel, err
 }
@@ -68,7 +68,7 @@ func (repo *ChannelDBRepository) GetList(page *data.Pagination) ([]*data.Channel
 	}
 	channels := make([]*data.Channel, 0)
 	pagination := &data.Pagination{}
-	baseQuery := "SELECT ID, channelID, name, token, createdAt, updatedAt FROM channel" + getPaginationQueryFragment(page, false)
+	baseQuery := "SELECT id, channelId, name, token, createdAt, updatedAt FROM channel" + getPaginationQueryFragment(page, false)
 	scanArgs := func() []interface{} {
 		channel := &data.Channel{}
 		channels = append(channels, channel)

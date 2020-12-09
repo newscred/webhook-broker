@@ -159,7 +159,8 @@ func TestConfigureAPI(t *testing.T) {
 	mListener.On("ServerStartFailed", mock.Anything).Return()
 	mListener.On("ServerShutdownCompleted").Return()
 	mAppRepo.On("GetApp").Return(defaultApp, nil)
-	ConfigureAPI(configuration, mListener, NewRouter(&Controllers{StatusController: NewStatusController(mAppRepo), ProducersController: &ProducersController{}, ProducerController: &ProducerController{}}))
+	ConfigureAPI(configuration, mListener, NewRouter(&Controllers{StatusController: NewStatusController(mAppRepo),
+		ProducersController: &ProducersController{}, ProducerController: &ProducerController{}, ChannelController: &ChannelController{}}))
 	<-mListener.serverListener
 	mListener.AssertExpectations(t)
 	mAppRepo.AssertExpectations(t)

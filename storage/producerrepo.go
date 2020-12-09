@@ -50,7 +50,7 @@ func (repo *ProducerDBRepository) insertProducer(producer *data.Producer) (*data
 // Get retrieves the producer with matching producer id
 func (repo *ProducerDBRepository) Get(producerID string) (*data.Producer, error) {
 	producer := &data.Producer{}
-	err := querySingleRow(repo.db, "SELECT ID, producerID, name, token, createdAt, updatedAt FROM producer WHERE producerID like $1", args2SliceFnWrapper(producerID),
+	err := querySingleRow(repo.db, "SELECT id, producerId, name, token, createdAt, updatedAt FROM producer WHERE producerId like $1", args2SliceFnWrapper(producerID),
 		args2SliceFnWrapper(&producer.ID, &producer.ProducerID, &producer.Name, &producer.Token, &producer.CreatedAt, &producer.UpdatedAt))
 	return producer, err
 }
@@ -62,7 +62,7 @@ func (repo *ProducerDBRepository) GetList(page *data.Pagination) ([]*data.Produc
 	}
 	producers := make([]*data.Producer, 0)
 	pagination := &data.Pagination{}
-	baseQuery := "SELECT ID, producerID, name, token, createdAt, updatedAt FROM producer" + getPaginationQueryFragment(page, false)
+	baseQuery := "SELECT id, producerId, name, token, createdAt, updatedAt FROM producer" + getPaginationQueryFragment(page, false)
 	scanArgs := func() []interface{} {
 		producer := &data.Producer{}
 		producers = append(producers, producer)

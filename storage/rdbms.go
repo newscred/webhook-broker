@@ -68,7 +68,7 @@ const (
 	completeInitUpdateStatement     = `UPDATE app SET appStatus = $1 WHERE id = 1 AND appStatus == $2`
 	optimisticLockInitAppErrMsg     = "Initializing began in another app in the meantime"
 	optimisticLockCompleteAppErrMsg = "Initializing not started so can not complete"
-	pageSizeWithOrder               = "ORDER BY createdAt desc, ID desc LIMIT 25"
+	pageSizeWithOrder               = "ORDER BY createdAt desc, id desc LIMIT 25"
 )
 
 var (
@@ -273,7 +273,7 @@ var (
 			} else {
 				query = query + "WHERE "
 			}
-			query = query + "ID < '" + string(*page.Next) + "' "
+			query = query + "id < '" + string(*page.Next) + "' "
 		}
 		if page.Previous != nil {
 			if append {
@@ -281,7 +281,7 @@ var (
 			} else {
 				query = query + "WHERE "
 			}
-			query = query + "ID > '" + string(*page.Previous) + "' "
+			query = query + "id > '" + string(*page.Previous) + "' "
 		}
 		query = query + pageSizeWithOrder
 		return query
