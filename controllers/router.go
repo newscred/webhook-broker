@@ -265,11 +265,9 @@ func randomToken() string {
 
 func formatURL(params []httprouter.Param, urlTemplate string, urlParamNames ...string) (result string) {
 	paramValues := make(map[string]string)
-	for _, param := range params {
-		for _, paramName := range urlParamNames {
-			if param.Key == paramName {
-				paramValues[paramName] = param.Value
-			}
+	for _, paramName := range urlParamNames {
+		if val := findParam(params, paramName); len(val) > 0 {
+			paramValues[paramName] = val
 		}
 	}
 	result = urlTemplate
@@ -277,4 +275,8 @@ func formatURL(params []httprouter.Param, urlTemplate string, urlParamNames ...s
 		result = strings.ReplaceAll(result, ":"+key, value)
 	}
 	return result
+}
+
+func findParam(params httprouter.Params, name string) string {
+	return params.ByName(name)
 }

@@ -53,7 +53,7 @@ func TestChannelsControllerGet(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rr.Code)
 	body := rr.Body.String()
 	t.Log(body)
-	bodyChannels := &MsgStakeholders{}
+	bodyChannels := &ListResult{}
 	json.NewDecoder(strings.NewReader(body)).Decode(bodyChannels)
 	assert.Equal(t, 25, len(bodyChannels.Result))
 

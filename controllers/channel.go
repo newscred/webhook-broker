@@ -61,27 +61,27 @@ type ChannelsController struct {
 }
 
 // Get implements the /channels endpoint
-func (prodController *ChannelsController) Get(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	channels, resultPagination, err := prodController.ChannelRepo.GetList(getPagination(r))
+func (channelsController *ChannelsController) Get(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	channels, resultPagination, err := channelsController.ChannelRepo.GetList(getPagination(r))
 	if err != nil {
 		writeErr(w, err)
 		return
 	}
 	channelURLs := make([]string, len(channels))
 	for index, channel := range channels {
-		channelURLs[index] = prodController.ChannelEndpoint.FormatAsRelativeLink(httprouter.Param{Key: channelIDPathParamKey, Value: channel.ChannelID})
+		channelURLs[index] = channelsController.ChannelEndpoint.FormatAsRelativeLink(httprouter.Param{Key: channelIDPathParamKey, Value: channel.ChannelID})
 	}
-	data := MsgStakeholders{Result: channelURLs, Pages: getPaginationLinks(r, resultPagination)}
+	data := ListResult{Result: channelURLs, Pages: getPaginationLinks(r, resultPagination)}
 	writeJSON(w, data)
 }
 
 // GetPath returns the endpoint's path
-func (prodController *ChannelsController) GetPath() string {
+func (channelsController *ChannelsController) GetPath() string {
 	return channelsPath
 }
 
 // FormatAsRelativeLink Format as relative URL of this resource based on the params
-func (prodController *ChannelsController) FormatAsRelativeLink(params ...httprouter.Param) string {
+func (channelsController *ChannelsController) FormatAsRelativeLink(params ...httprouter.Param) string {
 	return channelsPath
 }
 

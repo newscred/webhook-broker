@@ -27,10 +27,11 @@ func getMessageStakeholder(id string, stakeholderModel *data.MessageStakeholder)
 	return &MsgStakeholder{ID: id, Name: stakeholderModel.Name, Token: stakeholderModel.Token, ChangedAt: stakeholderModel.UpdatedAt}
 }
 
-// MsgStakeholders is the resource returned by /producers endpoint
-type MsgStakeholders struct {
+// ListResult is the resource returned by /producers endpoint
+type ListResult struct {
 	Result []string
 	Pages  map[string]string
+	Links  map[string]string
 }
 
 func isConditionalUpdateCalled(w http.ResponseWriter, r *http.Request, channelModel *data.MessageStakeholder) bool {
@@ -133,7 +134,7 @@ func (prodController *ProducersController) Get(w http.ResponseWriter, r *http.Re
 	for index, producer := range producers {
 		producerURLs[index] = prodController.ProducerEndpoint.FormatAsRelativeLink(httprouter.Param{Key: producerIDPathParamKey, Value: producer.ProducerID})
 	}
-	data := MsgStakeholders{Result: producerURLs, Pages: getPaginationLinks(r, resultPagination)}
+	data := ListResult{Result: producerURLs, Pages: getPaginationLinks(r, resultPagination)}
 	writeJSON(w, data)
 }
 
