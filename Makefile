@@ -41,6 +41,7 @@ generate:
 	(cd storage && go generate -mod=readonly)
 	mockery --all --dir "./config/" --output "./config/mocks"
 	mockery --all --dir "./storage/" --output "./storage/mocks"
+	mockery --name ChannelRepository --structname "MockChannelRepository" --dir "./storage/" --output "./storage" --testonly --outpkg "storage"
 
 dep-tools:
 	go get github.com/google/wire/cmd/wire

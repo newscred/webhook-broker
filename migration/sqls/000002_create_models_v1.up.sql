@@ -28,5 +28,5 @@ CREATE TABLE IF NOT EXISTS consumer (
     createdAt DATETIME NOT NULL,
     updatedAt DATETIME NOT NULL,
     UNIQUE (consumerId, channelId),
-    CONSTRAINT channelRef FOREIGN KEY (channelId) REFERENCES channel(id) ON UPDATE CASCADE ON DELETE RESTRICT
+    CONSTRAINT channelRef FOREIGN KEY (channelId) REFERENCES channel(channelId) ON UPDATE CASCADE ON DELETE RESTRICT
 );

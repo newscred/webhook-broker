@@ -8,7 +8,7 @@ import (
 
 var (
 	// ErrInsufficientInformationForCreating is returned when NewProducer is called with insufficient information
-	ErrInsufficientInformationForCreating = errors.New("ID and Token is must for creating")
+	ErrInsufficientInformationForCreating = errors.New("Necessary information missing for persistence")
 )
 
 // Cursor represents a string used for pagination

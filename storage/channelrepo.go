@@ -63,11 +63,11 @@ func (repo *ChannelDBRepository) Get(channelID string) (*data.Channel, error) {
 
 // GetList retrieves the list of channel based on pagination params supplied. It will return a error if both after and before is present at the same time
 func (repo *ChannelDBRepository) GetList(page *data.Pagination) ([]*data.Channel, *data.Pagination, error) {
-	if page == nil || (page.Next != nil && page.Previous != nil) {
-		return nil, nil, ErrPaginationDeadlock
-	}
 	channels := make([]*data.Channel, 0)
 	pagination := &data.Pagination{}
+	if page == nil || (page.Next != nil && page.Previous != nil) {
+		return channels, pagination, ErrPaginationDeadlock
+	}
 	baseQuery := "SELECT id, channelId, name, token, createdAt, updatedAt FROM channel" + getPaginationQueryFragment(page, false)
 	scanArgs := func() []interface{} {
 		channel := &data.Channel{}
