@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/imyousuf/webhook-broker/storage"
@@ -114,12 +113,7 @@ func (prodController *ProducerController) GetPath() string {
 
 // FormatAsRelativeLink Format as relative URL of this resource based on the params
 func (prodController *ProducerController) FormatAsRelativeLink(params ...httprouter.Param) string {
-	for _, param := range params {
-		if param.Key == producerIDPathParamKey {
-			return strings.Replace(producerPath, ":"+producerIDPathParamKey, param.Value, -1)
-		}
-	}
-	return producerPath
+	return formatURL(params, producerPath, producerIDPathParamKey)
 }
 
 // ProducersController for handling `/producers` endpoint

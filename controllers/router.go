@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"time"
 
@@ -26,6 +27,8 @@ type Controllers struct {
 	ProducersController *ProducersController
 	ProducerController  *ProducerController
 	ChannelController   *ChannelController
+	ConsumerController  *ConsumerController
+	ConsumersController *ConsumersController
 }
 
 var (
@@ -33,7 +36,7 @@ var (
 	routerInitializer sync.Once
 	server            *http.Server
 	// ControllerInjector for binding controllers
-	ControllerInjector = wire.NewSet(ConfigureAPI, NewRouter, NewStatusController, NewProducersController, NewProducerController, NewChannelController, wire.Struct(new(Controllers), "StatusController", "ProducersController", "ProducerController", "ChannelController"))
+	ControllerInjector = wire.NewSet(ConfigureAPI, NewRouter, NewStatusController, NewProducersController, NewProducerController, NewChannelController, NewConsumerController, NewConsumersController, wire.Struct(new(Controllers), "StatusController", "ProducersController", "ProducerController", "ChannelController", "ConsumerController", "ConsumersController"))
 	// ErrUnsupportedMediaType is returned when client does not provide appropriate `Content-Type` header
 	ErrUnsupportedMediaType = errors.New("Media type not supported")
 	// ErrConditionalFailed is returned when update is missing `If-Unmodified-Since` header
@@ -139,7 +142,7 @@ func handleExit() {
 // NewRouter returns a new instance of the router
 func NewRouter(controllers *Controllers) *httprouter.Router {
 	apiRouter := httprouter.New()
-	setupAPIRoutes(apiRouter, controllers.StatusController, controllers.ProducersController, controllers.ProducerController, controllers.ChannelController)
+	setupAPIRoutes(apiRouter, controllers.StatusController, controllers.ProducersController, controllers.ProducerController, controllers.ChannelController, controllers.ConsumerController, controllers.ConsumersController)
 	return apiRouter
 }
 
@@ -258,4 +261,20 @@ func randomToken() string {
 		b[i] = charset[seededRand.Intn(len(charset))]
 	}
 	return string(b)
+}
+
+func formatURL(params []httprouter.Param, urlTemplate string, urlParamNames ...string) (result string) {
+	paramValues := make(map[string]string)
+	for _, param := range params {
+		for _, paramName := range urlParamNames {
+			if param.Key == paramName {
+				paramValues[paramName] = param.Value
+			}
+		}
+	}
+	result = urlTemplate
+	for key, value := range paramValues {
+		result = strings.ReplaceAll(result, ":"+key, value)
+	}
+	return result
 }

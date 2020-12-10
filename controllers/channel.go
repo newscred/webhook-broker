@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"net/http"
-	"strings"
 
 	"github.com/imyousuf/webhook-broker/storage"
 	"github.com/imyousuf/webhook-broker/storage/data"
@@ -52,12 +51,7 @@ func (channelController *ChannelController) GetPath() string {
 
 // FormatAsRelativeLink Format as relative URL of this resource based on the params
 func (channelController *ChannelController) FormatAsRelativeLink(params ...httprouter.Param) string {
-	for _, param := range params {
-		if param.Key == channelIDPathParamKey {
-			return strings.Replace(channelPath, ":"+channelIDPathParamKey, param.Value, -1)
-		}
-	}
-	return channelPath
+	return formatURL(params, channelPath, channelIDPathParamKey)
 }
 
 // ChannelsController for handling `/channels` endpoint
