@@ -3,14 +3,12 @@ package storage
 import (
 	"database/sql"
 	"errors"
-	"os"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/imyousuf/webhook-broker/config"
 	"github.com/imyousuf/webhook-broker/storage/data"
 	"github.com/stretchr/testify/assert"
 )
@@ -28,18 +26,6 @@ const (
 	noChangeUpdateTestProducerID     = "nc-update-test"
 	listTestProducerIDPrefix         = "get-list-"
 )
-
-func TestMain(m *testing.M) {
-	// Setup DB and migration
-	os.Remove("./webhook-broker.sqlite3")
-	configuration, _ := config.GetAutoConfiguration()
-	var dbErr error
-	testDB, dbErr = GetConnectionPool(configuration, defaultMigrationConf, configuration)
-	if dbErr == nil {
-		m.Run()
-	}
-	testDB.Close()
-}
 
 func getProducerRepo() ProducerRepository {
 	producerRepo := NewProducerRepository(testDB)

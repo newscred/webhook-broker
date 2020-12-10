@@ -14,6 +14,7 @@ import (
 
 	"github.com/imyousuf/webhook-broker/storage"
 	"github.com/imyousuf/webhook-broker/storage/data"
+	storagemocks "github.com/imyousuf/webhook-broker/storage/mocks"
 	"github.com/julienschmidt/httprouter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -96,7 +97,7 @@ func TestChannelsControllerGet(t *testing.T) {
 
 func TestChannelsControllerGet_Error(t *testing.T) {
 	testRouter := httprouter.New()
-	mockChannelRepo := new(ChannelRepositoryMockImpl)
+	mockChannelRepo := new(storagemocks.ChannelRepository)
 	expectedErr := errors.New("GetList error")
 	mockChannelRepo.On("GetList", mock.Anything).Return(nil, nil, expectedErr)
 	listController := NewChannelsController(mockChannelRepo, NewChannelController(mockChannelRepo))
@@ -241,7 +242,7 @@ func TestChannelPut(t *testing.T) {
 	})
 	t.Run("500", func(t *testing.T) {
 		t.Parallel()
-		mockChannelRepo := new(ChannelRepositoryMockImpl)
+		mockChannelRepo := new(storagemocks.ChannelRepository)
 		expectedErr := errors.New("error")
 		mockChannelRepo.On("Get", mock.Anything).Return(&data.Channel{}, expectedErr)
 		mockChannelRepo.On("Store", mock.Anything).Return(&data.Channel{}, expectedErr)

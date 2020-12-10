@@ -57,11 +57,11 @@ func (repo *ProducerDBRepository) Get(producerID string) (*data.Producer, error)
 
 // GetList retrieves the list of producer based on pagination params supplied. It will return a error if both after and before is present at the same time
 func (repo *ProducerDBRepository) GetList(page *data.Pagination) ([]*data.Producer, *data.Pagination, error) {
-	if page == nil || (page.Next != nil && page.Previous != nil) {
-		return nil, nil, ErrPaginationDeadlock
-	}
 	producers := make([]*data.Producer, 0)
 	pagination := &data.Pagination{}
+	if page == nil || (page.Next != nil && page.Previous != nil) {
+		return producers, pagination, ErrPaginationDeadlock
+	}
 	baseQuery := "SELECT id, producerId, name, token, createdAt, updatedAt FROM producer" + getPaginationQueryFragment(page, false)
 	scanArgs := func() []interface{} {
 		producer := &data.Producer{}

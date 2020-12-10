@@ -16,6 +16,7 @@ import (
 	"github.com/imyousuf/webhook-broker/config"
 	"github.com/imyousuf/webhook-broker/storage"
 	"github.com/imyousuf/webhook-broker/storage/data"
+	storagemocks "github.com/imyousuf/webhook-broker/storage/mocks"
 	"github.com/julienschmidt/httprouter"
 	"github.com/stretchr/testify/assert"
 )
@@ -53,7 +54,7 @@ func setupTestRoutes(r *httprouter.Router, s EndpointController) {
 }
 
 func TestStatus(t *testing.T) {
-	mAppRepo := new(AppRepositoryMockImpl)
+	mAppRepo := new(storagemocks.AppRepository)
 	testRouter := httprouter.New()
 	statusController := NewStatusController(mAppRepo)
 	setupTestRoutes(testRouter, statusController)
@@ -72,7 +73,7 @@ func TestStatus(t *testing.T) {
 }
 
 func TestStatus_AppDataError(t *testing.T) {
-	mAppRepo := new(AppRepositoryMockImpl)
+	mAppRepo := new(storagemocks.AppRepository)
 	testRouter := httprouter.New()
 	setupTestRoutes(testRouter, NewStatusController(mAppRepo))
 	err := errors.New("App could not be returned")
@@ -86,7 +87,7 @@ func TestStatus_AppDataError(t *testing.T) {
 }
 
 func TestStatus_JSONMarshalError(t *testing.T) {
-	mAppRepo := new(AppRepositoryMockImpl)
+	mAppRepo := new(storagemocks.AppRepository)
 	testRouter := httprouter.New()
 	setupTestRoutes(testRouter, NewStatusController(mAppRepo))
 	mAppRepo.On("GetApp").Return(defaultApp, nil)

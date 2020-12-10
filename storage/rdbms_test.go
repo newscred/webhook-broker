@@ -7,44 +7,26 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
-	"time"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database"
 	"github.com/imyousuf/webhook-broker/config"
+	configmocks "github.com/imyousuf/webhook-broker/config/mocks"
 	"github.com/imyousuf/webhook-broker/storage/data"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 )
 
-type RelationalDatabaseConfigMockImpl struct {
-	mock.Mock
-}
-
-func (m *RelationalDatabaseConfigMockImpl) GetDBDialect() config.DBDialect {
-	args := m.Called()
-	return args.Get(0).(config.DBDialect)
-}
-func (m *RelationalDatabaseConfigMockImpl) GetDBConnectionURL() string {
-	args := m.Called()
-	return args.Get(0).(string)
-}
-func (m *RelationalDatabaseConfigMockImpl) GetDBConnectionMaxIdleTime() time.Duration {
-	args := m.Called()
-	return args.Get(0).(time.Duration)
-}
-func (m *RelationalDatabaseConfigMockImpl) GetDBConnectionMaxLifetime() time.Duration {
-	args := m.Called()
-	return args.Get(0).(time.Duration)
-}
-func (m *RelationalDatabaseConfigMockImpl) GetMaxIdleDBConnections() uint16 {
-	args := m.Called()
-	return args.Get(0).(uint16)
-}
-func (m *RelationalDatabaseConfigMockImpl) GetMaxOpenDBConnections() uint16 {
-	args := m.Called()
-	return args.Get(0).(uint16)
+func TestMain(m *testing.M) {
+	// Setup DB and migration
+	os.Remove("./webhook-broker.sqlite3")
+	configuration, _ := config.GetAutoConfiguration()
+	var dbErr error
+	testDB, dbErr = GetConnectionPool(configuration, defaultMigrationConf, configuration)
+	if dbErr == nil {
+		m.Run()
+	}
+	testDB.Close()
 }
 
 func dbPanicDeferAssert(t *testing.T) {
@@ -118,7 +100,7 @@ func TestGetNewDataAccessor(t *testing.T) {
 		mock.ExpectPing()
 		row := mock.NewRows([]string{"databaseName"}).FromCSVString("sample_database")
 		mock.ExpectQuery("SELECT DATABASE()").WillReturnRows(row).WillReturnError(nil)
-		dbConfig := new(RelationalDatabaseConfigMockImpl)
+		dbConfig := new(configmocks.RelationalDatabaseConfig)
 		dbConfig.On("GetDBDialect").Return(config.MySQLDialect)
 		mock.MatchExpectationsInOrder(true)
 		_, err := getMigrationDriver(db, dbConfig)

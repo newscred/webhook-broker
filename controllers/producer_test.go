@@ -14,6 +14,7 @@ import (
 
 	"github.com/imyousuf/webhook-broker/storage"
 	"github.com/imyousuf/webhook-broker/storage/data"
+	storagemocks "github.com/imyousuf/webhook-broker/storage/mocks"
 	"github.com/julienschmidt/httprouter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -97,7 +98,7 @@ func TestProducersControllerGet(t *testing.T) {
 
 func TestProducersControllerGet_Error(t *testing.T) {
 	testRouter := httprouter.New()
-	mockProducerRepo := new(ProducerRepositoryMockImpl)
+	mockProducerRepo := new(storagemocks.ProducerRepository)
 	expectedErr := errors.New("GetList error")
 	mockProducerRepo.On("GetList", mock.Anything).Return(nil, nil, expectedErr)
 	listController := NewProducersController(mockProducerRepo, NewProducerController(mockProducerRepo))
@@ -242,7 +243,7 @@ func TestProducerPut(t *testing.T) {
 	})
 	t.Run("500", func(t *testing.T) {
 		t.Parallel()
-		mockProducerRepo := new(ProducerRepositoryMockImpl)
+		mockProducerRepo := new(storagemocks.ProducerRepository)
 		expectedErr := errors.New("error")
 		mockProducerRepo.On("Get", mock.Anything).Return(&data.Producer{}, expectedErr)
 		mockProducerRepo.On("Store", mock.Anything).Return(&data.Producer{}, expectedErr)

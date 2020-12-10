@@ -39,11 +39,14 @@ endif
 generate:
 	go generate -mod=readonly
 	(cd storage && go generate -mod=readonly)
+	mockery --all --dir "./config/" --output "./config/mocks"
+	mockery --all --dir "./storage/" --output "./storage/mocks"
 
 dep-tools:
 	go get github.com/google/wire/cmd/wire
 ifneq ($(OS),Alpine Linux)
 	go get github.com/golang-migrate/migrate/v4/cmd/migrate
+	go get github.com/vektra/mockery/v2/.../
 endif
 
 build-docker-iamge:

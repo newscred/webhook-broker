@@ -6,118 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/imyousuf/webhook-broker/config"
-	"github.com/imyousuf/webhook-broker/storage"
 	"github.com/imyousuf/webhook-broker/storage/data"
+	storagemocks "github.com/imyousuf/webhook-broker/storage/mocks"
 	"github.com/stretchr/testify/mock"
 )
-
-type AppRepositoryMockImpl struct {
-	mock.Mock
-}
-
-func (m *AppRepositoryMockImpl) GetApp() (*data.App, error) {
-	args := m.Called()
-	return args.Get(0).(*data.App), args.Error(1)
-}
-func (m *AppRepositoryMockImpl) StartAppInit(data *config.SeedData) error {
-	m.Called(data)
-	return nil
-}
-func (m *AppRepositoryMockImpl) CompleteAppInit() error {
-	m.Called()
-	return nil
-}
-
-type ProducerRepositoryMockImpl struct {
-	mock.Mock
-}
-
-func (m *ProducerRepositoryMockImpl) Store(producer *data.Producer) (*data.Producer, error) {
-	args := m.Called()
-	arg0 := args.Get(0)
-	var rProducer *data.Producer
-	if arg0 != nil {
-		rProducer = arg0.(*data.Producer)
-	}
-	return rProducer, args.Error(1)
-}
-func (m *ProducerRepositoryMockImpl) Get(producerID string) (*data.Producer, error) {
-	args := m.Called()
-	arg0 := args.Get(0)
-	var rProducer *data.Producer
-	if arg0 != nil {
-		rProducer = arg0.(*data.Producer)
-	}
-	return rProducer, args.Error(1)
-}
-func (m *ProducerRepositoryMockImpl) GetList(page *data.Pagination) ([]*data.Producer, *data.Pagination, error) {
-	args := m.Called()
-	var producers []*data.Producer
-	arg0 := args.Get(0)
-	if arg0 != nil {
-		producers = arg0.([]*data.Producer)
-	}
-	var pagination *data.Pagination
-	arg1 := args.Get(1)
-	if arg1 != nil {
-		pagination = arg1.(*data.Pagination)
-	}
-	return producers, pagination, args.Error(2)
-}
-
-type ChannelRepositoryMockImpl struct {
-	mock.Mock
-}
-
-func (m *ChannelRepositoryMockImpl) Store(channel *data.Channel) (*data.Channel, error) {
-	args := m.Called()
-	arg0 := args.Get(0)
-	var rChannel *data.Channel
-	if arg0 != nil {
-		rChannel = arg0.(*data.Channel)
-	}
-	return rChannel, args.Error(1)
-}
-func (m *ChannelRepositoryMockImpl) Get(producerID string) (*data.Channel, error) {
-	args := m.Called()
-	arg0 := args.Get(0)
-	var rChannel *data.Channel
-	if arg0 != nil {
-		rChannel = arg0.(*data.Channel)
-	}
-	return rChannel, args.Error(1)
-}
-func (m *ChannelRepositoryMockImpl) GetList(page *data.Pagination) ([]*data.Channel, *data.Pagination, error) {
-	args := m.Called()
-	var channels []*data.Channel
-	arg0 := args.Get(0)
-	if arg0 != nil {
-		channels = arg0.([]*data.Channel)
-	}
-	var pagination *data.Pagination
-	arg1 := args.Get(1)
-	if arg1 != nil {
-		pagination = arg1.(*data.Pagination)
-	}
-	return channels, pagination, args.Error(2)
-}
-
-type DataAccessorMockImpl struct {
-	mock.Mock
-}
-
-func (m *DataAccessorMockImpl) GetAppRepository() storage.AppRepository {
-	args := m.Called()
-	return args.Get(0).(storage.AppRepository)
-}
-
-func (m *DataAccessorMockImpl) GetChannelRepository() storage.ChannelRepository {
-	args := m.Called()
-	return args.Get(0).(storage.ChannelRepository)
-}
-
-func (m *DataAccessorMockImpl) Close() { m.Called() }
 
 type ServerLifecycleListenerMockImpl struct {
 	mock.Mock
@@ -152,7 +44,7 @@ var forceServerExiter = func(stop *chan os.Signal) {
 func TestConfigureAPI(t *testing.T) {
 	mListener := &ServerLifecycleListenerMockImpl{serverListener: make(chan bool)}
 	defaultApp := data.NewApp(&configuration.SeedData, data.Initialized)
-	mAppRepo := new(AppRepositoryMockImpl)
+	mAppRepo := new(storagemocks.AppRepository)
 	oldNotify := NotifyOnInterrupt
 	NotifyOnInterrupt = forceServerExiter
 	mListener.On("StartingServer").Return()

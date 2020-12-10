@@ -12,3 +12,10 @@ Generate Migration script using command as follows from project root -
 ```bash
 migrate create -ext sql -dir migration/sqls -seq create_sample_table
 ```
+
+For generating mocks we use [Mockery](https://github.com/vektra/mockery). Currently `storage` and `config` interfaces are mocked using the tool. Command used for them are -
+
+```bash
+mockery --all --dir "./config/" --output "./config/mocks"
+mockery --all --dir "./storage/" --output "./storage/mocks"
+```
