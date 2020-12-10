@@ -59,6 +59,9 @@ build:
 	@echo "Version: $(shell git log --pretty=format:'%h' -n 1)"
 	(cd dist && tar cjvf webhook-broker-$(shell git log --pretty=format:'%h' -n 1).tar.bz2 ./webhook-broker)
 
+time-test:
+	time go test -timeout 30s -mod=readonly ./... -count=1
+
 ci-test:
 	go test -timeout 30s -mod=readonly -v ./... -short
 

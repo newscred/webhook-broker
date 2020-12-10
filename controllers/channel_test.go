@@ -87,12 +87,18 @@ func TestChannelsControllerGet(t *testing.T) {
 	assert.Equal(t, 25, len(bodyChannels.Result))
 
 	// Next of second page should be empty
-	nreq, _ = http.NewRequest("GET", nextURL, nil)
-	nr = httptest.NewRecorder()
-	testRouter.ServeHTTP(nr, nreq)
-	assert.Equal(t, http.StatusOK, nr.Code)
-	json.NewDecoder(strings.NewReader(nr.Body.String())).Decode(bodyChannels)
-	assert.Equal(t, 0, len(bodyChannels.Result))
+	continueNext := true
+	for continueNext {
+		nreq, _ = http.NewRequest("GET", nextURL, nil)
+		nr = httptest.NewRecorder()
+		testRouter.ServeHTTP(nr, nreq)
+		assert.Equal(t, http.StatusOK, nr.Code)
+		json.NewDecoder(strings.NewReader(nr.Body.String())).Decode(bodyChannels)
+		if len(bodyChannels.Result) == 0 {
+			continueNext = false
+		}
+		nextURL = bodyChannels.Pages[nextPaginationQueryParamKey]
+	}
 }
 
 func TestChannelsControllerGet_Error(t *testing.T) {

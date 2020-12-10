@@ -1,6 +1,9 @@
 package controllers
 
 import (
+	"database/sql"
+	"net/http"
+
 	"github.com/imyousuf/webhook-broker/storage"
 	"github.com/julienschmidt/httprouter"
 )
@@ -35,14 +38,39 @@ func (controller *ConsumerController) FormatAsRelativeLink(params ...httprouter.
 
 // ConsumersController represents all endpoints related to a consumers list for a channel
 type ConsumersController struct {
-	ChannelRepo     storage.ChannelRepository
-	ConsumerRepo    storage.ConsumerRepository
-	ChannelEndpoint EndpointController
+	ChannelRepo      storage.ChannelRepository
+	ConsumerRepo     storage.ConsumerRepository
+	ChannelEndpoint  EndpointController
+	ConsumerEndpoint EndpointController
 }
 
 // NewConsumersController creates and returns a new instance of ConsumersController
-func NewConsumersController(channelEndpoint *ChannelController, channelRepo storage.ChannelRepository, consumerRepo storage.ConsumerRepository) *ConsumersController {
-	return &ConsumersController{ChannelRepo: channelRepo, ConsumerRepo: consumerRepo, ChannelEndpoint: channelEndpoint}
+func NewConsumersController(channelEndpoint *ChannelController, consumerEndpoint *ConsumerController, channelRepo storage.ChannelRepository, consumerRepo storage.ConsumerRepository) *ConsumersController {
+	return &ConsumersController{ChannelRepo: channelRepo, ConsumerRepo: consumerRepo, ChannelEndpoint: channelEndpoint, ConsumerEndpoint: consumerEndpoint}
+}
+
+// Get implements the /channels endpoint
+func (controller *ConsumersController) Get(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+	channelID := findParam(params, channelIDPathParamKey)
+	consumers, resultPagination, err := controller.ConsumerRepo.GetList(channelID, getPagination(r))
+	if err != nil {
+		switch err {
+		case sql.ErrNoRows:
+			writeNotFound(w)
+		default:
+			writeErr(w, err)
+		}
+		return
+	}
+	consumerURLs := make([]string, len(consumers))
+	channelIDParam := httprouter.Param{Key: channelIDPathParamKey, Value: channelID}
+	for index, consumer := range consumers {
+		consumerURLs[index] = controller.ConsumerEndpoint.FormatAsRelativeLink(channelIDParam, httprouter.Param{Key: consumerIDPathParamKey, Value: consumer.ConsumerID})
+	}
+	links := make(map[string]string)
+	links["channel"] = controller.ChannelEndpoint.FormatAsRelativeLink(channelIDParam)
+	data := ListResult{Result: consumerURLs, Pages: getPaginationLinks(r, resultPagination), Links: links}
+	writeJSON(w, data)
 }
 
 // GetPath returns the endpoint's path

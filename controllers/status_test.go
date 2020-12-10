@@ -38,8 +38,10 @@ func TestMain(m *testing.M) {
 		os.Remove("./webhook-broker.sqlite3")
 		db, err = storage.GetConnectionPool(configuration, &storage.MigrationConfig{MigrationEnabled: true, MigrationSource: "file://" + migrationLocation}, configuration)
 		if err == nil {
+			// ORDER needs to be maintained
 			ProducerTestSetup()
 			ChannelTestSetup()
+			ConsumerTestSetup()
 			m.Run()
 			db.Close()
 		}
