@@ -1,43 +1,5 @@
 package data
 
-import (
-	"time"
-
-	"github.com/rs/xid"
-)
-
-// BasePaginateable provides common functionalities around paginateable objects
-type BasePaginateable struct {
-	ID        xid.ID
-	CreatedAt time.Time
-	UpdatedAt time.Time
-}
-
-// GetCursor returns the cursor value for this producer
-func (paginateable *BasePaginateable) GetCursor() (*Cursor, error) {
-	text, err := paginateable.ID.Value()
-	cursor := Cursor(text.(string))
-	return &cursor, err
-}
-
-// QuickFix fixes base paginatable model's attribute
-func (paginateable *BasePaginateable) QuickFix() bool {
-	madeChanges := false
-	if paginateable.ID.IsNil() {
-		paginateable.ID = xid.New()
-		madeChanges = true
-	}
-	if paginateable.CreatedAt.IsZero() {
-		paginateable.CreatedAt = time.Now()
-		madeChanges = true
-	}
-	if paginateable.UpdatedAt.IsZero() {
-		paginateable.UpdatedAt = time.Now()
-		madeChanges = true
-	}
-	return madeChanges
-}
-
 // MessageStakeholder represents all objects around a message, for example, Producer, Channel, Consumer
 type MessageStakeholder struct {
 	BasePaginateable

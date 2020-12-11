@@ -23,6 +23,11 @@ type MsgStakeholder struct {
 	ChangedAt time.Time
 }
 
+// GetLastUpdatedHTTPTimeString exposes the string rep of the last modified timestamp for the object
+func (stakeholder *MsgStakeholder) GetLastUpdatedHTTPTimeString() string {
+	return stakeholder.ChangedAt.Format(http.TimeFormat)
+}
+
 func getMessageStakeholder(id string, stakeholderModel *data.MessageStakeholder) *MsgStakeholder {
 	return &MsgStakeholder{ID: id, Name: stakeholderModel.Name, Token: stakeholderModel.Token, ChangedAt: stakeholderModel.UpdatedAt}
 }
@@ -34,10 +39,10 @@ type ListResult struct {
 	Links  map[string]string
 }
 
-func isConditionalUpdateCalled(w http.ResponseWriter, r *http.Request, channelModel *data.MessageStakeholder) bool {
+func isConditionalUpdateCalled(w http.ResponseWriter, r *http.Request, channelModel data.Updateable) bool {
 	validRequest := true
 	unmodifiedSince := r.Header.Get(headerUnmodifiedSince)
-	expectedHeader := channelModel.UpdatedAt.Format(http.TimeFormat)
+	expectedHeader := channelModel.GetLastUpdatedHTTPTimeString()
 	if len(unmodifiedSince) <= 0 {
 		writeBadRequest(w)
 		validRequest = false
@@ -48,11 +53,13 @@ func isConditionalUpdateCalled(w http.ResponseWriter, r *http.Request, channelMo
 	return validRequest
 }
 
-func writeGetResult(err error, errFn func(w http.ResponseWriter), w http.ResponseWriter, msg *MsgStakeholder) {
+func writeGetResult(err error, errFn func(w http.ResponseWriter), w http.ResponseWriter, msg interface{}) {
 	if err != nil {
 		errFn(w)
 	}
-	w.Header().Add(headerLastModified, msg.ChangedAt.Format(http.TimeFormat))
+	if stakeholder, ok := msg.(data.Updateable); ok {
+		w.Header().Add(headerLastModified, stakeholder.GetLastUpdatedHTTPTimeString())
+	}
 	writeJSON(w, msg)
 }
 
@@ -86,7 +93,7 @@ func (prodController *ProducerController) Put(w http.ResponseWriter, r *http.Req
 	producerID := param.ByName(producerIDPathParamKey)
 	producerModel, err := prodController.ProducerRepo.Get(producerID)
 	if err == nil && validRequest {
-		validRequest = isConditionalUpdateCalled(w, r, &producerModel.MessageStakeholder)
+		validRequest = isConditionalUpdateCalled(w, r, producerModel)
 	}
 	if !validRequest {
 		return

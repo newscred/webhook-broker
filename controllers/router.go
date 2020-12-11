@@ -235,7 +235,9 @@ func writePreconditionFailed(w http.ResponseWriter) {
 
 func writeStatus(w http.ResponseWriter, code int, err error) {
 	w.WriteHeader(code)
-	w.Write([]byte(err.Error()))
+	if err != nil {
+		w.Write([]byte(err.Error()))
+	}
 }
 
 func writeJSON(w http.ResponseWriter, data interface{}) {

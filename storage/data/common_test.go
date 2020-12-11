@@ -2,7 +2,9 @@ package data
 
 import (
 	"errors"
+	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -81,4 +83,10 @@ func TestNewPagination(t *testing.T) {
 		after.AssertExpectations(t)
 		before.AssertExpectations(t)
 	})
+}
+
+func TestGetLastUpdatedHTTPTimeString(t *testing.T) {
+	currentTime := time.Now()
+	base := BasePaginateable{UpdatedAt: currentTime}
+	assert.Equal(t, currentTime.Format(http.TimeFormat), base.GetLastUpdatedHTTPTimeString())
 }

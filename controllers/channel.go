@@ -32,7 +32,7 @@ func (channelController *ChannelController) Put(w http.ResponseWriter, r *http.R
 	channelID := param.ByName(channelIDPathParamKey)
 	channelModel, err := channelController.ChannelRepo.Get(channelID)
 	if err == nil && validRequest {
-		validRequest = isConditionalUpdateCalled(w, r, &channelModel.MessageStakeholder)
+		validRequest = isConditionalUpdateCalled(w, r, channelModel)
 	}
 	if !validRequest {
 		return

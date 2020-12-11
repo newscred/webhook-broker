@@ -2,6 +2,8 @@ package data
 
 import (
 	"errors"
+	"net/http"
+	"time"
 
 	"github.com/rs/xid"
 )
@@ -13,6 +15,48 @@ var (
 
 // Cursor represents a string used for pagination
 type Cursor string
+
+// Updateable represents interface for objects that expose updated date
+type Updateable interface {
+	GetLastUpdatedHTTPTimeString() string
+}
+
+// BasePaginateable provides common functionalities around paginateable objects
+type BasePaginateable struct {
+	ID        xid.ID
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+// GetLastUpdatedHTTPTimeString exposes the string rep of the last modified timestamp for the object
+func (paginateable *BasePaginateable) GetLastUpdatedHTTPTimeString() string {
+	return paginateable.UpdatedAt.Format(http.TimeFormat)
+}
+
+// GetCursor returns the cursor value for this producer
+func (paginateable *BasePaginateable) GetCursor() (*Cursor, error) {
+	text, err := paginateable.ID.Value()
+	cursor := Cursor(text.(string))
+	return &cursor, err
+}
+
+// QuickFix fixes base paginate-able model's attribute
+func (paginateable *BasePaginateable) QuickFix() bool {
+	madeChanges := false
+	if paginateable.ID.IsNil() {
+		paginateable.ID = xid.New()
+		madeChanges = true
+	}
+	if paginateable.CreatedAt.IsZero() {
+		paginateable.CreatedAt = time.Now()
+		madeChanges = true
+	}
+	if paginateable.UpdatedAt.IsZero() {
+		paginateable.UpdatedAt = time.Now()
+		madeChanges = true
+	}
+	return madeChanges
+}
 
 // Pagination represents a data structure to determine how to traverse a list
 type Pagination struct {
