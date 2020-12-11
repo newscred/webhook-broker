@@ -9,6 +9,7 @@ import (
 const (
 	someID    = "some-id"
 	someToken = "some-token"
+	someName  = "some-name"
 )
 
 func TestNewProducer(t *testing.T) {
@@ -75,14 +76,23 @@ func TestIsInValidState(t *testing.T) {
 }
 
 func TestProducerQuickFix(t *testing.T) {
-	t.Parallel()
-	producer := Producer{ProducerID: someID}
-	producer.Token = someToken
-	assert.False(t, producer.IsInValidState())
-	assert.True(t, len(producer.Name) <= 0)
-	assert.True(t, producer.QuickFix())
-	assert.True(t, producer.IsInValidState())
-	assert.Equal(t, someID, producer.Name)
+	t.Run("ChildQuickFixChange", func(t *testing.T) {
+		t.Parallel()
+		producer := Producer{ProducerID: someID}
+		producer.Token = someToken
+		assert.False(t, producer.IsInValidState())
+		assert.True(t, len(producer.Name) <= 0)
+		assert.True(t, producer.QuickFix())
+		assert.True(t, producer.IsInValidState())
+		assert.Equal(t, someID, producer.Name)
+	})
+	t.Run("ParentOnlyQuickFixChange", func(t *testing.T) {
+		t.Parallel()
+		producer := Producer{ProducerID: someID, MessageStakeholder: MessageStakeholder{Name: someName}}
+		producer.Token = someToken
+		assert.True(t, producer.QuickFix())
+		assert.Equal(t, someName, producer.Name)
+	})
 }
 
 func TestProducerIsInValidState(t *testing.T) {

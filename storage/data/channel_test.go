@@ -43,12 +43,22 @@ func TestChannelIsInValidState(t *testing.T) {
 }
 
 func TestChannelQuickFix(t *testing.T) {
-	t.Parallel()
-	channel := Channel{ChannelID: someID}
-	channel.Token = someToken
-	assert.False(t, channel.IsInValidState())
-	assert.True(t, len(channel.Name) <= 0)
-	assert.True(t, channel.QuickFix())
-	assert.True(t, channel.IsInValidState())
-	assert.Equal(t, someID, channel.Name)
+	t.Run("ChildQuickFixChange", func(t *testing.T) {
+		t.Parallel()
+		channel := Channel{ChannelID: someID}
+		channel.Token = someToken
+		assert.False(t, channel.IsInValidState())
+		assert.True(t, len(channel.Name) <= 0)
+		assert.True(t, channel.QuickFix())
+		assert.True(t, channel.IsInValidState())
+		assert.Equal(t, someID, channel.Name)
+	})
+	t.Run("ParentOnlyQuickFixChange", func(t *testing.T) {
+		t.Parallel()
+		channel := Channel{ChannelID: someID, MessageStakeholder: MessageStakeholder{Name: someName}}
+		channel.Token = someToken
+		assert.True(t, channel.QuickFix())
+		assert.True(t, channel.IsInValidState())
+		assert.Equal(t, someName, channel.Name)
+	})
 }

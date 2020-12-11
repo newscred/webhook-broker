@@ -13,7 +13,7 @@ type Consumer struct {
 // QuickFix fixes the model to set default ID, name same as producer id, created and updated at to current time.
 func (consumer *Consumer) QuickFix() bool {
 	madeChanges := consumer.BasePaginateable.QuickFix()
-	madeChanges = setValIfBothNotEmpty(&consumer.Name, &consumer.ConsumerID)
+	madeChanges = setValIfBothNotEmpty(&consumer.Name, &consumer.ConsumerID) || madeChanges
 	return madeChanges
 }
 

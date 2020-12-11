@@ -76,14 +76,23 @@ func TestConsumerIsInValidState(t *testing.T) {
 }
 
 func TestConsumerQuickFix(t *testing.T) {
-	t.Parallel()
-	consumer, _ := NewConsumer(sampleChannel, someID, someToken, sampleCallbackURL)
-	consumer.Name = ""
-	assert.False(t, consumer.IsInValidState())
-	assert.True(t, len(consumer.Name) <= 0)
-	assert.True(t, consumer.QuickFix())
-	assert.True(t, consumer.IsInValidState())
-	assert.Equal(t, someID, consumer.Name)
+	t.Run("ChildQuickFixChange", func(t *testing.T) {
+		t.Parallel()
+		consumer, _ := NewConsumer(sampleChannel, someID, someToken, sampleCallbackURL)
+		consumer.Name = ""
+		assert.False(t, consumer.IsInValidState())
+		assert.True(t, len(consumer.Name) <= 0)
+		assert.True(t, consumer.QuickFix())
+		assert.True(t, consumer.IsInValidState())
+		assert.Equal(t, someID, consumer.Name)
+	})
+	t.Run("ParentOnlyQuickFixChange", func(t *testing.T) {
+		t.Parallel()
+		consumer, _ := NewConsumer(sampleChannel, someID, someToken, sampleCallbackURL)
+		consumer.Name = someName
+		assert.True(t, consumer.QuickFix())
+		assert.Equal(t, someName, consumer.Name)
+	})
 }
 
 func TestGetChannelIDSafely(t *testing.T) {
