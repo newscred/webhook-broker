@@ -39,10 +39,10 @@ type ListResult struct {
 	Links  map[string]string
 }
 
-func isConditionalUpdateCalled(w http.ResponseWriter, r *http.Request, channelModel data.Updateable) bool {
+func isConditionalUpdateCalled(w http.ResponseWriter, r *http.Request, model data.Updateable) bool {
 	validRequest := true
 	unmodifiedSince := r.Header.Get(headerUnmodifiedSince)
-	expectedHeader := channelModel.GetLastUpdatedHTTPTimeString()
+	expectedHeader := model.GetLastUpdatedHTTPTimeString()
 	if len(unmodifiedSince) <= 0 {
 		writeBadRequest(w)
 		validRequest = false

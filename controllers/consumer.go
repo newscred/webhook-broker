@@ -3,8 +3,10 @@ package controllers
 import (
 	"database/sql"
 	"net/http"
+	"net/url"
 
 	"github.com/imyousuf/webhook-broker/storage"
+	"github.com/imyousuf/webhook-broker/storage/data"
 	"github.com/julienschmidt/httprouter"
 )
 
@@ -14,16 +16,88 @@ const (
 	consumerPath           = channelPath + "/consumer/:" + consumerIDPathParamKey
 )
 
+// ConsumerModel represents the data communicated to HTTP clients
+type ConsumerModel struct {
+	MsgStakeholder
+	CallbackURL string
+}
+
 // ConsumerController represents all endpoints related to a single consumer for a channel
 type ConsumerController struct {
-	ChannelRepo     storage.ChannelRepository
-	ConsumerRepo    storage.ConsumerRepository
-	ChannelEndpoint EndpointController
+	ConsumerRepo storage.ConsumerRepository
+	ChannelRepo  storage.ChannelRepository
 }
 
 // NewConsumerController creates and returns a new instance of ConsumerController
-func NewConsumerController(channelEndpoint *ChannelController, channelRepo storage.ChannelRepository, consumerRepo storage.ConsumerRepository) *ConsumerController {
-	return &ConsumerController{ChannelRepo: channelRepo, ConsumerRepo: consumerRepo, ChannelEndpoint: channelEndpoint}
+func NewConsumerController(channelRepo storage.ChannelRepository, consumerRepo storage.ConsumerRepository) *ConsumerController {
+	return &ConsumerController{ConsumerRepo: consumerRepo, ChannelRepo: channelRepo}
+}
+
+// Get implements the GET /channel/:channelId/consumer/:consumerId endpoint
+func (controller *ConsumerController) Get(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+	consumer, err := controller.ConsumerRepo.Get(findParam(params, channelIDPathParamKey), findParam(params, consumerIDPathParamKey))
+	consumerModel := getConsumerModel(consumer)
+	writeGetResult(err, writeNotFound, w, consumerModel)
+}
+
+func getConsumerModel(consumer *data.Consumer) *ConsumerModel {
+	consumerModel := &ConsumerModel{MsgStakeholder: *getMessageStakeholder(consumer.ConsumerID, &consumer.MessageStakeholder), CallbackURL: consumer.CallbackURL}
+	return consumerModel
+}
+
+// Put implements the PUT /channel/:channelId/consumer/:consumerId endpoint
+func (controller *ConsumerController) Put(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+	validRequest := checkFormContentType(r, w)
+	var channel *data.Channel
+	var err error
+	channelID := findParam(params, channelIDPathParamKey)
+	consumerID := findParam(params, consumerIDPathParamKey)
+	if validRequest {
+		channel, err = controller.ChannelRepo.Get(channelID)
+		if err != nil {
+			writeNotFound(w)
+			validRequest = false
+		}
+	}
+	if validRequest {
+		consumer, err := controller.ConsumerRepo.Get(channelID, consumerID)
+		if err == nil {
+			validRequest = isConditionalUpdateCalled(w, r, consumer)
+		}
+	}
+	if !validRequest {
+		return
+	}
+	token, name := getUpdateData(r, consumerID)
+	urlString := r.PostFormValue("callbackUrl")
+	callbackURL, uErr := url.Parse(urlString)
+	if len(urlString) < 1 || uErr != nil || !callbackURL.IsAbs() {
+		writeBadRequest(w)
+		return
+	}
+	inComingConsumer, _ := data.NewConsumer(channel, consumerID, token, callbackURL)
+	inComingConsumer.Name = name
+	consumer, updateErr := controller.ConsumerRepo.Store(inComingConsumer)
+	writeGetResult(updateErr, func(w http.ResponseWriter) { writeErr(w, updateErr) }, w, getConsumerModel(consumer))
+}
+
+// Delete implements the DELETE /channel/:channelId/consumer/:consumerId endpoint
+func (controller *ConsumerController) Delete(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+	consumer, err := controller.ConsumerRepo.Get(findParam(params, channelIDPathParamKey), findParam(params, consumerIDPathParamKey))
+	switch err {
+	case nil:
+		if validRequest := isConditionalUpdateCalled(w, r, consumer); !validRequest {
+			writePreconditionFailed(w)
+		} else if delErr := controller.ConsumerRepo.Delete(consumer); delErr != nil {
+			writeErr(w, delErr)
+		} else {
+			writeStatus(w, http.StatusNoContent, nil)
+		}
+	case sql.ErrNoRows:
+		writeNotFound(w)
+	default:
+		writeErr(w, err)
+	}
 }
 
 // GetPath returns the endpoint's path
@@ -38,18 +112,16 @@ func (controller *ConsumerController) FormatAsRelativeLink(params ...httprouter.
 
 // ConsumersController represents all endpoints related to a consumers list for a channel
 type ConsumersController struct {
-	ChannelRepo      storage.ChannelRepository
 	ConsumerRepo     storage.ConsumerRepository
-	ChannelEndpoint  EndpointController
 	ConsumerEndpoint EndpointController
 }
 
 // NewConsumersController creates and returns a new instance of ConsumersController
-func NewConsumersController(channelEndpoint *ChannelController, consumerEndpoint *ConsumerController, channelRepo storage.ChannelRepository, consumerRepo storage.ConsumerRepository) *ConsumersController {
-	return &ConsumersController{ChannelRepo: channelRepo, ConsumerRepo: consumerRepo, ChannelEndpoint: channelEndpoint, ConsumerEndpoint: consumerEndpoint}
+func NewConsumersController(consumerEndpoint *ConsumerController, consumerRepo storage.ConsumerRepository) *ConsumersController {
+	return &ConsumersController{ConsumerRepo: consumerRepo, ConsumerEndpoint: consumerEndpoint}
 }
 
-// Get implements the /channels endpoint
+// Get implements the GET /channel/:channelId/consumers endpoint
 func (controller *ConsumersController) Get(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 	channelID := findParam(params, channelIDPathParamKey)
 	consumers, resultPagination, err := controller.ConsumerRepo.GetList(channelID, getPagination(r))
@@ -67,9 +139,7 @@ func (controller *ConsumersController) Get(w http.ResponseWriter, r *http.Reques
 	for index, consumer := range consumers {
 		consumerURLs[index] = controller.ConsumerEndpoint.FormatAsRelativeLink(channelIDParam, httprouter.Param{Key: consumerIDPathParamKey, Value: consumer.ConsumerID})
 	}
-	links := make(map[string]string)
-	links["channel"] = controller.ChannelEndpoint.FormatAsRelativeLink(channelIDParam)
-	data := ListResult{Result: consumerURLs, Pages: getPaginationLinks(r, resultPagination), Links: links}
+	data := ListResult{Result: consumerURLs, Pages: getPaginationLinks(r, resultPagination)}
 	writeJSON(w, data)
 }
 

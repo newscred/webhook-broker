@@ -35,10 +35,10 @@ func GetHTTPServer(cliConfig *config.CLIConfig) (*HTTPServiceContainer, error) {
 	producerController := controllers.NewProducerController(producerRepository)
 	producersController := controllers.NewProducersController(producerRepository, producerController)
 	channelRepository := newChannelRepository(dataAccessor)
-	channelController := controllers.NewChannelController(channelRepository)
 	consumerRepository := newConsumerRepository(dataAccessor)
-	consumerController := controllers.NewConsumerController(channelController, channelRepository, consumerRepository)
-	consumersController := controllers.NewConsumersController(channelController, consumerController, channelRepository, consumerRepository)
+	consumerController := controllers.NewConsumerController(channelRepository, consumerRepository)
+	consumersController := controllers.NewConsumersController(consumerController, consumerRepository)
+	channelController := controllers.NewChannelController(consumersController, channelRepository)
 	controllersControllers := &controllers.Controllers{
 		StatusController:    statusController,
 		ProducersController: producersController,

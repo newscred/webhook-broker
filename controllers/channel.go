@@ -16,14 +16,21 @@ const (
 
 // ChannelController is for /channel/:prodId
 type ChannelController struct {
-	ChannelRepo storage.ChannelRepository
+	ChannelRepo       storage.ChannelRepository
+	ConsumersEndpoint EndpointController
+}
+
+// ChannelModel represents the Channel data
+type ChannelModel struct {
+	MsgStakeholder
+	ConsumersURL string
 }
 
 // Get implements the /channel/:prodId GET endpoint
 func (channelController *ChannelController) Get(w http.ResponseWriter, r *http.Request, param httprouter.Params) {
 	channelID := param.ByName(channelIDPathParamKey)
 	channelModel, err := channelController.ChannelRepo.Get(channelID)
-	writeGetResult(err, writeNotFound, w, getMessageStakeholder(channelID, &channelModel.MessageStakeholder))
+	writeGetResult(err, writeNotFound, w, channelController.getChannelModel(channelModel))
 }
 
 // Put implements the /channel/:prodId PUT endpoint
@@ -41,7 +48,12 @@ func (channelController *ChannelController) Put(w http.ResponseWriter, r *http.R
 	channel, _ := data.NewChannel(channelID, token)
 	channel.Name = name
 	channel, err = channelController.ChannelRepo.Store(channel)
-	writeGetResult(err, func(w http.ResponseWriter) { writeErr(w, err) }, w, getMessageStakeholder(channelID, &channel.MessageStakeholder))
+	writeGetResult(err, func(w http.ResponseWriter) { writeErr(w, err) }, w, channelController.getChannelModel(channel))
+}
+
+func (channelController *ChannelController) getChannelModel(channel *data.Channel) *ChannelModel {
+	return &ChannelModel{MsgStakeholder: *getMessageStakeholder(channel.ChannelID, &channel.MessageStakeholder),
+		ConsumersURL: channelController.ConsumersEndpoint.FormatAsRelativeLink(httprouter.Param{Key: channelIDPathParamKey, Value: channel.ChannelID})}
 }
 
 // GetPath returns the endpoint's path
@@ -86,8 +98,8 @@ func (channelsController *ChannelsController) FormatAsRelativeLink(params ...htt
 }
 
 // NewChannelController initialize new channels controller
-func NewChannelController(channelRepo storage.ChannelRepository) *ChannelController {
-	return &ChannelController{ChannelRepo: channelRepo}
+func NewChannelController(consumersController *ConsumersController, channelRepo storage.ChannelRepository) *ChannelController {
+	return &ChannelController{ChannelRepo: channelRepo, ConsumersEndpoint: consumersController}
 }
 
 // NewChannelsController initialize new channels controller

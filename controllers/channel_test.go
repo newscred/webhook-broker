@@ -45,7 +45,7 @@ func ChannelTestSetup() {
 
 func TestChannelsControllerGet(t *testing.T) {
 	testRouter := httprouter.New()
-	listController := NewChannelsController(channelRepo, NewChannelController(channelRepo))
+	listController := NewChannelsController(channelRepo, getNewChannelController(channelRepo))
 	setupAPIRoutes(testRouter, listController)
 	req, _ := http.NewRequest("GET", "/channels", nil)
 	rr := httptest.NewRecorder()
@@ -106,7 +106,7 @@ func TestChannelsControllerGet_Error(t *testing.T) {
 	mockChannelRepo := new(storagemocks.ChannelRepository)
 	expectedErr := errors.New("GetList error")
 	mockChannelRepo.On("GetList", mock.Anything).Return(nil, nil, expectedErr)
-	listController := NewChannelsController(mockChannelRepo, NewChannelController(mockChannelRepo))
+	listController := NewChannelsController(mockChannelRepo, getNewChannelController(mockChannelRepo))
 	setupAPIRoutes(testRouter, listController)
 	req, _ := http.NewRequest("GET", "/channels", nil)
 	rr := httptest.NewRecorder()
@@ -115,36 +115,37 @@ func TestChannelsControllerGet_Error(t *testing.T) {
 }
 
 func TestChannelsFormatAsRelativeLink(t *testing.T) {
-	listController := NewChannelsController(channelRepo, NewChannelController(channelRepo))
+	listController := NewChannelsController(channelRepo, getNewChannelController(channelRepo))
 	assert.Equal(t, "/channels", listController.FormatAsRelativeLink())
 }
 
 func TestChannelControllerFormatAsRelativeLink_NoParam(t *testing.T) {
-	assert.Equal(t, "/channel/:channelId", NewChannelController(channelRepo).FormatAsRelativeLink())
+	assert.Equal(t, "/channel/:channelId", getNewChannelController(channelRepo).FormatAsRelativeLink())
 }
 
 func TestChannelGet(t *testing.T) {
 	t.Run("SuccessfulGet", func(t *testing.T) {
 		t.Parallel()
 		testRouter := httprouter.New()
-		getController := NewChannelController(channelRepo)
+		getController := getNewChannelController(channelRepo)
 		setupAPIRoutes(testRouter, getController)
 		req, _ := http.NewRequest("GET", "/channel/"+listTestChannelIDPrefix+"0", nil)
 		rr := httptest.NewRecorder()
 		testRouter.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusOK, rr.Code)
-		bodyChannel := &MsgStakeholder{}
+		bodyChannel := &ChannelModel{}
 		json.NewDecoder(strings.NewReader(rr.Body.String())).Decode(bodyChannel)
 		assert.Contains(t, bodyChannel.ID, listTestChannelIDPrefix)
 		assert.Contains(t, bodyChannel.Name, listTestChannelIDPrefix)
 		assert.Contains(t, bodyChannel.Token, successfulGetTestToken)
+		assert.Equal(t, "/channel/"+listTestChannelIDPrefix+"0/consumers", bodyChannel.ConsumersURL)
 		assert.NotNil(t, bodyChannel.ChangedAt)
 		assert.Equal(t, bodyChannel.ChangedAt.Format(http.TimeFormat), rr.HeaderMap.Get(headerLastModified))
 	})
 	t.Run("NotFound", func(t *testing.T) {
 		t.Parallel()
 		testRouter := httprouter.New()
-		getController := NewChannelController(channelRepo)
+		getController := getNewChannelController(channelRepo)
 		setupAPIRoutes(testRouter, getController)
 		req, _ := http.NewRequest("GET", "/channel/"+time.Now().String(), nil)
 		rr := httptest.NewRecorder()
@@ -153,11 +154,15 @@ func TestChannelGet(t *testing.T) {
 	})
 }
 
+func getNewChannelController(channelRepo storage.ChannelRepository) *ChannelController {
+	return NewChannelController(NewConsumersController(NewConsumerController(nil, nil), nil), channelRepo)
+}
+
 func TestChannelPut(t *testing.T) {
 	t.Run("SuccessfulPutCreateWithNameToken", func(t *testing.T) {
 		t.Parallel()
 		testRouter := httprouter.New()
-		putController := NewChannelController(channelRepo)
+		putController := getNewChannelController(channelRepo)
 		setupAPIRoutes(testRouter, putController)
 		req, _ := http.NewRequest("PUT", "/channel/"+createChannelIDWithData, nil)
 		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
@@ -176,7 +181,7 @@ func TestChannelPut(t *testing.T) {
 	t.Run("SuccessfulPutCreateWithoutNameToken", func(t *testing.T) {
 		t.Parallel()
 		testRouter := httprouter.New()
-		putController := NewChannelController(channelRepo)
+		putController := getNewChannelController(channelRepo)
 		setupAPIRoutes(testRouter, putController)
 		req, _ := http.NewRequest("PUT", "/channel/"+createChannelIDWithoutData, nil)
 		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
@@ -192,7 +197,7 @@ func TestChannelPut(t *testing.T) {
 	t.Run("SuccessfulPutUpdate", func(t *testing.T) {
 		t.Parallel()
 		testRouter := httprouter.New()
-		putController := NewChannelController(channelRepo)
+		putController := getNewChannelController(channelRepo)
 		setupAPIRoutes(testRouter, putController)
 		greq, _ := http.NewRequest("GET", "/channel/"+listTestChannelIDPrefix+"0", nil)
 		grr := httptest.NewRecorder()
@@ -216,7 +221,7 @@ func TestChannelPut(t *testing.T) {
 	t.Run("415", func(t *testing.T) {
 		t.Parallel()
 		testRouter := httprouter.New()
-		putController := NewChannelController(channelRepo)
+		putController := getNewChannelController(channelRepo)
 		setupAPIRoutes(testRouter, putController)
 		req, _ := http.NewRequest("PUT", "/channel/"+listTestChannelIDPrefix+"0", nil)
 		rr := httptest.NewRecorder()
@@ -226,7 +231,7 @@ func TestChannelPut(t *testing.T) {
 	t.Run("400", func(t *testing.T) {
 		t.Parallel()
 		testRouter := httprouter.New()
-		putController := NewChannelController(channelRepo)
+		putController := getNewChannelController(channelRepo)
 		setupAPIRoutes(testRouter, putController)
 		req, _ := http.NewRequest("PUT", "/channel/"+listTestChannelIDPrefix+"0", nil)
 		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
@@ -237,7 +242,7 @@ func TestChannelPut(t *testing.T) {
 	t.Run("412", func(t *testing.T) {
 		t.Parallel()
 		testRouter := httprouter.New()
-		putController := NewChannelController(channelRepo)
+		putController := getNewChannelController(channelRepo)
 		setupAPIRoutes(testRouter, putController)
 		req, _ := http.NewRequest("PUT", "/channel/"+listTestChannelIDPrefix+"0", nil)
 		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
@@ -253,7 +258,7 @@ func TestChannelPut(t *testing.T) {
 		mockChannelRepo.On("Get", mock.Anything).Return(&data.Channel{}, expectedErr)
 		mockChannelRepo.On("Store", mock.Anything).Return(&data.Channel{}, expectedErr)
 		testRouter := httprouter.New()
-		putController := NewChannelController(mockChannelRepo)
+		putController := getNewChannelController(mockChannelRepo)
 		setupAPIRoutes(testRouter, putController)
 		req, _ := http.NewRequest("PUT", "/channel/"+listTestChannelIDPrefix+"0", nil)
 		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
