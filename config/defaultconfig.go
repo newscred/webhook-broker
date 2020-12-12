@@ -3,7 +3,7 @@ package config
 // DefaultConfiguration is the configuration that will be in effect if no configuration is loaded from any of the expected locations
 const DefaultConfiguration = `[rdbms]
 dialect=sqlite3
-connection-url=webhook-broker.sqlite3
+connection-url=webhook-broker.sqlite3?_foreign_keys=on
 connxn-max-idle-time-seconds=0
 connxn-max-lifetime-seconds=0
 max-idle-connxns=30

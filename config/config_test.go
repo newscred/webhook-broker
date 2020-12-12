@@ -87,7 +87,7 @@ func TestGetAutoConfiguration_Default(t *testing.T) {
 		t.Fail()
 	}
 	assert.Equal(t, SQLite3Dialect, config.GetDBDialect())
-	assert.Equal(t, "webhook-broker.sqlite3", config.GetDBConnectionURL())
+	assert.Equal(t, "webhook-broker.sqlite3?_foreign_keys=on", config.GetDBConnectionURL())
 	assert.Equal(t, time.Duration(0), config.GetDBConnectionMaxIdleTime())
 	assert.Equal(t, time.Duration(0), config.GetDBConnectionMaxLifetime())
 	assert.Equal(t, uint16(30), config.GetMaxIdleDBConnections())
