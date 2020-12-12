@@ -119,8 +119,7 @@ var (
 						initErr := startAppInit(httpServiceContainer, &seedData)
 						switch initErr {
 						case nil:
-							log.Println("Creating seed data")
-							// TODO: Add Creates here
+							createSeedData(httpServiceContainer.DataAccessor, httpServiceContainer.Configuration)
 							log.Println(httpServiceContainer.DataAccessor.GetAppRepository().CompleteAppInit())
 							run = false
 						case storage.ErrAppInitializing:
@@ -136,6 +135,46 @@ var (
 				initFinished <- true
 			}()
 			<-initFinished
+		}
+	}
+
+	createSeedData = func(dataAccessor storage.DataAccessor, seedDataConfig config.SeedDataConfig) {
+		for _, seedProducer := range seedDataConfig.GetSeedData().Producers {
+			producer, err := data.NewProducer(seedProducer.ID, seedProducer.Token)
+			if err == nil {
+				producer.Name = seedProducer.Name
+				_, err = dataAccessor.GetProducerRepository().Store(producer)
+			}
+			if err != nil {
+				log.Println("Error creating producer", seedProducer.ID, err)
+			}
+		}
+		for _, seedChannel := range seedDataConfig.GetSeedData().Channels {
+			channel, err := data.NewChannel(seedChannel.ID, seedChannel.Token)
+			if err == nil {
+				channel.Name = seedChannel.Name
+				_, err = dataAccessor.GetChannelRepository().Store(channel)
+			}
+			if err != nil {
+				log.Println("Error creating channel", seedChannel.ID, err)
+			}
+		}
+		for _, seedConsumer := range seedDataConfig.GetSeedData().Consumers {
+			channel, err := dataAccessor.GetChannelRepository().Get(seedConsumer.Channel)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			consumer, err := data.NewConsumer(channel, seedConsumer.ID, seedConsumer.Token, seedConsumer.CallbackURL)
+			if err == nil {
+				consumer.Name = seedConsumer.Name
+				consumer.ConsumingFrom = channel
+				consumer.CallbackURL = seedConsumer.CallbackURL.String()
+				_, err = dataAccessor.GetConsumerRepository().Store(consumer)
+			}
+			if err != nil {
+				log.Println("Error creating consumer", seedConsumer.ID, err)
+			}
 		}
 	}
 )

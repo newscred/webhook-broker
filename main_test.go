@@ -18,7 +18,9 @@ import (
 	"github.com/imyousuf/webhook-broker/controllers"
 	"github.com/imyousuf/webhook-broker/storage"
 	"github.com/imyousuf/webhook-broker/storage/data"
+	"github.com/imyousuf/webhook-broker/storage/mocks"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 func TestGetAppVersion(t *testing.T) {
@@ -140,6 +142,16 @@ func TestMainFunc(t *testing.T) {
 		app, err := dataAccessor.GetAppRepository().GetApp()
 		assert.Nil(t, err)
 		assert.Equal(t, data.Initialized, app.GetStatus())
+		// Load and assert seed data
+		channel, err := dataAccessor.GetChannelRepository().Get("sample-channel")
+		assert.Nil(t, err)
+		assert.NotNil(t, channel)
+		producer, err := dataAccessor.GetProducerRepository().Get("sample-producer")
+		assert.Nil(t, err)
+		assert.NotNil(t, producer)
+		consumer, err := dataAccessor.GetConsumerRepository().Get("sample-channel", "sample-consumer")
+		assert.Nil(t, err)
+		assert.NotNil(t, consumer)
 	})
 	t.Run("HelpError", func(t *testing.T) {
 		oldExit := exit
@@ -303,4 +315,47 @@ func TestSetupLog(t *testing.T) {
 	dat, err := ioutil.ReadFile(testLogFile)
 	assert.Nil(t, err)
 	assert.Contains(t, string(dat), "unit test")
+}
+
+func TestCreateSeedData_ErrorFlows(t *testing.T) {
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	expectedErr := errors.New("expected main seed data error")
+	defer func() {
+		assert.Contains(t, expectedErr.Error(), buf.String())
+		assert.Contains(t, "Error creating producer", buf.String())
+		assert.Contains(t, "Error creating channel", buf.String())
+		assert.Contains(t, "Error creating consumer", buf.String())
+		log.SetOutput(os.Stderr)
+	}()
+	configuration, _ := config.GetAutoConfiguration()
+	t.Run("StoreError", func(t *testing.T) {
+		t.Parallel()
+		dataAccessor := new(mocks.DataAccessor)
+		productRepo := new(mocks.ProducerRepository)
+		channelRepo := new(mocks.ChannelRepository)
+		consumerRepo := new(mocks.ConsumerRepository)
+		dataAccessor.On("GetProducerRepository").Return(productRepo)
+		dataAccessor.On("GetChannelRepository").Return(channelRepo)
+		dataAccessor.On("GetConsumerRepository").Return(consumerRepo)
+		productRepo.On("Store", mock.Anything).Return(nil, expectedErr)
+		channelRepo.On("Get", mock.Anything).Return(&data.Channel{}, nil)
+		channelRepo.On("Store", mock.Anything).Return(nil, expectedErr)
+		consumerRepo.On("Store", mock.Anything).Return(nil, expectedErr)
+		createSeedData(dataAccessor, configuration)
+		dataAccessor.AssertExpectations(t)
+	})
+	t.Run("ChannelGetError", func(t *testing.T) {
+		t.Parallel()
+		dataAccessor := new(mocks.DataAccessor)
+		productRepo := new(mocks.ProducerRepository)
+		channelRepo := new(mocks.ChannelRepository)
+		dataAccessor.On("GetProducerRepository").Return(productRepo)
+		dataAccessor.On("GetChannelRepository").Return(channelRepo)
+		productRepo.On("Store", mock.Anything).Return(nil, expectedErr)
+		channelRepo.On("Get", mock.Anything).Return(&data.Channel{}, expectedErr)
+		channelRepo.On("Store", mock.Anything).Return(nil, expectedErr)
+		createSeedData(dataAccessor, configuration)
+		dataAccessor.AssertExpectations(t)
+	})
 }
