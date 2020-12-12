@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	sampleChannel             = &Channel{}
+	sampleChannel             = getChannel()
 	sampleCallbackURL         = getSampleURL("http://imytech.net/")
 	sampleRelativeCallbackURL = getSampleURL("./")
 	getSampleURL              = func(sampleURL string) *url.URL {
@@ -16,6 +16,11 @@ var (
 		return url
 	}
 )
+
+func getChannel() *Channel {
+	channel, _ := NewChannel("testchannelforconsumer", "token")
+	return channel
+}
 
 func TestNewConsumer(t *testing.T) {
 	t.Run("EmptyID", func(t *testing.T) {

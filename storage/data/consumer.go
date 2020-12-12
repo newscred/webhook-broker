@@ -19,7 +19,7 @@ func (consumer *Consumer) QuickFix() bool {
 
 // IsInValidState returns false if any of consumer id or name or token is empty, channel is not nil and callback URL is absolute URL
 func (consumer *Consumer) IsInValidState() bool {
-	if len(consumer.ConsumerID) <= 0 || len(consumer.Name) <= 0 || len(consumer.Token) <= 0 || consumer.ConsumingFrom == nil {
+	if len(consumer.ConsumerID) <= 0 || len(consumer.Name) <= 0 || len(consumer.Token) <= 0 || consumer.ConsumingFrom == nil || !consumer.ConsumingFrom.IsInValidState() {
 		return false
 	}
 	if callbackURL, err := url.Parse(consumer.CallbackURL); err != nil || !callbackURL.IsAbs() {
