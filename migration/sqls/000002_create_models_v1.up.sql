@@ -28,5 +28,21 @@ CREATE TABLE IF NOT EXISTS consumer (
     createdAt DATETIME NOT NULL,
     updatedAt DATETIME NOT NULL,
     UNIQUE (consumerId, channelId),
-    CONSTRAINT channelRef FOREIGN KEY (channelId) REFERENCES channel(channelId) ON UPDATE CASCADE ON DELETE RESTRICT
+    CONSTRAINT channelConsumerRef FOREIGN KEY (channelId) REFERENCES channel(channelId) ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
+CREATE TABLE IF NOT EXISTS message (
+    id VARCHAR(255) NOT NULL PRIMARY KEY,
+    messageId VARCHAR(255) NOT NULL,
+    payload MEDIUMTEXT NOT NULL,
+    contentType VARCHAR(255) NOT NULL,
+    priority INTEGER NOT NULL,
+    status INTEGER NOT NULL,
+    channelId VARCHAR(255) NOT NULL,
+    receivedAt DATETIME NOT NULL,
+    outboxedAt DATETIME NOT NULL,
+    createdAt DATETIME NOT NULL,
+    updatedAt DATETIME NOT NULL,
+    UNIQUE (messageId, channelId),
+    CONSTRAINT channelMessageRef FOREIGN KEY (channelId) REFERENCES channel(channelId) ON UPDATE CASCADE ON DELETE RESTRICT
 );

@@ -13,6 +13,7 @@
 
 # SQLlite3 DB files
 *.sqlite3
+*.sqlite3-journal
 
 # Log outputs
 *.log
