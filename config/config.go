@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"database/sql"
-	"database/sql/driver"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -46,49 +45,6 @@ const (
 	DefaultSystemConfigFilePath = "/etc/webhook-broker/" + ConfigFilename
 	// DefaultCurrentDirConfigFilePath is the config file path based on current working dir
 	DefaultCurrentDirConfigFilePath = ConfigFilename
-	// DefaultConfiguration is the configuration that will be in effect if no configuration is loaded from any of the expected locations
-	DefaultConfiguration = `[rdbms]
-	dialect=sqlite3
-	connection-url=webhook-broker.sqlite3
-	connxn-max-idle-time-seconds=0
-	connxn-max-lifetime-seconds=0
-	max-idle-connxns=30
-	max-open-connxns=100
-	[http]
-	listener=:8080
-	read-timeout=240
-	write-timeout=240
-	[log]
-	filename=
-	max-file-size-in-mb=200
-	max-backups=3
-	max-age-in-days=28
-	compress-backups=true
-	[broker]
-	max-message-queue-size=10000
-	max-workers=200
-	priority-dispatcher-enabled=true
-	retrigger-base-endpoint=http://localhost:8080
-	max-retry=5
-	rational-delay-in-seconds=20
-	retry-backoff-delays-in-seconds=5,30,60
-	[consumer-connection]
-	token-header-name=X-Broker-Consumer-Token
-	user-agent=Webhook Message Broker
-	connection-timeout-in-seconds=30
-	[initial-channels]
-	sample-channel=Sample Channel
-	[initial-producers]
-	sample-producer=Sample Producer
-	[initial-consumers]
-	sample-consumer=http://sample-endpoint/webhook-receiver
-	[initial-channel-tokens]
-	sample-channel=sample-channel-token
-	[initial-producer-tokens]
-	sample-producer=sample-producer-token
-	[initial-consumer-tokens]
-	sample-consumer=sample-consumer-token
-	`
 )
 
 var (
@@ -116,97 +72,6 @@ func getUserHomeDirBasedDefaultConfigFileLocation() string {
 		return DefaultCurrentDirConfigFilePath
 	}
 	return user.HomeDir + "/.webhook-broker/" + ConfigFilename
-}
-
-// RelationalDatabaseConfig represents DB configuration related behaviors
-type RelationalDatabaseConfig interface {
-	GetDBDialect() DBDialect
-	GetDBConnectionURL() string
-	GetDBConnectionMaxIdleTime() time.Duration
-	GetDBConnectionMaxLifetime() time.Duration
-	GetMaxIdleDBConnections() uint16
-	GetMaxOpenDBConnections() uint16
-}
-
-// HTTPConfig represents the HTTP configuration related behaviors
-type HTTPConfig interface {
-	GetHTTPListeningAddr() string
-	GetHTTPReadTimeout() time.Duration
-	GetHTTPWriteTimeout() time.Duration
-}
-
-// LogConfig represents the interface for log related configuration
-type LogConfig interface {
-	IsLoggerConfigAvailable() bool
-	GetLogFilename() string
-	GetMaxLogFileSize() uint
-	GetMaxLogBackups() uint
-	GetMaxAgeForALogFile() uint
-	IsCompressionEnabledOnLogBackups() bool
-}
-
-// SeedProducer represents the pre configured producer via configuration
-type SeedProducer struct {
-	// ID is the ID of the data
-	ID string
-	// Name is name of the data
-	Name string
-	// Token is the pre configured token of the data
-	Token string
-}
-
-// SeedChannel represents pre configured channel via configuration
-type SeedChannel SeedProducer
-
-// SeedConsumer represents pre configured consumer via configuration
-type SeedConsumer struct {
-	SeedProducer
-	// CallbackURL represents the URl to call back
-	CallbackURL string
-}
-
-// SeedData represents data specified in configuration to ensure is present when app starts up
-type SeedData struct {
-	DataHash  string
-	Producers []SeedProducer
-	Channels  []SeedChannel
-	Consumers []SeedConsumer
-}
-
-// Scan de-serializes SeedData for reading from DB
-func (u *SeedData) Scan(value interface{}) error {
-	err := json.NewDecoder(strings.NewReader(value.(string))).Decode(u)
-	return err
-}
-
-// Value serializes SeedData to write to DB
-func (u SeedData) Value() (driver.Value, error) {
-	var buf bytes.Buffer
-	err := json.NewEncoder(&buf).Encode(u)
-	return buf.String(), err
-}
-
-// SeedDataConfig provides the interface for working with SeedData in configuration
-type SeedDataConfig interface {
-	GetSeedData() SeedData
-}
-
-// ConsumerConnectionConfig provides the interface for working with consumer connection related configuration
-type ConsumerConnectionConfig interface {
-	GetTokenRequestHeaderName() string
-	GetUserAgent() string
-	GetConnectionTimeout() time.Duration
-}
-
-// BrokerConfig provides the interface for configuring the broker
-type BrokerConfig interface {
-	GetMaxMessageQueueSize() uint
-	GetMaxWorkers() uint
-	IsPriorityDispatcherEnabled() bool
-	GetRetriggerBaseEndpoint() string
-	GetMaxRetry() uint8
-	GetRationalDelay() time.Duration
-	GetRetryBackoffDelays() []time.Duration
 }
 
 //Config represents the application configuration
@@ -548,21 +413,7 @@ func setupSeedDataConfiguration(cfg *ini.File, configuration *Config) {
 	seedProducers := parseProducers(initialProducers, initialProducerTokens)
 	seedData.Producers = seedProducers
 
-	initialConsumers, _ := cfg.GetSection("initial-consumers")
-	initialConsumerTokens, _ := cfg.GetSection("initial-consumer-tokens")
-	seedConsumers := make([]SeedConsumer, 0, len(initialConsumers.Keys()))
-	for _, channel := range initialConsumers.Keys() {
-		token, tokenErr := initialConsumerTokens.GetKey(channel.Name())
-		seedConsumer := SeedConsumer{SeedProducer: SeedProducer{ID: channel.Name(), Name: channel.Name()}, CallbackURL: channel.MustString("")}
-		if tokenErr == nil {
-			seedConsumer.Token = token.MustString("")
-		}
-		consumerCallbackURL, urlErr := url.Parse(seedConsumer.CallbackURL)
-		if urlErr == nil && consumerCallbackURL.IsAbs() {
-			seedConsumers = append(seedConsumers, seedConsumer)
-		}
-	}
-	seedData.Consumers = seedConsumers
+	seedData.Consumers = parseConsumers(cfg, seedChannels)
 
 	var buf bytes.Buffer
 	json.NewEncoder(&buf).Encode(seedData)
@@ -570,6 +421,47 @@ func setupSeedDataConfiguration(cfg *ini.File, configuration *Config) {
 	seedData.DataHash = base64.StdEncoding.EncodeToString(hashCalculator.Sum(buf.Bytes()))
 
 	configuration.SeedData = seedData
+}
+
+func parseConsumers(cfg *ini.File, seedChannels []SeedChannel) []SeedConsumer {
+	initialConsumers, _ := cfg.GetSection("initial-consumers")
+	seedConsumers := make([]SeedConsumer, 0, len(initialConsumers.Keys()))
+	for _, consumer := range initialConsumers.Keys() {
+		consumerSection, consumerSectionErr := cfg.GetSection(consumer.Name())
+		if consumerSectionErr != nil {
+			continue
+		}
+		channel, channelErr := getChannelForConsumer(consumerSection, seedChannels)
+		if channelErr != nil {
+			continue
+		}
+		seedConsumer := SeedConsumer{SeedProducer: SeedProducer{ID: consumer.Name(), Name: consumer.Name()}, Channel: channel}
+		token, tokenErr := consumerSection.GetKey("token")
+		if tokenErr == nil {
+			seedConsumer.Token = token.MustString("")
+		}
+		callbackURL := consumer.MustString("")
+		consumerCallbackURL, urlErr := url.Parse(callbackURL)
+		if urlErr == nil && consumerCallbackURL.IsAbs() {
+			seedConsumer.CallbackURL = consumerCallbackURL
+			seedConsumers = append(seedConsumers, seedConsumer)
+		}
+	}
+	return seedConsumers
+}
+
+func getChannelForConsumer(consumerSection *ini.Section, seedChannels []SeedChannel) (string, error) {
+	channelKey, channelsErr := consumerSection.GetKey("channel")
+	if channelsErr != nil {
+		return "", channelsErr
+	}
+	channel := channelKey.MustString("")
+	for _, seedChannel := range seedChannels {
+		if channel == seedChannel.ID {
+			return channel, nil
+		}
+	}
+	return channel, sql.ErrNoRows
 }
 
 func parseProducers(initialProducers *ini.Section, initialProducerTokens *ini.Section) []SeedProducer {

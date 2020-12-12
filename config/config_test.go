@@ -67,8 +67,8 @@ const (
 	[initial-producer-tokens]
 	sample-producer=sample-producer-token
 
-	[initial-consumer-tokens]
-	sample-consumer=sample-consumer-token
+	[sample-consumer]
+	token=sample-consumer-token
 	`
 	errorConfig = `[rdbms]
 	asda sdads
@@ -118,7 +118,8 @@ func TestGetAutoConfiguration_Default(t *testing.T) {
 	assert.Equal(t, "sample-consumer", seedConsumer.ID)
 	assert.Equal(t, "sample-consumer", seedConsumer.Name)
 	assert.Equal(t, "sample-consumer-token", seedConsumer.Token)
-	assert.Equal(t, "http://sample-endpoint/webhook-receiver", seedConsumer.CallbackURL)
+	assert.Equal(t, "http://sample-endpoint/webhook-receiver", seedConsumer.CallbackURL.String())
+	assert.Equal(t, "sample-channel", seedConsumer.Channel)
 	assert.Equal(t, "Webhook Message Broker", config.GetUserAgent())
 	assert.Equal(t, "X-Broker-Consumer-Token", config.GetTokenRequestHeaderName())
 	assert.Equal(t, toSecond(30), config.GetConnectionTimeout())
@@ -163,6 +164,7 @@ func TestGetAutoConfiguration_WrongValues(t *testing.T) {
 	assert.Equal(t, uint8(10), config.GetMaxRetry())
 	assert.Equal(t, toSecond(30), config.GetRationalDelay())
 	assert.Equal(t, []time.Duration{toSecond(5), toSecond(30), toSecond(15)}, config.GetRetryBackoffDelays())
+	assert.Equal(t, 0, len(config.GetSeedData().Consumers))
 	defer func() {
 		loadConfiguration = defaultLoadFunc
 	}()
@@ -250,17 +252,17 @@ func TestGetConfiguration(t *testing.T) {
 	assert.Equal(t, "sample-consumer", seedConsumer.ID)
 	assert.Equal(t, "sample-consumer", seedConsumer.Name)
 	assert.Equal(t, "sample-consumer-token", seedConsumer.Token)
-	assert.Equal(t, "http://sample-endpoint/webhook-receiver", seedConsumer.CallbackURL)
+	assert.Equal(t, "http://sample-endpoint/webhook-receiver", seedConsumer.CallbackURL.String())
 	seedConsumer = seedData.Consumers[1]
 	assert.Equal(t, "test-consumer", seedConsumer.ID)
 	assert.Equal(t, "test-consumer", seedConsumer.Name)
 	assert.Equal(t, "test-consumer-token", seedConsumer.Token)
-	assert.Equal(t, "http://imy13.us/webhook-receiver", seedConsumer.CallbackURL)
+	assert.Equal(t, "http://imy13.us/webhook-receiver", seedConsumer.CallbackURL.String())
 	seedConsumer = seedData.Consumers[2]
 	assert.Equal(t, "test-consumer4", seedConsumer.ID)
 	assert.Equal(t, "test-consumer4", seedConsumer.Name)
 	assert.Equal(t, "", seedConsumer.Token)
-	assert.Equal(t, "http://imy13.us/webhook-receiver1", seedConsumer.CallbackURL)
+	assert.Equal(t, "http://imy13.us/webhook-receiver1", seedConsumer.CallbackURL.String())
 	assert.Equal(t, "Test User Agent", config.GetUserAgent())
 	assert.Equal(t, "X-Test-Consumer-Token", config.GetTokenRequestHeaderName())
 	assert.Equal(t, toSecond(300), config.GetConnectionTimeout())

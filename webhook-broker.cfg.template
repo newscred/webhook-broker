@@ -66,5 +66,7 @@ sample-channel=sample-channel-token
 [initial-producer-tokens]
 sample-producer=sample-producer-token
 
-[initial-consumer-tokens]
-sample-consumer=sample-consumer-token
+[sample-consumer]
+token=sample-consumer-token
+# Supports single `channel` key when; channel must be present
+channel=sample-channel
