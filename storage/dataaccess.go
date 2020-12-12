@@ -11,6 +11,7 @@ type DataAccessor interface {
 	GetProducerRepository() ProducerRepository
 	GetChannelRepository() ChannelRepository
 	GetConsumerRepository() ConsumerRepository
+	GetMessageRepository() MessageRepository
 	Close()
 }
 
@@ -41,4 +42,10 @@ type ConsumerRepository interface {
 	Delete(consumer *data.Consumer) error
 	Get(channelID string, consumerID string) (*data.Consumer, error)
 	GetList(channelID string, page *data.Pagination) ([]*data.Consumer, *data.Pagination, error)
+}
+
+// MessageRepository allows storage operations over Message
+type MessageRepository interface {
+	Create(message *data.Message) error
+	Get(channelID string, messageID string) (*data.Message, error)
 }

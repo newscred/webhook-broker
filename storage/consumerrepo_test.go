@@ -28,7 +28,7 @@ const (
 )
 
 var (
-	channel1, channel2       *data.Channel
+	channel1, channel2       *data.Channel // Used by messagerepo_test as well
 	callbackURL, relativeURL *url.URL
 )
 

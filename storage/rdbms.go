@@ -33,6 +33,7 @@ type RelationalDBDataAccessor struct {
 	producerRepository ProducerRepository
 	channelRepository  ChannelRepository
 	consumerRepository ConsumerRepository
+	messageRepository  MessageRepository
 	db                 *sql.DB
 }
 
@@ -54,6 +55,11 @@ func (rdbmsDataAccessor *RelationalDBDataAccessor) GetChannelRepository() Channe
 // GetConsumerRepository returns the ProducerRepository to be used for Producer ops
 func (rdbmsDataAccessor *RelationalDBDataAccessor) GetConsumerRepository() ConsumerRepository {
 	return rdbmsDataAccessor.consumerRepository
+}
+
+// GetMessageRepository retrieves the MessageRepository to be used for Message ops
+func (rdbmsDataAccessor *RelationalDBDataAccessor) GetMessageRepository() MessageRepository {
+	return rdbmsDataAccessor.messageRepository
 }
 
 // Close closes the connection to DB
@@ -160,7 +166,7 @@ var (
 	// ErrDBConnectionNeverInitialized is returned when same NewDataAccessor is called the first time and it failed to connec to DB; in all subsequent calls the accessor will remain nil
 	ErrDBConnectionNeverInitialized = errors.New("DB Connection never initialized")
 	// RDBMSStorageInternalInjector injector for data storage related implementation
-	RDBMSStorageInternalInjector = wire.NewSet(GetConnectionPool, NewAppRepository, NewProducerRepository, NewChannelRepository, NewConsumerRepository, wire.Struct(new(RelationalDBDataAccessor), "db", "appRepository", "producerRepository", "channelRepository", "consumerRepository"), wire.Bind(new(DataAccessor), new(*RelationalDBDataAccessor)))
+	RDBMSStorageInternalInjector = wire.NewSet(GetConnectionPool, NewAppRepository, NewProducerRepository, NewChannelRepository, NewConsumerRepository, NewMessageRepository, wire.Struct(new(RelationalDBDataAccessor), "db", "appRepository", "producerRepository", "channelRepository", "consumerRepository", "messageRepository"), wire.Bind(new(DataAccessor), new(*RelationalDBDataAccessor)))
 )
 
 func panicIfNoDBConnectionPool(db *sql.DB) {
@@ -251,7 +257,7 @@ var (
 		if err == nil {
 			prequeryOps()
 			var result sql.Result
-			result, err = db.Exec(query, arguments()...)
+			result, err = tx.Exec(query, arguments()...)
 			if err == nil {
 				var rowsAffected int64
 				if rowsAffected, err = result.RowsAffected(); rowsAffected <= 0 && err == nil {
