@@ -39,10 +39,12 @@ CREATE TABLE IF NOT EXISTS message (
     priority INTEGER NOT NULL,
     status INTEGER NOT NULL,
     channelId VARCHAR(255) NOT NULL,
+    producerId VARCHAR(255) NOT NULL,
     receivedAt DATETIME NOT NULL,
     outboxedAt DATETIME NOT NULL,
     createdAt DATETIME NOT NULL,
     updatedAt DATETIME NOT NULL,
     UNIQUE (messageId, channelId),
-    CONSTRAINT channelMessageRef FOREIGN KEY (channelId) REFERENCES channel(channelId) ON UPDATE CASCADE ON DELETE RESTRICT
+    CONSTRAINT channelMessageRef FOREIGN KEY (channelId) REFERENCES channel(channelId) ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT producerMessageRef FOREIGN KEY (producerId) REFERENCES producer(producerId) ON UPDATE CASCADE ON DELETE RESTRICT
 );

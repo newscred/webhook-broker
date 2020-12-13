@@ -25,6 +25,7 @@ type Message struct {
 	Priority      uint
 	Status        MsgStatus
 	BroadcastedTo *Channel
+	ProducedBy    *Producer
 	ReceivedAt    time.Time
 	OutboxedAt    time.Time
 }
@@ -58,7 +59,10 @@ func (message *Message) QuickFix() bool {
 // status not recognized, received at and outboxed at not set properly. Call QuickFix before IsInValidState is called.
 func (message *Message) IsInValidState() bool {
 	valid := true
-	if len(message.MessageID) <= 0 || len(message.Payload) <= 0 || len(message.ContentType) <= 0 || message.BroadcastedTo == nil || !message.BroadcastedTo.IsInValidState() {
+	if len(message.MessageID) <= 0 || len(message.Payload) <= 0 || len(message.ContentType) <= 0 {
+		valid = false
+	}
+	if message.BroadcastedTo == nil || !message.BroadcastedTo.IsInValidState() || message.ProducedBy == nil || !message.ProducedBy.IsInValidState() {
 		valid = false
 	}
 	if valid && message.Status != MsgStatusAcknowledged && message.Status != MsgStatusDispatched {
@@ -88,8 +92,8 @@ func (message *Message) GetChannelIDSafely() (channelID string) {
 }
 
 // NewMessage creates and returns new instance of message
-func NewMessage(channel *Channel, payload, contentType string) (*Message, error) {
-	msg := &Message{Payload: payload, ContentType: contentType, BroadcastedTo: channel}
+func NewMessage(channel *Channel, producedBy *Producer, payload, contentType string) (*Message, error) {
+	msg := &Message{Payload: payload, ContentType: contentType, BroadcastedTo: channel, ProducedBy: producedBy}
 	msg.QuickFix()
 	var err error
 	if !msg.IsInValidState() {

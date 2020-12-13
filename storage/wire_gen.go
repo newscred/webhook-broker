@@ -26,7 +26,7 @@ func GetNewDataAccessor(dbConfig config.RelationalDatabaseConfig, migrationConf 
 	producerRepository := NewProducerRepository(sqlDB)
 	channelRepository := NewChannelRepository(sqlDB)
 	consumerRepository := NewConsumerRepository(sqlDB, channelRepository)
-	messageRepository := NewMessageRepository(sqlDB, channelRepository)
+	messageRepository := NewMessageRepository(sqlDB, channelRepository, producerRepository)
 	relationalDBDataAccessor := &RelationalDBDataAccessor{
 		db:                 sqlDB,
 		appRepository:      appRepository,

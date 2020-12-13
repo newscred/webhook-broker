@@ -27,6 +27,7 @@ func TestMain(m *testing.M) {
 	testDB, dbErr = GetConnectionPool(configuration, defaultMigrationConf, configuration)
 	if dbErr == nil {
 		SetupForConsumerTests()
+		SetupForMessageTests()
 		m.Run()
 	}
 	testDB.Close()

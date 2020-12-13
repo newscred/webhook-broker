@@ -2,10 +2,12 @@ package storage
 
 import (
 	"database/sql"
+	"errors"
 	"testing"
 
 	"github.com/imyousuf/webhook-broker/storage/data"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 const (
@@ -14,15 +16,26 @@ const (
 	duplicateMessageID = "a-duplicate-message-id"
 )
 
+var (
+	producer1 *data.Producer
+)
+
+func SetupForMessageTests() {
+	producerRepo := NewProducerRepository(testDB)
+	producer, _ := data.NewProducer("producer1-for-message", successfulGetTestToken)
+	producer.QuickFix()
+	producer1, _ = producerRepo.Store(producer)
+}
+
 func getMessageRepository() MessageRepository {
-	return NewMessageRepository(testDB, NewChannelRepository(testDB))
+	return NewMessageRepository(testDB, NewChannelRepository(testDB), NewProducerRepository(testDB))
 }
 
 func TestMessageGetCreate(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		t.Parallel()
 		repo := getMessageRepository()
-		msg, err := data.NewMessage(channel1, samplePayload, sampleContentType)
+		msg, err := data.NewMessage(channel1, producer1, samplePayload, sampleContentType)
 		assert.Nil(t, err)
 		_, err = repo.Get(channel1.ChannelID, msg.MessageID)
 		assert.NotNil(t, err)
@@ -32,7 +45,8 @@ func TestMessageGetCreate(t *testing.T) {
 		assert.Nil(t, err)
 		assert.Equal(t, msg.MessageID, readMessage.MessageID)
 		assert.Equal(t, msg.ID, readMessage.ID)
-		assert.Equal(t, msg.BroadcastedTo.ChannelID, readMessage.BroadcastedTo.ChannelID)
+		assert.Equal(t, channel1.ChannelID, readMessage.BroadcastedTo.ChannelID)
+		assert.Equal(t, producer1.ProducerID, readMessage.ProducedBy.ProducerID)
 		assert.Equal(t, msg.ContentType, readMessage.ContentType)
 		assert.Equal(t, msg.Payload, readMessage.Payload)
 		assert.Equal(t, msg.Priority, readMessage.Priority)
@@ -44,7 +58,7 @@ func TestMessageGetCreate(t *testing.T) {
 	})
 	t.Run("InvalidMsgState", func(t *testing.T) {
 		t.Parallel()
-		msg, err := data.NewMessage(channel1, samplePayload, sampleContentType)
+		msg, err := data.NewMessage(channel1, producer1, samplePayload, sampleContentType)
 		assert.Nil(t, err)
 		msg.MessageID = ""
 		repo := getMessageRepository()
@@ -54,7 +68,7 @@ func TestMessageGetCreate(t *testing.T) {
 		t.Parallel()
 		channel, _ := data.NewChannel("testchannel4msgtest", "token")
 		channel.QuickFix()
-		msg, err := data.NewMessage(channel, samplePayload, sampleContentType)
+		msg, err := data.NewMessage(channel, producer1, samplePayload, sampleContentType)
 		assert.Nil(t, err)
 		repo := getMessageRepository()
 		err = repo.Create(msg)
@@ -63,14 +77,40 @@ func TestMessageGetCreate(t *testing.T) {
 		assert.NotNil(t, err)
 		assert.Equal(t, sql.ErrNoRows, err)
 	})
+	t.Run("NonExistingProducer", func(t *testing.T) {
+		t.Parallel()
+		producer, _ := data.NewProducer("testproducer4invalidprodinmsgtest", "testtoken")
+		producer.QuickFix()
+		msg, err := data.NewMessage(channel1, producer, samplePayload, sampleContentType)
+		assert.Nil(t, err)
+		repo := getMessageRepository()
+		err = repo.Create(msg)
+		assert.NotNil(t, err)
+		_, err = repo.Get(channel1.ChannelID, msg.MessageID)
+		assert.NotNil(t, err)
+		assert.Equal(t, sql.ErrNoRows, err)
+	})
 	t.Run("DuplicateMessage", func(t *testing.T) {
 		t.Parallel()
-		msg, err := data.NewMessage(channel1, samplePayload, sampleContentType)
+		msg, err := data.NewMessage(channel1, producer1, samplePayload, sampleContentType)
 		assert.Nil(t, err)
 		repo := getMessageRepository()
 		assert.Nil(t, repo.Create(msg))
 		err = repo.Create(msg)
 		assert.NotNil(t, err)
 		assert.Equal(t, ErrDuplicateMessageIDForChannel, err)
+	})
+	t.Run("ProducerReadErr", func(t *testing.T) {
+		t.Parallel()
+		expectedErr := errors.New("producer could not be read")
+		msg, err := data.NewMessage(channel1, producer1, samplePayload, sampleContentType)
+		assert.Nil(t, err)
+		mockProducerRepository := new(MockProducerRepository)
+		repo := NewMessageRepository(testDB, NewChannelRepository(testDB), mockProducerRepository)
+		mockProducerRepository.On("Get", mock.Anything).Return(nil, expectedErr)
+		assert.Nil(t, repo.Create(msg))
+		_, err = repo.Get(channel1.ChannelID, msg.MessageID)
+		assert.NotNil(t, err)
+		assert.Equal(t, expectedErr, err)
 	})
 }
