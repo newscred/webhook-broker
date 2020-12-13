@@ -33,7 +33,7 @@ func (consumerRepo *ConsumerDBRepository) Store(consumer *data.Consumer) (*data.
 }
 
 func (consumerRepo *ConsumerDBRepository) updateConsumer(consumer *data.Consumer, name, token, callbackURL string) (*data.Consumer, error) {
-	err := transactionalExec(consumerRepo.db, func() {
+	err := transactionalSingleRowWriteExec(consumerRepo.db, func() {
 		consumer.Name = name
 		consumer.Token = token
 		consumer.CallbackURL = callbackURL
@@ -47,7 +47,7 @@ func (consumerRepo *ConsumerDBRepository) insertConsumer(consumer *data.Consumer
 	consumer.QuickFix()
 	var err error
 	if consumer.IsInValidState() {
-		err = transactionalExec(consumerRepo.db, emptyOps, "INSERT INTO consumer (id, channelId, consumerId, name, token, callbackUrl, createdAt, updatedAt) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+		err = transactionalSingleRowWriteExec(consumerRepo.db, emptyOps, "INSERT INTO consumer (id, channelId, consumerId, name, token, callbackUrl, createdAt, updatedAt) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
 			args2SliceFnWrapper(consumer.ID, consumer.ConsumingFrom.ChannelID, consumer.ConsumerID, consumer.Name, consumer.Token, consumer.CallbackURL, consumer.CreatedAt, consumer.UpdatedAt))
 	} else {
 		err = ErrInvalidStateToSave
@@ -57,7 +57,7 @@ func (consumerRepo *ConsumerDBRepository) insertConsumer(consumer *data.Consumer
 
 // Delete deletes consumer from DB
 func (consumerRepo *ConsumerDBRepository) Delete(consumer *data.Consumer) error {
-	return transactionalExec(consumerRepo.db, emptyOps, "DELETE from consumer WHERE channelId = $1 and consumerId = $2", args2SliceFnWrapper(consumer.GetChannelIDSafely(), consumer.ConsumerID))
+	return transactionalSingleRowWriteExec(consumerRepo.db, emptyOps, "DELETE from consumer WHERE channelId = $1 and consumerId = $2", args2SliceFnWrapper(consumer.GetChannelIDSafely(), consumer.ConsumerID))
 }
 
 // Get retrieves consumer for specific consumer, error if either consumer or channel does not exist

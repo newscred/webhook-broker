@@ -28,7 +28,7 @@ func (msgRepo *MessageDBRepository) Create(message *data.Message) (err error) {
 		if msgErr == nil {
 			err = ErrDuplicateMessageIDForChannel
 		} else {
-			err = transactionalExec(msgRepo.db, emptyOps, "INSERT INTO message (id, channelId, messageId, payload, contentType, priority, status, receivedAt, outboxedAt, createdAt, updatedAt) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
+			err = transactionalSingleRowWriteExec(msgRepo.db, emptyOps, "INSERT INTO message (id, channelId, messageId, payload, contentType, priority, status, receivedAt, outboxedAt, createdAt, updatedAt) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
 				args2SliceFnWrapper(message.ID, message.BroadcastedTo.ChannelID, message.MessageID, message.Payload, message.ContentType, message.Priority, message.Status, message.ReceivedAt, message.OutboxedAt, message.CreatedAt, message.UpdatedAt))
 		}
 	}

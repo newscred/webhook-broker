@@ -28,7 +28,7 @@ func (repo *ProducerDBRepository) Store(producer *data.Producer) (*data.Producer
 }
 
 func (repo *ProducerDBRepository) updateProducer(producer *data.Producer, name, token string) (*data.Producer, error) {
-	err := transactionalExec(repo.db, func() {
+	err := transactionalSingleRowWriteExec(repo.db, func() {
 		producer.Name = name
 		producer.Token = token
 		producer.UpdatedAt = time.Now()
@@ -42,7 +42,7 @@ func (repo *ProducerDBRepository) insertProducer(producer *data.Producer) (*data
 	if !producer.IsInValidState() {
 		return producer, ErrInvalidStateToSave
 	}
-	err := transactionalExec(repo.db, emptyOps, "INSERT INTO producer (id, producerId, name, token, createdAt, updatedAt) VALUES ($1, $2, $3, $4, $5, $6)",
+	err := transactionalSingleRowWriteExec(repo.db, emptyOps, "INSERT INTO producer (id, producerId, name, token, createdAt, updatedAt) VALUES ($1, $2, $3, $4, $5, $6)",
 		args2SliceFnWrapper(producer.ID, producer.ProducerID, producer.Name, producer.Token, producer.CreatedAt, producer.UpdatedAt))
 	return producer, err
 }

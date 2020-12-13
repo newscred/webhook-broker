@@ -226,7 +226,7 @@ func TestAppDBRepositoryStartAppInit(t *testing.T) {
 		mock.ExpectQuery(selectStatement).WillReturnRows(getMockSelectAppRow(mock, &seedData, data.NotInitialized))
 		mock.ExpectBegin()
 		mock.ExpectExec("UPDATE app").WithArgs(seedDataVal, initializingVal).WillReturnResult(sqlmock.NewResult(1, 0))
-		mock.ExpectCommit()
+		mock.ExpectRollback()
 		// Main Call
 		aErr := appRepo.StartAppInit(&seedData)
 		mErr := mock.ExpectationsWereMet()
@@ -295,7 +295,7 @@ func TestTransactionalCommitRollbackErrors(t *testing.T) {
 		db, mock, _ := sqlmock.New()
 		mock.MatchExpectationsInOrder(true)
 		mock.ExpectBegin()
-		transactionalExec(db, func() {
+		transactionalSingleRowWriteExec(db, func() {
 			panic(1)
 		}, "", func() []interface{} { return nil })
 		assert.Contains(t, buf.String(), "tx rollback error")
@@ -378,7 +378,7 @@ func TestAppDBRepositoryCompleteAppInit(t *testing.T) {
 		mock.ExpectQuery(selectStatement).WillReturnRows(getMockSelectAppRow(mock, &seedData, data.Initializing))
 		mock.ExpectBegin()
 		mock.ExpectExec("UPDATE app").WithArgs(initializedVal, initializingVal).WillReturnResult(sqlmock.NewResult(1, 0))
-		mock.ExpectCommit()
+		mock.ExpectRollback()
 		// Main Call
 		aErr := appRepo.CompleteAppInit()
 		mErr := mock.ExpectationsWereMet()

@@ -149,7 +149,7 @@ func TestChannelStore(t *testing.T) {
 		mock.ExpectQuery("SELECT id, channelId, name, token, createdAt, updatedAt FROM channel WHERE channelId like").WithArgs(dbErrUpdateTestChannelID).WillReturnRows(rows).WillReturnError(nil)
 		mock.ExpectBegin()
 		mock.ExpectExec("UPDATE channel").WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), dbErrUpdateTestChannelID).WillReturnResult(result).WillReturnError(nil)
-		mock.ExpectCommit()
+		mock.ExpectRollback()
 		mock.MatchExpectationsInOrder(true)
 		repo := &ChannelDBRepository{db: db}
 		channel.Token = "c"

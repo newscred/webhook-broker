@@ -153,7 +153,7 @@ func TestProducerStore(t *testing.T) {
 		mock.ExpectQuery("SELECT id, producerId, name, token, createdAt, updatedAt FROM producer WHERE producerId like").WithArgs(dbErrUpdateTestProducerID).WillReturnRows(rows).WillReturnError(nil)
 		mock.ExpectBegin()
 		mock.ExpectExec("UPDATE producer").WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), dbErrUpdateTestProducerID).WillReturnResult(result).WillReturnError(nil)
-		mock.ExpectCommit()
+		mock.ExpectRollback()
 		mock.MatchExpectationsInOrder(true)
 		repo := &ProducerDBRepository{db: db}
 		producer.Token = "c"

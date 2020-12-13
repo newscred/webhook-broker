@@ -237,7 +237,7 @@ func TestConsumerStore(t *testing.T) {
 		result := sqlmock.NewResult(1, 0)
 		mock.ExpectBegin()
 		mock.ExpectExec("UPDATE consumer").WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), dbErrUpdateTestConsumerID, channel2.ChannelID).WillReturnResult(result).WillReturnError(nil)
-		mock.ExpectCommit()
+		mock.ExpectRollback()
 		mock.MatchExpectationsInOrder(true)
 		repo := &ConsumerDBRepository{db: db, channelRepository: mockChannelRepo}
 		consumer.Token = "c"

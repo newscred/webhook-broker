@@ -110,7 +110,7 @@ func (appRep *AppDBRepository) InitAppData(seedData *config.SeedData) error {
 	}
 	// INSERT SQL
 	initialState := data.NotInitialized
-	var appErr error = transactionalExec(appRep.db, emptyOps, insertStatement, args2SliceFnWrapper(1, seedData, &initialState))
+	var appErr error = transactionalSingleRowWriteExec(appRep.db, emptyOps, insertStatement, args2SliceFnWrapper(1, seedData, &initialState))
 	return appErr
 }
 
@@ -136,7 +136,7 @@ func (appRep *AppDBRepository) StartAppInit(seedData *config.SeedData) error {
 		appErr = ErrNoDataChangeFromInitialized
 	}
 	if appErr == nil {
-		appErr = transactionalExec(appRep.db, emptyOps, startInitUpdateStatement, args2SliceFnWrapper(*seedData, data.Initializing))
+		appErr = transactionalSingleRowWriteExec(appRep.db, emptyOps, startInitUpdateStatement, args2SliceFnWrapper(*seedData, data.Initializing))
 		if appErr == ErrNoRowsUpdated {
 			appErr = ErrOptimisticAppInit
 		}
@@ -154,7 +154,7 @@ func (appRep *AppDBRepository) CompleteAppInit() error {
 		return ErrCompleteWhileNotBeingInitialized
 	}
 	// UPDATE SQL with condition
-	var appErr error = transactionalExec(appRep.db, emptyOps, completeInitUpdateStatement, args2SliceFnWrapper(data.Initialized, data.Initializing))
+	var appErr error = transactionalSingleRowWriteExec(appRep.db, emptyOps, completeInitUpdateStatement, args2SliceFnWrapper(data.Initialized, data.Initializing))
 	if appErr == ErrNoRowsUpdated {
 		appErr = ErrOptimisticAppComplete
 	}
@@ -259,9 +259,8 @@ var (
 		}
 	}
 
-	transactionalExec = func(db *sql.DB, prequeryOps func(), query string, arguments func() []interface{}) error {
+	transactionalOperations = func(db *sql.DB, txOps func(tx *sql.Tx) error) (err error) {
 		var tx *sql.Tx
-		var err error
 		tx, err = db.Begin()
 		defer func() {
 			if r := recover(); r != nil {
@@ -270,26 +269,37 @@ var (
 			}
 		}()
 		if err == nil {
-			prequeryOps()
-			var result sql.Result
-			result, err = tx.Exec(query, arguments()...)
+			err = txOps(tx)
 			if err == nil {
-				var rowsAffected int64
-				if rowsAffected, err = result.RowsAffected(); rowsAffected <= 0 && err == nil {
-					err = ErrNoRowsUpdated
-				}
 				txErr := tx.Commit()
 				if txErr != nil {
 					log.Println("tx commit error", txErr)
-					if err == nil {
-						err = txErr
-					}
+					err = txErr
 				}
 			} else {
 				rollback(tx)
 			}
 		}
 		return err
+	}
+
+	inTransactionExec = func(tx *sql.Tx, prequeryOps func(), query string, arguments func() []interface{}, expectedRowEffected int64) (err error) {
+		prequeryOps()
+		var result sql.Result
+		result, err = tx.Exec(query, arguments()...)
+		if err == nil {
+			var rowsAffected int64
+			if rowsAffected, err = result.RowsAffected(); rowsAffected != expectedRowEffected && err == nil {
+				err = ErrNoRowsUpdated
+			}
+		}
+		return err
+	}
+
+	transactionalSingleRowWriteExec = func(db *sql.DB, prequeryOps func(), query string, arguments func() []interface{}) error {
+		return transactionalOperations(db, func(tx *sql.Tx) error {
+			return inTransactionExec(tx, prequeryOps, query, arguments, int64(1))
+		})
 	}
 
 	getPaginationQueryFragment = func(page *data.Pagination, append bool) string {
