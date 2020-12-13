@@ -3,6 +3,7 @@ package storage
 import (
 	"database/sql"
 	"errors"
+	"log"
 	"sync"
 
 	"github.com/golang-migrate/migrate/v4"
@@ -250,10 +251,24 @@ var (
 			return migrate_sqlite3.WithInstance(db, &migrate_sqlite3.Config{})
 		}
 	}
+
+	rollback = func(tx *sql.Tx) {
+		txErr := tx.Rollback()
+		if txErr != nil {
+			log.Println("tx rollback error", txErr)
+		}
+	}
+
 	transactionalExec = func(db *sql.DB, prequeryOps func(), query string, arguments func() []interface{}) error {
 		var tx *sql.Tx
 		var err error
 		tx, err = db.Begin()
+		defer func() {
+			if r := recover(); r != nil {
+				log.Println("recovered from in-tx panic", r)
+				rollback(tx)
+			}
+		}()
 		if err == nil {
 			prequeryOps()
 			var result sql.Result
@@ -263,9 +278,15 @@ var (
 				if rowsAffected, err = result.RowsAffected(); rowsAffected <= 0 && err == nil {
 					err = ErrNoRowsUpdated
 				}
-				tx.Commit()
+				txErr := tx.Commit()
+				if txErr != nil {
+					log.Println("tx commit error", txErr)
+					if err == nil {
+						err = txErr
+					}
+				}
 			} else {
-				tx.Rollback()
+				rollback(tx)
 			}
 		}
 		return err

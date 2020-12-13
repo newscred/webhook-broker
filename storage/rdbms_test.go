@@ -1,8 +1,10 @@
 package storage
 
 import (
+	"bytes"
 	"database/sql"
 	"errors"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -230,6 +232,74 @@ func TestAppDBRepositoryStartAppInit(t *testing.T) {
 		mErr := mock.ExpectationsWereMet()
 		assert.Nil(t, mErr)
 		assert.Equal(t, ErrOptimisticAppInit, aErr)
+	})
+}
+
+func TestTransactionalCommitRollbackErrors(t *testing.T) {
+	var buf bytes.Buffer
+	configuration, _ := config.GetAutoConfiguration()
+	seedData := configuration.GetSeedData()
+	getMockSelectAppRow := func(mock sqlmock.Sqlmock, seedData *config.SeedData, appStatus data.AppStatus) *sqlmock.Rows {
+		seedDataDriverVal, _ := seedData.Value()
+		appStatusVal, _ := appStatus.Value()
+		return mock.NewRows([]string{"seedData", "appStatus"}).AddRow(seedDataDriverVal, appStatusVal)
+	}
+	seedDataVal, _ := seedData.Value()
+	initializingVal, _ := data.Initializing.Value()
+	t.Run("RollbackFailed", func(t *testing.T) {
+		var buf bytes.Buffer
+		log.SetOutput(&buf)
+		defer func() {
+			log.SetOutput(os.Stderr)
+		}()
+		db, mock, _ := sqlmock.New()
+		appRepo := &AppDBRepository{db: db}
+		mock.MatchExpectationsInOrder(true)
+		mock.ExpectQuery(selectStatement).WillReturnRows(getMockSelectAppRow(mock, &seedData, data.NotInitialized))
+		mock.ExpectBegin()
+		err := errors.New("Update failed")
+		mock.ExpectExec("UPDATE app").WithArgs(seedDataVal, initializingVal).WillReturnError(err)
+		mock.ExpectRollback().WillReturnError(err)
+		// Main Call
+		aErr := appRepo.StartAppInit(&seedData)
+		mErr := mock.ExpectationsWereMet()
+		assert.Nil(t, mErr)
+		assert.Equal(t, err, aErr)
+		assert.Contains(t, buf.String(), "tx rollback error")
+	})
+	t.Run("CommitFailed", func(t *testing.T) {
+		log.SetOutput(&buf)
+		defer func() {
+			log.SetOutput(os.Stderr)
+		}()
+		db, mock, _ := sqlmock.New()
+		appRepo := &AppDBRepository{db: db}
+		mock.MatchExpectationsInOrder(true)
+		mock.ExpectQuery(selectStatement).WillReturnRows(getMockSelectAppRow(mock, &seedData, data.NotInitialized))
+		mock.ExpectBegin()
+		mock.ExpectExec("UPDATE app").WithArgs(seedDataVal, initializingVal).WillReturnResult(sqlmock.NewResult(1, 1))
+		err := errors.New("Update failed")
+		mock.ExpectCommit().WillReturnError(err)
+		// Main Call
+		aErr := appRepo.StartAppInit(&seedData)
+		mErr := mock.ExpectationsWereMet()
+		assert.Nil(t, mErr)
+		assert.Equal(t, err, aErr)
+		assert.Contains(t, buf.String(), "tx commit error")
+	})
+	t.Run("PanicRollbackFailed", func(t *testing.T) {
+		log.SetOutput(&buf)
+		defer func() {
+			log.SetOutput(os.Stderr)
+		}()
+		db, mock, _ := sqlmock.New()
+		mock.MatchExpectationsInOrder(true)
+		mock.ExpectBegin()
+		transactionalExec(db, func() {
+			panic(1)
+		}, "", func() []interface{} { return nil })
+		assert.Contains(t, buf.String(), "tx rollback error")
+		assert.Contains(t, buf.String(), "recovered from in-tx panic")
 	})
 }
 
