@@ -36,12 +36,6 @@ func getConcreteNewBroadcastController(msgRepo storage.MessageRepository) *Broad
 	return NewBroadcastController(channelRepo, msgRepo, producerRepo, dispatcher.NewMessageDispatcher(messageRepo, consumerRepo))
 }
 
-func createRouter(endpoints ...EndpointController) *httprouter.Router {
-	testRouter := httprouter.New()
-	setupAPIRoutes(testRouter, endpoints...)
-	return testRouter
-}
-
 type mockCloser struct {
 }
 
@@ -67,7 +61,7 @@ func TestBroadcastControllerPost(t *testing.T) {
 		t.Parallel()
 		msgRepo := new(storagemocks.MessageRepository)
 		controller, mockDispatcher := getNewBroadcastController(msgRepo)
-		testRouter := createRouter(controller)
+		testRouter := createTestRouter(controller)
 		testURI := controller.FormatAsRelativeLink(getRouterParam("broadcast-channel-404"))
 		req, _ := http.NewRequest("POST", testURI, nil)
 		bodyString := "test message body"
@@ -90,7 +84,7 @@ func TestBroadcastControllerPost(t *testing.T) {
 		t.Parallel()
 		msgRepo := new(storagemocks.MessageRepository)
 		controller, mockDispatcher := getNewBroadcastController(msgRepo)
-		testRouter := createRouter(controller)
+		testRouter := createTestRouter(controller)
 		testURI := controller.FormatAsRelativeLink(getRouterParam(consumerTestChannel.ChannelID))
 		req, _ := http.NewRequest("POST", testURI, nil)
 		bodyString := "test message body"
@@ -113,7 +107,7 @@ func TestBroadcastControllerPost(t *testing.T) {
 		t.Parallel()
 		msgRepo := new(storagemocks.MessageRepository)
 		controller, mockDispatcher := getNewBroadcastController(msgRepo)
-		testRouter := createRouter(controller)
+		testRouter := createTestRouter(controller)
 		testURI := controller.FormatAsRelativeLink(getRouterParam(consumerTestChannel.ChannelID))
 		req, _ := http.NewRequest("POST", testURI, nil)
 		bodyString := "test message body"
@@ -134,7 +128,7 @@ func TestBroadcastControllerPost(t *testing.T) {
 		t.Parallel()
 		msgRepo := new(storagemocks.MessageRepository)
 		controller, mockDispatcher := getNewBroadcastController(msgRepo)
-		testRouter := createRouter(controller)
+		testRouter := createTestRouter(controller)
 		testURI := controller.FormatAsRelativeLink(getRouterParam(consumerTestChannel.ChannelID))
 		req, _ := http.NewRequest("POST", testURI, nil)
 		bodyString := "test message body"
@@ -157,7 +151,7 @@ func TestBroadcastControllerPost(t *testing.T) {
 		t.Parallel()
 		msgRepo := new(storagemocks.MessageRepository)
 		controller, mockDispatcher := getNewBroadcastController(msgRepo)
-		testRouter := createRouter(controller)
+		testRouter := createTestRouter(controller)
 		testURI := controller.FormatAsRelativeLink(getRouterParam(consumerTestChannel.ChannelID))
 		req, _ := http.NewRequest("POST", testURI, nil)
 		bodyString := "test message body"
@@ -180,7 +174,7 @@ func TestBroadcastControllerPost(t *testing.T) {
 		t.Parallel()
 		msgRepo := new(storagemocks.MessageRepository)
 		controller, mockDispatcher := getNewBroadcastController(msgRepo)
-		testRouter := createRouter(controller)
+		testRouter := createTestRouter(controller)
 		testURI := controller.FormatAsRelativeLink(getRouterParam(consumerTestChannel.ChannelID))
 		req, _ := http.NewRequest("POST", testURI, nil)
 		req.Body = &mockCloser{}
@@ -202,7 +196,7 @@ func TestBroadcastControllerPost(t *testing.T) {
 		t.Parallel()
 		msgRepo := new(storagemocks.MessageRepository)
 		controller, mockDispatcher := getNewBroadcastController(msgRepo)
-		testRouter := createRouter(controller)
+		testRouter := createTestRouter(controller)
 		testURI := controller.FormatAsRelativeLink(getRouterParam(consumerTestChannel.ChannelID))
 		req, _ := http.NewRequest("POST", testURI, nil)
 		bodyString := "test message body"
@@ -232,7 +226,7 @@ func TestBroadcastControllerPost(t *testing.T) {
 		t.Parallel()
 		msgRepo := new(storagemocks.MessageRepository)
 		controller, mockDispatcher := getNewBroadcastController(msgRepo)
-		testRouter := createRouter(controller)
+		testRouter := createTestRouter(controller)
 		testURI := controller.FormatAsRelativeLink(getRouterParam(consumerTestChannel.ChannelID))
 		req, _ := http.NewRequest("POST", testURI, nil)
 		bodyString := "test message body"
@@ -261,7 +255,7 @@ func TestBroadcastControllerPost(t *testing.T) {
 		t.Parallel()
 		msgRepo := new(storagemocks.MessageRepository)
 		controller, mockDispatcher := getNewBroadcastController(msgRepo)
-		testRouter := createRouter(controller)
+		testRouter := createTestRouter(controller)
 		testURI := controller.FormatAsRelativeLink(getRouterParam(consumerTestChannel.ChannelID))
 		req, _ := http.NewRequest("POST", testURI, nil)
 		bodyString := "test message body"
@@ -290,7 +284,7 @@ func TestBroadcastControllerPost(t *testing.T) {
 		t.Parallel()
 		msgRepo := new(storagemocks.MessageRepository)
 		controller, mockDispatcher := getNewBroadcastController(msgRepo)
-		testRouter := createRouter(controller)
+		testRouter := createTestRouter(controller)
 		testURI := controller.FormatAsRelativeLink(getRouterParam(consumerTestChannel.ChannelID))
 		req, _ := http.NewRequest("POST", testURI, nil)
 		bodyString := "test message body"

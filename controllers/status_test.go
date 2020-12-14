@@ -52,15 +52,16 @@ func TestMain(m *testing.M) {
 	}
 }
 
-func setupTestRoutes(r *httprouter.Router, s EndpointController) {
-	setupAPIRoutes(r, s)
+func createTestRouter(endpoints ...EndpointController) *httprouter.Router {
+	testRouter := httprouter.New()
+	setupAPIRoutes(testRouter, endpoints...)
+	return testRouter
 }
 
 func TestStatus(t *testing.T) {
 	mAppRepo := new(storagemocks.AppRepository)
-	testRouter := httprouter.New()
 	statusController := NewStatusController(mAppRepo)
-	setupTestRoutes(testRouter, statusController)
+	testRouter := createTestRouter(statusController)
 	mAppRepo.On("GetApp").Return(defaultApp, nil)
 	req, _ := http.NewRequest("GET", "/_status", nil)
 	rr := httptest.NewRecorder()
@@ -77,8 +78,7 @@ func TestStatus(t *testing.T) {
 
 func TestStatus_AppDataError(t *testing.T) {
 	mAppRepo := new(storagemocks.AppRepository)
-	testRouter := httprouter.New()
-	setupTestRoutes(testRouter, NewStatusController(mAppRepo))
+	testRouter := createTestRouter(NewStatusController(mAppRepo))
 	err := errors.New("App could not be returned")
 	mAppRepo.On("GetApp").Return(defaultApp, err)
 	req, _ := http.NewRequest("GET", "/_status", nil)
@@ -91,8 +91,7 @@ func TestStatus_AppDataError(t *testing.T) {
 
 func TestStatus_JSONMarshalError(t *testing.T) {
 	mAppRepo := new(storagemocks.AppRepository)
-	testRouter := httprouter.New()
-	setupTestRoutes(testRouter, NewStatusController(mAppRepo))
+	testRouter := createTestRouter(NewStatusController(mAppRepo))
 	mAppRepo.On("GetApp").Return(defaultApp, nil)
 	err := errors.New("App could not be returned")
 	oldGetJSON := getJSON

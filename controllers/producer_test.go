@@ -15,7 +15,6 @@ import (
 	"github.com/imyousuf/webhook-broker/storage"
 	"github.com/imyousuf/webhook-broker/storage/data"
 	storagemocks "github.com/imyousuf/webhook-broker/storage/mocks"
-	"github.com/julienschmidt/httprouter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -45,9 +44,7 @@ func ProducerTestSetup() {
 }
 
 func TestProducersControllerGet(t *testing.T) {
-	testRouter := httprouter.New()
-	listController := NewProducersController(producerRepo, NewProducerController(producerRepo))
-	setupAPIRoutes(testRouter, listController)
+	testRouter := createTestRouter(NewProducersController(producerRepo, NewProducerController(producerRepo)))
 	req, _ := http.NewRequest("GET", "/producers", nil)
 	rr := httptest.NewRecorder()
 	testRouter.ServeHTTP(rr, req)
@@ -97,12 +94,10 @@ func TestProducersControllerGet(t *testing.T) {
 }
 
 func TestProducersControllerGet_Error(t *testing.T) {
-	testRouter := httprouter.New()
 	mockProducerRepo := new(storagemocks.ProducerRepository)
 	expectedErr := errors.New("GetList error")
 	mockProducerRepo.On("GetList", mock.Anything).Return(nil, nil, expectedErr)
-	listController := NewProducersController(mockProducerRepo, NewProducerController(mockProducerRepo))
-	setupAPIRoutes(testRouter, listController)
+	testRouter := createTestRouter(NewProducersController(mockProducerRepo, NewProducerController(mockProducerRepo)))
 	req, _ := http.NewRequest("GET", "/producers", nil)
 	rr := httptest.NewRecorder()
 	testRouter.ServeHTTP(rr, req)
@@ -121,9 +116,7 @@ func TestProducerControllerFormatAsRelativeLink_NoParam(t *testing.T) {
 func TestProducerGet(t *testing.T) {
 	t.Run("SuccessfulGet", func(t *testing.T) {
 		t.Parallel()
-		testRouter := httprouter.New()
-		getController := NewProducerController(producerRepo)
-		setupAPIRoutes(testRouter, getController)
+		testRouter := createTestRouter(NewProducerController(producerRepo))
 		req, _ := http.NewRequest("GET", "/producer/"+listTestProducerIDPrefix+"0", nil)
 		rr := httptest.NewRecorder()
 		testRouter.ServeHTTP(rr, req)
@@ -138,9 +131,7 @@ func TestProducerGet(t *testing.T) {
 	})
 	t.Run("NotFound", func(t *testing.T) {
 		t.Parallel()
-		testRouter := httprouter.New()
-		getController := NewProducerController(producerRepo)
-		setupAPIRoutes(testRouter, getController)
+		testRouter := createTestRouter(NewProducerController(producerRepo))
 		req, _ := http.NewRequest("GET", "/producer/"+time.Now().String(), nil)
 		rr := httptest.NewRecorder()
 		testRouter.ServeHTTP(rr, req)
@@ -151,9 +142,7 @@ func TestProducerGet(t *testing.T) {
 func TestProducerPut(t *testing.T) {
 	t.Run("SuccessfulPutCreateWithNameToken", func(t *testing.T) {
 		t.Parallel()
-		testRouter := httprouter.New()
-		putController := NewProducerController(producerRepo)
-		setupAPIRoutes(testRouter, putController)
+		testRouter := createTestRouter(NewProducerController(producerRepo))
 		req, _ := http.NewRequest("PUT", "/producer/"+createProducerIDWithData, nil)
 		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
 		req.PostForm = url.Values{}
@@ -170,9 +159,7 @@ func TestProducerPut(t *testing.T) {
 	})
 	t.Run("SuccessfulPutCreateWithoutNameToken", func(t *testing.T) {
 		t.Parallel()
-		testRouter := httprouter.New()
-		putController := NewProducerController(producerRepo)
-		setupAPIRoutes(testRouter, putController)
+		testRouter := createTestRouter(NewProducerController(producerRepo))
 		req, _ := http.NewRequest("PUT", "/producer/"+createProducerIDWithoutData, nil)
 		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
 		rr := httptest.NewRecorder()
@@ -186,9 +173,7 @@ func TestProducerPut(t *testing.T) {
 	})
 	t.Run("SuccessfulPutUpdate", func(t *testing.T) {
 		t.Parallel()
-		testRouter := httprouter.New()
-		putController := NewProducerController(producerRepo)
-		setupAPIRoutes(testRouter, putController)
+		testRouter := createTestRouter(NewProducerController(producerRepo))
 		greq, _ := http.NewRequest("GET", "/producer/"+listTestProducerIDPrefix+"0", nil)
 		grr := httptest.NewRecorder()
 		testRouter.ServeHTTP(grr, greq)
@@ -210,9 +195,7 @@ func TestProducerPut(t *testing.T) {
 	})
 	t.Run("415", func(t *testing.T) {
 		t.Parallel()
-		testRouter := httprouter.New()
-		putController := NewProducerController(producerRepo)
-		setupAPIRoutes(testRouter, putController)
+		testRouter := createTestRouter(NewProducerController(producerRepo))
 		req, _ := http.NewRequest("PUT", "/producer/"+listTestProducerIDPrefix+"0", nil)
 		rr := httptest.NewRecorder()
 		testRouter.ServeHTTP(rr, req)
@@ -220,9 +203,7 @@ func TestProducerPut(t *testing.T) {
 	})
 	t.Run("400", func(t *testing.T) {
 		t.Parallel()
-		testRouter := httprouter.New()
-		putController := NewProducerController(producerRepo)
-		setupAPIRoutes(testRouter, putController)
+		testRouter := createTestRouter(NewProducerController(producerRepo))
 		req, _ := http.NewRequest("PUT", "/producer/"+listTestProducerIDPrefix+"0", nil)
 		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
 		rr := httptest.NewRecorder()
@@ -231,9 +212,7 @@ func TestProducerPut(t *testing.T) {
 	})
 	t.Run("412", func(t *testing.T) {
 		t.Parallel()
-		testRouter := httprouter.New()
-		putController := NewProducerController(producerRepo)
-		setupAPIRoutes(testRouter, putController)
+		testRouter := createTestRouter(NewProducerController(producerRepo))
 		req, _ := http.NewRequest("PUT", "/producer/"+listTestProducerIDPrefix+"0", nil)
 		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
 		req.Header.Add(headerUnmodifiedSince, time.Now().Add(-1*time.Duration(10)*time.Hour).Format(http.TimeFormat))
@@ -247,9 +226,7 @@ func TestProducerPut(t *testing.T) {
 		expectedErr := errors.New("error")
 		mockProducerRepo.On("Get", mock.Anything).Return(&data.Producer{}, expectedErr)
 		mockProducerRepo.On("Store", mock.Anything).Return(&data.Producer{}, expectedErr)
-		testRouter := httprouter.New()
-		putController := NewProducerController(mockProducerRepo)
-		setupAPIRoutes(testRouter, putController)
+		testRouter := createTestRouter(NewProducerController(mockProducerRepo))
 		req, _ := http.NewRequest("PUT", "/producer/"+listTestProducerIDPrefix+"0", nil)
 		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
 		rr := httptest.NewRecorder()

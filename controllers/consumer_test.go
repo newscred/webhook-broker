@@ -99,9 +99,8 @@ func TestConsumersFormatAsRelativeLink(t *testing.T) {
 
 func TestConsumersControllerGet(t *testing.T) {
 	t.Parallel()
-	testRouter := httprouter.New()
 	listController := NewConsumersController(getNewConsumerController(consumerRepo), consumerRepo)
-	setupAPIRoutes(testRouter, listController)
+	testRouter := createTestRouter(listController)
 	testURI := listController.FormatAsRelativeLink(httprouter.Param{Key: channelIDPathParamKey, Value: consumerTestChannel.ChannelID})
 	req, _ := http.NewRequest("GET", testURI, nil)
 	rr := httptest.NewRecorder()
@@ -160,12 +159,11 @@ func TestConsumersControllerGet(t *testing.T) {
 func TestConsumersControllerGet_Error(t *testing.T) {
 	t.Run("GetList:GenericServerError", func(t *testing.T) {
 		t.Parallel()
-		testRouter := httprouter.New()
 		mockConsumerRepo := new(storagemocks.ConsumerRepository)
 		expectedErr := errors.New("GetList error")
 		mockConsumerRepo.On("GetList", consumerTestChannel.ChannelID, mock.Anything).Return(nil, nil, expectedErr)
 		listController := NewConsumersController(getNewConsumerController(mockConsumerRepo), mockConsumerRepo)
-		setupAPIRoutes(testRouter, listController)
+		testRouter := createTestRouter(listController)
 		testURI := listController.FormatAsRelativeLink(httprouter.Param{Key: channelIDPathParamKey, Value: consumerTestChannel.ChannelID})
 		req, _ := http.NewRequest("GET", testURI, nil)
 		rr := httptest.NewRecorder()
@@ -174,9 +172,8 @@ func TestConsumersControllerGet_Error(t *testing.T) {
 	})
 	t.Run("GetList:NoChannel", func(t *testing.T) {
 		t.Parallel()
-		testRouter := httprouter.New()
 		listController := NewConsumersController(getNewConsumerController(consumerRepo), consumerRepo)
-		setupAPIRoutes(testRouter, listController)
+		testRouter := createTestRouter(listController)
 		testURI := listController.FormatAsRelativeLink(httprouter.Param{Key: channelIDPathParamKey, Value: "no-such-channel-for-get-consumers"})
 		req, _ := http.NewRequest("GET", testURI, nil)
 		rr := httptest.NewRecorder()
@@ -188,9 +185,8 @@ func TestConsumersControllerGet_Error(t *testing.T) {
 func TestConsumerGet(t *testing.T) {
 	t.Run("SuccessfulGet", func(t *testing.T) {
 		t.Parallel()
-		testRouter := httprouter.New()
 		getConsumerController := getNewConsumerController(consumerRepo)
-		setupAPIRoutes(testRouter, getConsumerController)
+		testRouter := createTestRouter(getConsumerController)
 		testURI := getConsumerController.FormatAsRelativeLink(httprouter.Param{Key: channelIDPathParamKey, Value: consumerTestChannel.ChannelID}, httprouter.Param{Key: consumerIDPathParamKey, Value: listTestConsumerIDPrefix + "0"})
 		t.Log(testURI)
 		req, _ := http.NewRequest("GET", testURI, nil)
@@ -208,9 +204,8 @@ func TestConsumerGet(t *testing.T) {
 	})
 	t.Run("NotFound", func(t *testing.T) {
 		t.Parallel()
-		testRouter := httprouter.New()
 		getController := getNewChannelController(channelRepo)
-		setupAPIRoutes(testRouter, getController)
+		testRouter := createTestRouter(getController)
 		req, _ := http.NewRequest("GET", "/channel/"+consumerTestChannel.ChannelID+"/consumer/"+time.Now().String(), nil)
 		rr := httptest.NewRecorder()
 		testRouter.ServeHTTP(rr, req)
@@ -221,9 +216,8 @@ func TestConsumerGet(t *testing.T) {
 func TestConsumerDelete(t *testing.T) {
 	t.Run("SuccessfulDelete", func(t *testing.T) {
 		t.Parallel()
-		testRouter := httprouter.New()
 		getConsumerController := getNewConsumerController(consumerRepo)
-		setupAPIRoutes(testRouter, getConsumerController)
+		testRouter := createTestRouter(getConsumerController)
 		testURI := getConsumerController.FormatAsRelativeLink(httprouter.Param{Key: channelIDPathParamKey, Value: consumerTestChannel.ChannelID}, httprouter.Param{Key: consumerIDPathParamKey, Value: deleteConsumerIDWithData})
 		t.Log(testURI)
 		req, _ := http.NewRequest("DELETE", testURI, nil)
@@ -234,9 +228,8 @@ func TestConsumerDelete(t *testing.T) {
 	})
 	t.Run("DeleteWithoutLastModified", func(t *testing.T) {
 		t.Parallel()
-		testRouter := httprouter.New()
 		getConsumerController := getNewConsumerController(consumerRepo)
-		setupAPIRoutes(testRouter, getConsumerController)
+		testRouter := createTestRouter(getConsumerController)
 		testURI := getConsumerController.FormatAsRelativeLink(httprouter.Param{Key: channelIDPathParamKey, Value: consumerTestChannel.ChannelID}, httprouter.Param{Key: consumerIDPathParamKey, Value: deleteConsumerIDFailed})
 		t.Log(testURI)
 		req, _ := http.NewRequest("DELETE", testURI, nil)
@@ -246,9 +239,8 @@ func TestConsumerDelete(t *testing.T) {
 	})
 	t.Run("DeleteWithIncorrectLastModified", func(t *testing.T) {
 		t.Parallel()
-		testRouter := httprouter.New()
 		getConsumerController := getNewConsumerController(consumerRepo)
-		setupAPIRoutes(testRouter, getConsumerController)
+		testRouter := createTestRouter(getConsumerController)
 		testURI := getConsumerController.FormatAsRelativeLink(httprouter.Param{Key: channelIDPathParamKey, Value: consumerTestChannel.ChannelID}, httprouter.Param{Key: consumerIDPathParamKey, Value: deleteConsumerIDFailed})
 		t.Log(testURI)
 		req, _ := http.NewRequest("DELETE", testURI, nil)
@@ -259,9 +251,8 @@ func TestConsumerDelete(t *testing.T) {
 	})
 	t.Run("NotFound", func(t *testing.T) {
 		t.Parallel()
-		testRouter := httprouter.New()
 		getController := getNewConsumerController(consumerRepo)
-		setupAPIRoutes(testRouter, getController)
+		testRouter := createTestRouter(getController)
 		req, _ := http.NewRequest("DELETE", "/channel/"+consumerTestChannel.ChannelID+"/consumer/"+time.Now().String(), nil)
 		rr := httptest.NewRecorder()
 		testRouter.ServeHTTP(rr, req)
@@ -269,12 +260,11 @@ func TestConsumerDelete(t *testing.T) {
 	})
 	t.Run("GetError", func(t *testing.T) {
 		t.Parallel()
-		testRouter := httprouter.New()
 		mockConsumerRepo := new(storagemocks.ConsumerRepository)
 		expectedErr := errors.New("test error")
 		mockConsumerRepo.On("Get", mock.Anything, mock.Anything).Return(nil, expectedErr)
 		getController := getNewConsumerController(mockConsumerRepo)
-		setupAPIRoutes(testRouter, getController)
+		testRouter := createTestRouter(getController)
 		req, _ := http.NewRequest("DELETE", "/channel/"+consumerTestChannel.ChannelID+"/consumer/"+time.Now().String(), nil)
 		rr := httptest.NewRecorder()
 		testRouter.ServeHTTP(rr, req)
@@ -283,13 +273,12 @@ func TestConsumerDelete(t *testing.T) {
 	})
 	t.Run("DeleteError", func(t *testing.T) {
 		t.Parallel()
-		testRouter := httprouter.New()
 		mockConsumerRepo := new(storagemocks.ConsumerRepository)
 		expectedErr := errors.New("test error")
 		mockConsumerRepo.On("Get", mock.Anything, mock.Anything).Return(deleteFailedConsumer, nil)
 		mockConsumerRepo.On("Delete", mock.Anything).Return(expectedErr)
 		getController := getNewConsumerController(mockConsumerRepo)
-		setupAPIRoutes(testRouter, getController)
+		testRouter := createTestRouter(getController)
 		req, _ := http.NewRequest("DELETE", "/channel/"+consumerTestChannel.ChannelID+"/consumer/"+time.Now().String(), nil)
 		req.Header.Add(headerUnmodifiedSince, deleteFailedConsumer.GetLastUpdatedHTTPTimeString())
 		rr := httptest.NewRecorder()
@@ -303,9 +292,8 @@ func TestConsumerDelete(t *testing.T) {
 func TestConsumerPut(t *testing.T) {
 	t.Run("SuccessfulPutCreateWithNameToken", func(t *testing.T) {
 		t.Parallel()
-		testRouter := httprouter.New()
 		putController := getNewConsumerController(consumerRepo)
-		setupAPIRoutes(testRouter, putController)
+		testRouter := createTestRouter(putController)
 		testURI := putController.FormatAsRelativeLink(httprouter.Param{Key: channelIDPathParamKey, Value: consumerTestChannel.ChannelID}, httprouter.Param{Key: consumerIDPathParamKey, Value: createConsumerIDWithData})
 		t.Log(testURI)
 		req, _ := http.NewRequest("PUT", testURI, nil)
@@ -326,9 +314,8 @@ func TestConsumerPut(t *testing.T) {
 	})
 	t.Run("SuccessfulPutCreateWithoutNameToken", func(t *testing.T) {
 		t.Parallel()
-		testRouter := httprouter.New()
 		putController := getNewConsumerController(consumerRepo)
-		setupAPIRoutes(testRouter, putController)
+		testRouter := createTestRouter(putController)
 		testURI := putController.FormatAsRelativeLink(httprouter.Param{Key: channelIDPathParamKey, Value: consumerTestChannel.ChannelID}, httprouter.Param{Key: consumerIDPathParamKey, Value: createConsumerIDWithoutData})
 		t.Log(testURI)
 		req, _ := http.NewRequest("PUT", testURI, nil)
@@ -347,9 +334,8 @@ func TestConsumerPut(t *testing.T) {
 	})
 	t.Run("SuccessfulPutUpdate", func(t *testing.T) {
 		t.Parallel()
-		testRouter := httprouter.New()
 		putController := getNewConsumerController(consumerRepo)
-		setupAPIRoutes(testRouter, putController)
+		testRouter := createTestRouter(putController)
 		testURI := putController.FormatAsRelativeLink(httprouter.Param{Key: channelIDPathParamKey, Value: consumerTestChannel.ChannelID}, httprouter.Param{Key: consumerIDPathParamKey, Value: listTestConsumerIDPrefix + "0"})
 		t.Log(testURI)
 
@@ -377,9 +363,8 @@ func TestConsumerPut(t *testing.T) {
 	})
 	t.Run("404", func(t *testing.T) {
 		t.Parallel()
-		testRouter := httprouter.New()
 		putController := getNewConsumerController(consumerRepo)
-		setupAPIRoutes(testRouter, putController)
+		testRouter := createTestRouter(putController)
 		testURI := putController.FormatAsRelativeLink(httprouter.Param{Key: channelIDPathParamKey, Value: "channel-does-exist"}, httprouter.Param{Key: consumerIDPathParamKey, Value: listTestConsumerIDPrefix})
 		t.Log(testURI)
 		req, _ := http.NewRequest("PUT", testURI, nil)
@@ -391,9 +376,8 @@ func TestConsumerPut(t *testing.T) {
 	})
 	t.Run("415", func(t *testing.T) {
 		t.Parallel()
-		testRouter := httprouter.New()
 		putController := getNewConsumerController(consumerRepo)
-		setupAPIRoutes(testRouter, putController)
+		testRouter := createTestRouter(putController)
 		testURI := putController.FormatAsRelativeLink(httprouter.Param{Key: channelIDPathParamKey, Value: consumerTestChannel.ChannelID}, httprouter.Param{Key: consumerIDPathParamKey, Value: deleteConsumerIDFailed})
 		t.Log(testURI)
 		req, _ := http.NewRequest("PUT", testURI, nil)
@@ -405,9 +389,8 @@ func TestConsumerPut(t *testing.T) {
 	})
 	t.Run("400:NoCallbackURL", func(t *testing.T) {
 		t.Parallel()
-		testRouter := httprouter.New()
 		putController := getNewConsumerController(consumerRepo)
-		setupAPIRoutes(testRouter, putController)
+		testRouter := createTestRouter(putController)
 		testURI := putController.FormatAsRelativeLink(httprouter.Param{Key: channelIDPathParamKey, Value: consumerTestChannel.ChannelID}, httprouter.Param{Key: consumerIDPathParamKey, Value: deleteConsumerIDFailed})
 		t.Log(testURI)
 		req, _ := http.NewRequest("PUT", testURI, nil)
@@ -420,9 +403,8 @@ func TestConsumerPut(t *testing.T) {
 	})
 	t.Run("400:InvalidURL", func(t *testing.T) {
 		t.Parallel()
-		testRouter := httprouter.New()
 		putController := getNewConsumerController(consumerRepo)
-		setupAPIRoutes(testRouter, putController)
+		testRouter := createTestRouter(putController)
 		testURI := putController.FormatAsRelativeLink(httprouter.Param{Key: channelIDPathParamKey, Value: consumerTestChannel.ChannelID}, httprouter.Param{Key: consumerIDPathParamKey, Value: deleteConsumerIDFailed})
 		t.Log(testURI)
 		req, _ := http.NewRequest("PUT", testURI, nil)
@@ -435,9 +417,8 @@ func TestConsumerPut(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, rr.Code)
 	})
 	t.Run("400:RelativeURL", func(t *testing.T) {
-		testRouter := httprouter.New()
 		putController := getNewConsumerController(consumerRepo)
-		setupAPIRoutes(testRouter, putController)
+		testRouter := createTestRouter(putController)
 		testURI := putController.FormatAsRelativeLink(httprouter.Param{Key: channelIDPathParamKey, Value: consumerTestChannel.ChannelID}, httprouter.Param{Key: consumerIDPathParamKey, Value: deleteConsumerIDFailed})
 		t.Log(testURI)
 		req, _ := http.NewRequest("PUT", testURI, nil)
@@ -451,9 +432,8 @@ func TestConsumerPut(t *testing.T) {
 	})
 	t.Run("400:NoUnmodifiedSinceHeader", func(t *testing.T) {
 		t.Parallel()
-		testRouter := httprouter.New()
 		putController := getNewConsumerController(consumerRepo)
-		setupAPIRoutes(testRouter, putController)
+		testRouter := createTestRouter(putController)
 		testURI := putController.FormatAsRelativeLink(httprouter.Param{Key: channelIDPathParamKey, Value: consumerTestChannel.ChannelID}, httprouter.Param{Key: consumerIDPathParamKey, Value: deleteConsumerIDFailed})
 		t.Log(testURI)
 		req, _ := http.NewRequest("PUT", testURI, nil)
@@ -464,9 +444,8 @@ func TestConsumerPut(t *testing.T) {
 	})
 	t.Run("412", func(t *testing.T) {
 		t.Parallel()
-		testRouter := httprouter.New()
 		putController := getNewConsumerController(consumerRepo)
-		setupAPIRoutes(testRouter, putController)
+		testRouter := createTestRouter(putController)
 		testURI := putController.FormatAsRelativeLink(httprouter.Param{Key: channelIDPathParamKey, Value: consumerTestChannel.ChannelID}, httprouter.Param{Key: consumerIDPathParamKey, Value: deleteConsumerIDFailed})
 		t.Log(testURI)
 		req, _ := http.NewRequest("PUT", testURI, nil)
@@ -482,9 +461,8 @@ func TestConsumerPut(t *testing.T) {
 		expectedErr := errors.New("error")
 		mockChannelRepo.On("Get", mock.Anything, mock.Anything).Return(deleteFailedConsumer, nil)
 		mockChannelRepo.On("Store", mock.Anything).Return(&data.Consumer{}, expectedErr)
-		testRouter := httprouter.New()
 		putController := getNewConsumerController(mockChannelRepo)
-		setupAPIRoutes(testRouter, putController)
+		testRouter := createTestRouter(putController)
 		req, _ := http.NewRequest("PUT", "/channel/"+consumerTestChannel.ChannelID+"/consumer/"+time.Now().String(), nil)
 		req.PostForm = url.Values{}
 		req.Header.Add(headerUnmodifiedSince, deleteFailedConsumer.GetLastUpdatedHTTPTimeString())
