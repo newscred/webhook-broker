@@ -8,6 +8,7 @@ package main
 import (
 	"github.com/imyousuf/webhook-broker/config"
 	"github.com/imyousuf/webhook-broker/controllers"
+	"github.com/imyousuf/webhook-broker/dispatcher"
 	"github.com/imyousuf/webhook-broker/storage"
 )
 
@@ -39,6 +40,9 @@ func GetHTTPServer(cliConfig *config.CLIConfig) (*HTTPServiceContainer, error) {
 	consumerController := controllers.NewConsumerController(channelRepository, consumerRepository)
 	consumersController := controllers.NewConsumersController(consumerController, consumerRepository)
 	channelController := controllers.NewChannelController(consumersController, channelRepository)
+	messageRepository := newMessageRepository(dataAccessor)
+	messageDispatcher := dispatcher.NewMessageDispatcher(messageRepository, consumerRepository)
+	broadcastController := controllers.NewBroadcastController(channelRepository, messageRepository, producerRepository, messageDispatcher)
 	controllersControllers := &controllers.Controllers{
 		StatusController:    statusController,
 		ProducersController: producersController,
@@ -46,6 +50,7 @@ func GetHTTPServer(cliConfig *config.CLIConfig) (*HTTPServiceContainer, error) {
 		ChannelController:   channelController,
 		ConsumerController:  consumerController,
 		ConsumersController: consumersController,
+		BroadcastController: broadcastController,
 	}
 	router := controllers.NewRouter(controllersControllers)
 	server := controllers.ConfigureAPI(configConfig, serverLifecycleListenerImpl, router)

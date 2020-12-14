@@ -41,6 +41,7 @@ generate:
 	(cd storage && go generate -mod=readonly)
 	mockery --all --dir "./config/" --output "./config/mocks"
 	mockery --all --dir "./storage/" --output "./storage/mocks"
+	mockery --all --dir "./dispatcher/" --output "./dispatcher/mocks"
 	mockery --name ChannelRepository --structname "MockChannelRepository" --dir "./storage/" --output "./storage" --testonly --outpkg "storage"
 	mockery --name ProducerRepository --structname "MockProducerRepository" --dir "./storage/" --output "./storage" --testonly --outpkg "storage"
 

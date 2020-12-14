@@ -15,6 +15,7 @@ import (
 	"github.com/google/wire"
 	"github.com/imyousuf/webhook-broker/config"
 	"github.com/imyousuf/webhook-broker/controllers"
+	"github.com/imyousuf/webhook-broker/dispatcher"
 	"github.com/imyousuf/webhook-broker/storage"
 	"github.com/imyousuf/webhook-broker/storage/data"
 	lumberjack "gopkg.in/natefinch/lumberjack.v2"
@@ -256,7 +257,11 @@ func newConsumerRepository(dataAccessor storage.DataAccessor) storage.ConsumerRe
 	return dataAccessor.GetConsumerRepository()
 }
 
+func newMessageRepository(dataAccessor storage.DataAccessor) storage.MessageRepository {
+	return dataAccessor.GetMessageRepository()
+}
+
 var (
 	configInjectorSet             = wire.NewSet(NewHTTPServiceContainer, NewServerListener, GetMigrationConfig, wire.Bind(new(controllers.ServerLifecycleListener), new(*ServerLifecycleListenerImpl)), config.ConfigInjector)
-	relationalDBWithControllerSet = wire.NewSet(controllers.ControllerInjector, storage.GetNewDataAccessor, newAppRepository, newChannelRepository, newProducerRepository, newConsumerRepository)
+	relationalDBWithControllerSet = wire.NewSet(controllers.ControllerInjector, storage.GetNewDataAccessor, newAppRepository, newChannelRepository, newProducerRepository, newConsumerRepository, newMessageRepository, dispatcher.DispatcherInjector)
 )

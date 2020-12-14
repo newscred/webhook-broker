@@ -29,6 +29,7 @@ type Controllers struct {
 	ChannelController   *ChannelController
 	ConsumerController  *ConsumerController
 	ConsumersController *ConsumersController
+	BroadcastController *BroadcastController
 }
 
 var (
@@ -36,7 +37,7 @@ var (
 	routerInitializer sync.Once
 	server            *http.Server
 	// ControllerInjector for binding controllers
-	ControllerInjector = wire.NewSet(ConfigureAPI, NewRouter, NewStatusController, NewProducersController, NewProducerController, NewChannelController, NewConsumerController, NewConsumersController, wire.Struct(new(Controllers), "StatusController", "ProducersController", "ProducerController", "ChannelController", "ConsumerController", "ConsumersController"))
+	ControllerInjector = wire.NewSet(ConfigureAPI, NewRouter, NewStatusController, NewProducersController, NewProducerController, NewChannelController, NewConsumerController, NewConsumersController, NewBroadcastController, wire.Struct(new(Controllers), "StatusController", "ProducersController", "ProducerController", "ChannelController", "ConsumerController", "ConsumersController", "BroadcastController"))
 	// ErrUnsupportedMediaType is returned when client does not provide appropriate `Content-Type` header
 	ErrUnsupportedMediaType = errors.New("Media type not supported")
 	// ErrConditionalFailed is returned when update is missing `If-Unmodified-Since` header
@@ -142,7 +143,7 @@ func handleExit() {
 // NewRouter returns a new instance of the router
 func NewRouter(controllers *Controllers) *httprouter.Router {
 	apiRouter := httprouter.New()
-	setupAPIRoutes(apiRouter, controllers.StatusController, controllers.ProducersController, controllers.ProducerController, controllers.ChannelController, controllers.ConsumerController, controllers.ConsumersController)
+	setupAPIRoutes(apiRouter, controllers.StatusController, controllers.ProducersController, controllers.ProducerController, controllers.ChannelController, controllers.ConsumerController, controllers.ConsumersController, controllers.BroadcastController)
 	return apiRouter
 }
 
