@@ -17,3 +17,8 @@ type MessageDispatcher struct {
 func (_m *MessageDispatcher) Dispatch(message *data.Message) {
 	_m.Called(message)
 }
+
+// Stop provides a mock function with given fields:
+func (_m *MessageDispatcher) Stop() {
+	_m.Called()
+}

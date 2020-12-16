@@ -33,7 +33,7 @@ func getNewBroadcastController(msgRepo storage.MessageRepository) (*BroadcastCon
 }
 
 func getConcreteNewBroadcastController(msgRepo storage.MessageRepository) *BroadcastController {
-	return NewBroadcastController(channelRepo, msgRepo, producerRepo, dispatcher.NewMessageDispatcher(messageRepo, consumerRepo))
+	return NewBroadcastController(channelRepo, msgRepo, producerRepo, dispatcher.NewMessageDispatcher(messageRepo, consumerRepo, configuration, configuration))
 }
 
 type mockCloser struct {

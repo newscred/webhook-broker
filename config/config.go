@@ -61,7 +61,7 @@ var (
 	loadConfiguration = defaultLoadFunc
 	errDBDialect      = errors.New("DB Dialect not supported")
 	// ConfigInjector sets up configuration related bindings
-	ConfigInjector = wire.NewSet(GetConfigurationFromCLIConfig, wire.Bind(new(SeedDataConfig), new(*Config)), wire.Bind(new(HTTPConfig), new(*Config)), wire.Bind(new(RelationalDatabaseConfig), new(*Config)), wire.Bind(new(LogConfig), new(*Config)))
+	ConfigInjector = wire.NewSet(GetConfigurationFromCLIConfig, wire.Bind(new(SeedDataConfig), new(*Config)), wire.Bind(new(HTTPConfig), new(*Config)), wire.Bind(new(RelationalDatabaseConfig), new(*Config)), wire.Bind(new(LogConfig), new(*Config)), wire.Bind(new(BrokerConfig), new(*Config)), wire.Bind(new(ConsumerConnectionConfig), new(*Config)))
 )
 
 var currentUser = user.Current

@@ -45,6 +45,7 @@ type HTTPServiceContainer struct {
 	Server        *http.Server
 	DataAccessor  storage.DataAccessor
 	Listener      *ServerLifecycleListenerImpl
+	Dispatcher    dispatcher.MessageDispatcher
 }
 
 var (
@@ -210,6 +211,7 @@ func main() {
 	// Setup Log Output
 	setupLogger(httpServiceContainer.Configuration)
 	<-httpServiceContainer.Listener.shutdownListener
+	httpServiceContainer.Dispatcher.Stop()
 }
 
 func setupLogger(config config.LogConfig) {
@@ -236,11 +238,6 @@ func GetMigrationConfig(cliConfig *config.CLIConfig) *storage.MigrationConfig {
 	return &storage.MigrationConfig{MigrationEnabled: cliConfig.IsMigrationEnabled(), MigrationSource: cliConfig.MigrationSource}
 }
 
-// NewHTTPServiceContainer is provider for http service container
-func NewHTTPServiceContainer(config *config.Config, listener *ServerLifecycleListenerImpl, server *http.Server, dataAccessor storage.DataAccessor) *HTTPServiceContainer {
-	return &HTTPServiceContainer{Configuration: config, Server: server, Listener: listener, DataAccessor: dataAccessor}
-}
-
 func newAppRepository(dataAccessor storage.DataAccessor) storage.AppRepository {
 	return dataAccessor.GetAppRepository()
 }
@@ -262,6 +259,7 @@ func newMessageRepository(dataAccessor storage.DataAccessor) storage.MessageRepo
 }
 
 var (
-	configInjectorSet             = wire.NewSet(NewHTTPServiceContainer, NewServerListener, GetMigrationConfig, wire.Bind(new(controllers.ServerLifecycleListener), new(*ServerLifecycleListenerImpl)), config.ConfigInjector)
-	relationalDBWithControllerSet = wire.NewSet(controllers.ControllerInjector, storage.GetNewDataAccessor, newAppRepository, newChannelRepository, newProducerRepository, newConsumerRepository, newMessageRepository, dispatcher.DispatcherInjector)
+	httpServiceContainerInjectorSet = wire.NewSet(wire.Struct(new(HTTPServiceContainer), "Configuration", "Server", "DataAccessor", "Listener", "Dispatcher"))
+	configInjectorSet               = wire.NewSet(httpServiceContainerInjectorSet, NewServerListener, GetMigrationConfig, wire.Bind(new(controllers.ServerLifecycleListener), new(*ServerLifecycleListenerImpl)), config.ConfigInjector)
+	relationalDBWithControllerSet   = wire.NewSet(controllers.ControllerInjector, storage.GetNewDataAccessor, newAppRepository, newChannelRepository, newProducerRepository, newConsumerRepository, newMessageRepository, dispatcher.DispatcherInjector)
 )
