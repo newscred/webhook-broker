@@ -16,6 +16,7 @@ import (
 
 const (
 	successfulGetTestConsumerID      = "get-test"
+	successfulGetByIDTestConsumerID  = "get-test-by-ID"
 	nonExistingGetTestConsumerID     = "get-test-ne"
 	successfulInsertTestConsumerID   = "s-insert-test"
 	invalidStateUpdateTestConsumerID = "i-update-test"
@@ -75,7 +76,7 @@ func TestConsumerGet(t *testing.T) {
 		consumer, err := repo.Get(channel1.ChannelID, successfulGetTestConsumerID)
 		assert.Nil(t, err)
 		assert.False(t, consumer.ID.IsNil())
-		assert.Equal(t, sampleConsumer.ID, consumer.ID)
+		assert.Equal(t, resultConsumer.ID, consumer.ID)
 		assert.Equal(t, successfulGetTestConsumerID, consumer.ConsumerID)
 		assert.Equal(t, successfulGetTestConsumerID, consumer.Name)
 		assert.Equal(t, successfulGetTestToken, consumer.Token)
@@ -88,6 +89,36 @@ func TestConsumerGet(t *testing.T) {
 		t.Parallel()
 		repo := getConsumerRepo()
 		_, err := repo.Get(channel1.ChannelID, nonExistingGetTestConsumerID)
+		assert.NotNil(t, err)
+	})
+}
+
+func TestConsumerGetByID(t *testing.T) {
+	t.Run("GetExisting", func(t *testing.T) {
+		t.Parallel()
+		repo := getConsumerRepo()
+		sampleConsumer, err := data.NewConsumer(channel1, successfulGetByIDTestConsumerID, successfulGetTestToken, callbackURL)
+		assert.Nil(t, err)
+		assert.True(t, sampleConsumer.IsInValidState())
+		resultConsumer, err := repo.Store(sampleConsumer)
+		assert.Nil(t, err)
+		assert.False(t, resultConsumer.ID.IsNil())
+		consumer, err := repo.GetByID(resultConsumer.ID.String())
+		assert.Nil(t, err)
+		assert.False(t, consumer.ID.IsNil())
+		assert.Equal(t, resultConsumer.ID, consumer.ID)
+		assert.Equal(t, successfulGetByIDTestConsumerID, consumer.ConsumerID)
+		assert.Equal(t, successfulGetByIDTestConsumerID, consumer.Name)
+		assert.Equal(t, successfulGetTestToken, consumer.Token)
+		assert.False(t, consumer.CreatedAt.IsZero())
+		assert.False(t, consumer.UpdatedAt.IsZero())
+		assert.True(t, consumer.CreatedAt.Before(time.Now()))
+		assert.True(t, consumer.UpdatedAt.Before(time.Now()))
+	})
+	t.Run("GetByIDMissing", func(t *testing.T) {
+		t.Parallel()
+		repo := getConsumerRepo()
+		_, err := repo.GetByID(nonExistingGetTestConsumerID)
 		assert.NotNil(t, err)
 	})
 }
@@ -212,8 +243,8 @@ func TestConsumerStore(t *testing.T) {
 		mockChannelRepo.On("Get", channel2.ChannelID).Return(channel2, nil)
 		consumer, _ := data.NewConsumer(channel2, dbErrUpdateTestConsumerID, successfulGetTestToken, callbackURL)
 		consumer.QuickFix()
-		rows := sqlmock.NewRows([]string{"id", "consumerId", "name", "token", "callbackUrl", "createdAt", "updatedAt"}).AddRow(consumer.ID, consumer.ConsumerID, consumer.Name, consumer.Token, consumer.CallbackURL, consumer.CreatedAt, consumer.UpdatedAt)
-		mock.ExpectQuery("SELECT id, consumerId, name, token, callbackUrl, createdAt, updatedAt FROM consumer WHERE channelId like").WithArgs(channel2.ChannelID, dbErrUpdateTestConsumerID).WillReturnRows(rows).WillReturnError(nil)
+		rows := sqlmock.NewRows([]string{"id", "consumerId", "channelId", "name", "token", "callbackUrl", "createdAt", "updatedAt"}).AddRow(consumer.ID, consumer.ConsumerID, channel2.ChannelID, consumer.Name, consumer.Token, consumer.CallbackURL, consumer.CreatedAt, consumer.UpdatedAt)
+		mock.ExpectQuery(consumerSelectRowCommonQuery+" channelId like").WithArgs(channel2.ChannelID, dbErrUpdateTestConsumerID).WillReturnRows(rows).WillReturnError(nil)
 		mock.ExpectBegin()
 		mock.ExpectExec("UPDATE consumer").WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), dbErrUpdateTestConsumerID, channel2.ChannelID).WillReturnError(expectedErr)
 		mock.ExpectRollback()
@@ -232,8 +263,8 @@ func TestConsumerStore(t *testing.T) {
 		consumer.QuickFix()
 		mockChannelRepo := new(MockChannelRepository)
 		mockChannelRepo.On("Get", channel2.ChannelID).Return(channel2, nil)
-		rows := sqlmock.NewRows([]string{"id", "consumerId", "name", "token", "callbackUrl", "createdAt", "updatedAt"}).AddRow(consumer.ID, consumer.ConsumerID, consumer.Name, consumer.Token, consumer.CallbackURL, consumer.CreatedAt, consumer.UpdatedAt)
-		mock.ExpectQuery("SELECT id, consumerId, name, token, callbackUrl, createdAt, updatedAt FROM consumer WHERE channelId like").WithArgs(channel2.ChannelID, dbErrUpdateTestConsumerID).WillReturnRows(rows).WillReturnError(nil)
+		rows := sqlmock.NewRows([]string{"id", "consumerId", "channelId", "name", "token", "callbackUrl", "createdAt", "updatedAt"}).AddRow(consumer.ID, consumer.ConsumerID, channel2.ChannelID, consumer.Name, consumer.Token, consumer.CallbackURL, consumer.CreatedAt, consumer.UpdatedAt)
+		mock.ExpectQuery(consumerSelectRowCommonQuery+" channelId like").WithArgs(channel2.ChannelID, dbErrUpdateTestConsumerID).WillReturnRows(rows).WillReturnError(nil)
 		result := sqlmock.NewResult(1, 0)
 		mock.ExpectBegin()
 		mock.ExpectExec("UPDATE consumer").WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), dbErrUpdateTestConsumerID, channel2.ChannelID).WillReturnResult(result).WillReturnError(nil)

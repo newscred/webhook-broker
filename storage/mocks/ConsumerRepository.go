@@ -49,6 +49,29 @@ func (_m *ConsumerRepository) Get(channelID string, consumerID string) (*data.Co
 	return r0, r1
 }
 
+// GetByID provides a mock function with given fields: id
+func (_m *ConsumerRepository) GetByID(id string) (*data.Consumer, error) {
+	ret := _m.Called(id)
+
+	var r0 *data.Consumer
+	if rf, ok := ret.Get(0).(func(string) *data.Consumer); ok {
+		r0 = rf(id)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*data.Consumer)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(string) error); ok {
+		r1 = rf(id)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // GetList provides a mock function with given fields: channelID, page
 func (_m *ConsumerRepository) GetList(channelID string, page *data.Pagination) ([]*data.Consumer, *data.Pagination, error) {
 	ret := _m.Called(channelID, page)

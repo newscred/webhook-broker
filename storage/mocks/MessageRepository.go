@@ -48,3 +48,26 @@ func (_m *MessageRepository) Get(channelID string, messageID string) (*data.Mess
 
 	return r0, r1
 }
+
+// GetByID provides a mock function with given fields: id
+func (_m *MessageRepository) GetByID(id string) (*data.Message, error) {
+	ret := _m.Called(id)
+
+	var r0 *data.Message
+	if rf, ok := ret.Get(0).(func(string) *data.Message); ok {
+		r0 = rf(id)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*data.Message)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(string) error); ok {
+		r1 = rf(id)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}

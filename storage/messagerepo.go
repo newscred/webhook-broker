@@ -19,6 +19,10 @@ var (
 	ErrDuplicateMessageIDForChannel = errors.New("duplicate message id for channel")
 )
 
+const (
+	messageSelectRowCommonQuery = "SELECT id, messageId, producerId, channelId, payload, contentType, priority, status, receivedAt, outboxedAt, createdAt, updatedAt FROM message WHERE"
+)
+
 // Create creates a new message if message.MessageID does not already exist; please ensure QuickFix is called before repo is called
 func (msgRepo *MessageDBRepository) Create(message *data.Message) (err error) {
 	if !message.IsInValidState() {
@@ -38,24 +42,34 @@ func (msgRepo *MessageDBRepository) Create(message *data.Message) (err error) {
 
 // Get retrieves a message for a channel if it exists
 func (msgRepo *MessageDBRepository) Get(channelID string, messageID string) (*data.Message, error) {
-	message := &data.Message{}
 	channel, err := msgRepo.channelRepository.Get(channelID)
-	var producerID string
-	if err == nil {
-		err = querySingleRow(msgRepo.db, "SELECT id, producerId, messageId, payload, contentType, priority, status, receivedAt, outboxedAt, createdAt, updatedAt FROM message WHERE channelId like $1 and messageId like $2",
-			args2SliceFnWrapper(channelID, messageID),
-			args2SliceFnWrapper(&message.ID, &producerID, &message.MessageID, &message.Payload, &message.ContentType, &message.Priority, &message.Status, &message.ReceivedAt, &message.OutboxedAt, &message.CreatedAt, &message.UpdatedAt))
-	}
+	message, err := msgRepo.getSingleMessage(messageSelectRowCommonQuery+" channelId like $1 and messageId like $2", args2SliceFnWrapper(channelID, messageID), false)
 	if err == nil {
 		message.BroadcastedTo = channel
-		producer, pErr := msgRepo.producerRepository.Get(producerID)
-		if pErr == nil {
-			message.ProducedBy = producer
-		} else {
-			err = pErr
-		}
 	}
 	return message, err
+}
+
+func (msgRepo *MessageDBRepository) getSingleMessage(query string, queryArgs func() []interface{}, loadChannel bool) (message *data.Message, err error) {
+	var producerID string
+	var channelID string
+	message = &data.Message{}
+	if err == nil {
+		err = querySingleRow(msgRepo.db, query, queryArgs,
+			args2SliceFnWrapper(&message.ID, &message.MessageID, &producerID, &channelID, &message.Payload, &message.ContentType, &message.Priority, &message.Status, &message.ReceivedAt, &message.OutboxedAt, &message.CreatedAt, &message.UpdatedAt))
+	}
+	if err == nil {
+		message.ProducedBy, err = msgRepo.producerRepository.Get(producerID)
+	}
+	if loadChannel && err == nil {
+		message.BroadcastedTo, err = msgRepo.channelRepository.Get(channelID)
+	}
+	return message, err
+}
+
+// GetByID retrieves a message by its ID
+func (msgRepo *MessageDBRepository) GetByID(id string) (*data.Message, error) {
+	return msgRepo.getSingleMessage(messageSelectRowCommonQuery+" id like $1", args2SliceFnWrapper(id), true)
 }
 
 // NewMessageRepository creates a new instance of MessageRepository

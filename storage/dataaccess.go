@@ -42,10 +42,12 @@ type ConsumerRepository interface {
 	Delete(consumer *data.Consumer) error
 	Get(channelID string, consumerID string) (*data.Consumer, error)
 	GetList(channelID string, page *data.Pagination) ([]*data.Consumer, *data.Pagination, error)
+	GetByID(id string) (*data.Consumer, error)
 }
 
 // MessageRepository allows storage operations over Message
 type MessageRepository interface {
 	Create(message *data.Message) error
 	Get(channelID string, messageID string) (*data.Message, error)
+	GetByID(id string) (*data.Message, error)
 }

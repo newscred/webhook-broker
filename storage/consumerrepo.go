@@ -7,6 +7,10 @@ import (
 	"github.com/imyousuf/webhook-broker/storage/data"
 )
 
+const (
+	consumerSelectRowCommonQuery = "SELECT id, consumerId, channelId, name, token, callbackUrl, createdAt, updatedAt FROM consumer WHERE"
+)
+
 // ConsumerDBRepository is the RDBMS implementation for ConsumerRepository
 type ConsumerDBRepository struct {
 	db                *sql.DB
@@ -61,16 +65,24 @@ func (consumerRepo *ConsumerDBRepository) Delete(consumer *data.Consumer) error 
 }
 
 // Get retrieves consumer for specific consumer, error if either consumer or channel does not exist
-func (consumerRepo *ConsumerDBRepository) Get(channelID string, consumerID string) (*data.Consumer, error) {
-	consumer := &data.Consumer{}
+func (consumerRepo *ConsumerDBRepository) Get(channelID string, consumerID string) (consumer *data.Consumer, err error) {
 	channel, err := consumerRepo.channelRepository.Get(channelID)
 	if err == nil {
-		err = querySingleRow(consumerRepo.db, "SELECT id, consumerId, name, token, callbackUrl, createdAt, updatedAt FROM consumer WHERE channelId like $1 and consumerId like $2",
-			args2SliceFnWrapper(channelID, consumerID),
-			args2SliceFnWrapper(&consumer.ID, &consumer.ConsumerID, &consumer.Name, &consumer.Token, &consumer.CallbackURL, &consumer.CreatedAt, &consumer.UpdatedAt))
+		consumer, err = consumerRepo.getSingleConsumer(consumerSelectRowCommonQuery+" channelId like $1 and consumerId like $2", args2SliceFnWrapper(channelID, consumerID), false)
 	}
 	if err == nil {
 		consumer.ConsumingFrom = channel
+	}
+	return consumer, err
+}
+
+func (consumerRepo *ConsumerDBRepository) getSingleConsumer(query string, queryArgs func() []interface{}, loadChannel bool) (consumer *data.Consumer, err error) {
+	consumer = &data.Consumer{}
+	var channelID string
+	err = querySingleRow(consumerRepo.db, query, queryArgs,
+		args2SliceFnWrapper(&consumer.ID, &consumer.ConsumerID, &channelID, &consumer.Name, &consumer.Token, &consumer.CallbackURL, &consumer.CreatedAt, &consumer.UpdatedAt))
+	if loadChannel && err == nil {
+		consumer.ConsumingFrom, err = consumerRepo.channelRepository.Get(channelID)
 	}
 	return consumer, err
 }
@@ -100,6 +112,11 @@ func (consumerRepo *ConsumerDBRepository) GetList(channelID string, page *data.P
 		}
 	}
 	return consumers, pagination, err
+}
+
+// GetByID retrieves a consumer by its ID
+func (consumerRepo *ConsumerDBRepository) GetByID(id string) (consumer *data.Consumer, err error) {
+	return consumerRepo.getSingleConsumer(consumerSelectRowCommonQuery+" id like $1", args2SliceFnWrapper(id), true)
 }
 
 // NewConsumerRepository initializes new consumer repository

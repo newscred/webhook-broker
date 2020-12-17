@@ -31,6 +31,29 @@ func getMessageRepository() MessageRepository {
 	return NewMessageRepository(testDB, NewChannelRepository(testDB), NewProducerRepository(testDB))
 }
 
+func TestMessageGetByID(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
+		t.Parallel()
+		repo := getMessageRepository()
+		msg, err := data.NewMessage(channel1, producer1, samplePayload, sampleContentType)
+		assert.Nil(t, err)
+		assert.Nil(t, repo.Create(msg))
+		rMsg, err := repo.GetByID(msg.ID.String())
+		assert.Nil(t, err)
+		assert.NotNil(t, rMsg)
+		assert.Equal(t, channel1.ID, msg.BroadcastedTo.ID)
+		assert.Equal(t, producer1.ID, msg.ProducedBy.ID)
+		assert.Equal(t, samplePayload, msg.Payload)
+		assert.Equal(t, sampleContentType, msg.ContentType)
+	})
+	t.Run("Fail", func(t *testing.T) {
+		t.Parallel()
+		repo := getMessageRepository()
+		_, err := repo.GetByID("non-existing-id")
+		assert.NotNil(t, err)
+	})
+}
+
 func TestMessageGetCreate(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		t.Parallel()
