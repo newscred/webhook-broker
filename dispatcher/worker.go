@@ -42,13 +42,13 @@ func (w *Worker) Start() {
 			select {
 			case job := <-w.jobChannel:
 				// we have received a work request.
-				req, reqErr := http.NewRequest("POST", "http://localhost:58080/consumer", strings.NewReader(job.Data.Payload))
+				req, reqErr := http.NewRequest("POST", "http://localhost:58080/consumer", strings.NewReader(job.Data.Message.Payload))
 				if reqErr != nil {
 					fmt.Println(reqErr)
 					return
 				}
 				req.Header.Set("Content-Type", "text/plain")
-				req.Header.Set("X-Broker-Message-Priority", strconv.Itoa(job.Priority))
+				req.Header.Set("X-Broker-Message-Priority", strconv.Itoa(int(job.Priority)))
 				_, err := client.Do(req)
 				if err != nil {
 					fmt.Println(err)

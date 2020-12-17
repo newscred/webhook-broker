@@ -12,6 +12,11 @@ var (
 
 // Job represents the job to be run
 type Job struct {
-	Data     *data.Message
-	Priority int
+	Data     *data.DeliveryJob
+	Priority uint
+}
+
+// NewJob returns a new instance of Job. Only call this method if Job.IsInValidState() is true, else can result a panic
+func NewJob(job *data.DeliveryJob) *Job {
+	return &Job{Data: job, Priority: job.Message.Priority}
 }

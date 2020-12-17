@@ -5,6 +5,7 @@
 | *Version* | 1 |
 | *By* | Imran M Yousuf |
 | *Date* | November 10, 2020 |
+| *Last Update* | December 16, 2020 |
 
 ## Problem Statement / Goal
 
@@ -58,7 +59,7 @@ Moreover, it is not polling based and with HTTP/2 multiplexing it makes it lucra
 | Message | The payload Producer wants distributed across the Consumer within a Channel |
 | Message Delivery | Reaching the consumer with the message should be considered as delivery, in case of success it would be marked as consumed, else end up in dead letter queue |
 | Message Status | Message has 2 status - Acknowledged and Out-for-delivery |
-| Message Delivery Status | Message Delivery status is associated with a Message, Channel and Consumer combination and is a enumeration of - In-flight, Retry-Delivery, Retry-In-flight, Delivered, Dead |
+| Message Delivery Status | Message Delivery status is associated with a Message, Channel and Consumer combination and is a enumeration of - Queued, In-flight, Delivered, Dead |
 | Rational-delay | Time delta for fail-safe mechanism to kick in |
 | Delivery-Timeout | How long will we wait for message delivery to finish before we step in |
 
@@ -135,10 +136,10 @@ There is 2 entry points to the process.
 For each message delivery we would have to follow the delivery lifecycle as designated by the _Message Delivery Status_. Here too, there will be 2 triggering functions -
 
 * Triggered by fail-safe mechanism
-  * Retrieve message deliveries in _Retry-Delivery_ with _next attempt timestamp_ past rational-delay
+  * Retrieve message deliveries in _Queued_ with _next attempt timestamp_ past rational-delay
   * For each message delivery run the _Triggered by Start Delivery Process_ process
 * Triggered by Start Delivery Process
-  * Update message delivery status to _Retry-In-Flight_ if the status is _Retry-Delivery_
+  * Update message delivery status to _In-Flight_
   * For delivery message retrieve consumer
   * Attempt to deliver message
   * Wait for the period of Delivery-Timeout
