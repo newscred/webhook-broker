@@ -1,6 +1,8 @@
 package storage
 
 import (
+	"context"
+
 	"github.com/imyousuf/webhook-broker/config"
 	"github.com/imyousuf/webhook-broker/storage/data"
 )
@@ -12,6 +14,7 @@ type DataAccessor interface {
 	GetChannelRepository() ChannelRepository
 	GetConsumerRepository() ConsumerRepository
 	GetMessageRepository() MessageRepository
+	GetDeliveryJobRepository() DeliveryJobRepository
 	Close()
 }
 
@@ -45,9 +48,15 @@ type ConsumerRepository interface {
 	GetByID(id string) (*data.Consumer, error)
 }
 
-// MessageRepository allows storage operations over Message
+// MessageRepository allows storage operations over Message. SetDispatched does not accept TX directly to keep the API storage class independent
 type MessageRepository interface {
 	Create(message *data.Message) error
 	Get(channelID string, messageID string) (*data.Message, error)
 	GetByID(id string) (*data.Message, error)
+	SetDispatched(txContext context.Context, message *data.Message) error
+}
+
+// DeliveryJobRepository allows storage operations over DeliveryJob
+type DeliveryJobRepository interface {
+	DispatchMessage(message *data.Message, deliveryJobs ...*data.DeliveryJob) error
 }

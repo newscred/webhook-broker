@@ -28,6 +28,7 @@ func TestMain(m *testing.M) {
 	if dbErr == nil {
 		SetupForConsumerTests()
 		SetupForMessageTests()
+		SetupForDeliveryJobTests()
 		m.Run()
 	}
 	testDB.Close()
@@ -124,6 +125,7 @@ func TestGetNewDataAccessor(t *testing.T) {
 		assert.NotNil(t, dataAccessor.GetChannelRepository())
 		assert.NotNil(t, dataAccessor.GetConsumerRepository())
 		assert.NotNil(t, dataAccessor.GetMessageRepository())
+		assert.NotNil(t, dataAccessor.GetDeliveryJobRepository())
 		// Does nothing
 		dataAccessor.Close()
 		t.Run("InitAppSkip", func(t *testing.T) {

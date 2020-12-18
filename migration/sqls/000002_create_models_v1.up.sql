@@ -48,3 +48,19 @@ CREATE TABLE IF NOT EXISTS message (
     CONSTRAINT channelMessageRef FOREIGN KEY (channelId) REFERENCES channel(channelId) ON UPDATE CASCADE ON DELETE RESTRICT,
     CONSTRAINT producerMessageRef FOREIGN KEY (producerId) REFERENCES producer(producerId) ON UPDATE CASCADE ON DELETE RESTRICT
 );
+
+CREATE TABLE IF NOT EXISTS job (
+    id VARCHAR(255) NOT NULL PRIMARY KEY,
+    messageId VARCHAR(255) NOT NULL,
+    consumerId VARCHAR(255) NOT NULL,
+    status INTEGER NOT NULL,
+    retryAttemptCount INTEGER NOT NULL DEFAULT 0,
+    statusChangedAt DATETIME NOT NULL,
+    dispatchReceivedAt DATETIME NOT NULL,
+    earliestNextAttemptAt DATETIME NOT NULL,
+    createdAt DATETIME NOT NULL,
+    updatedAt DATETIME NOT NULL,
+    UNIQUE (messageId, consumerId),
+    CONSTRAINT messageJobRef FOREIGN KEY (messageId) REFERENCES message(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT consumerJobRef FOREIGN KEY (consumerId) REFERENCES consumer(id) ON UPDATE CASCADE ON DELETE RESTRICT
+);

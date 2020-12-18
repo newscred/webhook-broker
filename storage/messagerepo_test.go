@@ -1,9 +1,11 @@
 package storage
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/imyousuf/webhook-broker/storage/data"
 	"github.com/stretchr/testify/assert"
@@ -135,5 +137,30 @@ func TestMessageGetCreate(t *testing.T) {
 		_, err = repo.Get(channel1.ChannelID, msg.MessageID)
 		assert.NotNil(t, err)
 		assert.Equal(t, expectedErr, err)
+	})
+}
+
+func TestMessageSetDispatched(t *testing.T) {
+	// Success tested along in TestDispatchMessage/Success
+	t.Run("MessageNil", func(t *testing.T) {
+		t.Parallel()
+		msgRepo := getMessageRepository()
+		tx, _ := testDB.Begin()
+		assert.Equal(t, ErrInvalidStateToSave, msgRepo.SetDispatched(context.WithValue(context.Background(), txContextKey, tx), nil))
+	})
+	t.Run("MessageInvalid", func(t *testing.T) {
+		t.Parallel()
+		msgRepo := getMessageRepository()
+		message := getMessageForJob()
+		message.ReceivedAt = time.Time{}
+		tx, _ := testDB.Begin()
+		assert.Equal(t, ErrInvalidStateToSave, msgRepo.SetDispatched(context.WithValue(context.Background(), txContextKey, tx), message))
+	})
+	t.Run("NoTX", func(t *testing.T) {
+		t.Parallel()
+		msgRepo := getMessageRepository()
+		message := getMessageForJob()
+		tx, _ := testDB.Begin()
+		assert.Equal(t, ErrNoTxInContext, msgRepo.SetDispatched(context.WithValue(context.Background(), ContextKey("hello"), tx), message))
 	})
 }

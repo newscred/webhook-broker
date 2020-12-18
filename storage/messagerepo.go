@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 
@@ -17,10 +18,16 @@ type MessageDBRepository struct {
 var (
 	// ErrDuplicateMessageIDForChannel represents when the a message with same ID already exists
 	ErrDuplicateMessageIDForChannel = errors.New("duplicate message id for channel")
+	// ErrNoTxInContext represents the case where transaction is not passed in the context
+	ErrNoTxInContext = errors.New("no tx value in content")
 )
 
+// ContextKey represents context key
+type ContextKey string
+
 const (
-	messageSelectRowCommonQuery = "SELECT id, messageId, producerId, channelId, payload, contentType, priority, status, receivedAt, outboxedAt, createdAt, updatedAt FROM message WHERE"
+	messageSelectRowCommonQuery            = "SELECT id, messageId, producerId, channelId, payload, contentType, priority, status, receivedAt, outboxedAt, createdAt, updatedAt FROM message WHERE"
+	txContextKey                ContextKey = "tx"
 )
 
 // Create creates a new message if message.MessageID does not already exist; please ensure QuickFix is called before repo is called
@@ -70,6 +77,22 @@ func (msgRepo *MessageDBRepository) getSingleMessage(query string, queryArgs fun
 // GetByID retrieves a message by its ID
 func (msgRepo *MessageDBRepository) GetByID(id string) (*data.Message, error) {
 	return msgRepo.getSingleMessage(messageSelectRowCommonQuery+" id like $1", args2SliceFnWrapper(id), true)
+}
+
+// SetDispatched sets the status of the message to dispatched within the transaction passed via txContext
+func (msgRepo *MessageDBRepository) SetDispatched(txContext context.Context, message *data.Message) error {
+	if message == nil || !message.IsInValidState() {
+		return ErrInvalidStateToSave
+	}
+	tx, ok := txContext.Value(txContextKey).(*sql.Tx)
+	if ok {
+		err := inTransactionExec(tx, emptyOps, "UPDATE message SET status = $1 WHERE id like $2 and status like $3", args2SliceFnWrapper(data.MsgStatusDispatched, message.ID, data.MsgStatusAcknowledged), int64(1))
+		if err == nil {
+			message.Status = data.MsgStatusDispatched
+		}
+		return err
+	}
+	return ErrNoTxInContext
 }
 
 // NewMessageRepository creates a new instance of MessageRepository

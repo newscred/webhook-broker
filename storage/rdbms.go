@@ -30,12 +30,13 @@ type MigrationConfig struct {
 
 // RelationalDBDataAccessor represents the DataAccessor implementation for RDBMS
 type RelationalDBDataAccessor struct {
-	appRepository      AppRepository
-	producerRepository ProducerRepository
-	channelRepository  ChannelRepository
-	consumerRepository ConsumerRepository
-	messageRepository  MessageRepository
-	db                 *sql.DB
+	appRepository         AppRepository
+	producerRepository    ProducerRepository
+	channelRepository     ChannelRepository
+	consumerRepository    ConsumerRepository
+	messageRepository     MessageRepository
+	deliveryJobRepository DeliveryJobRepository
+	db                    *sql.DB
 }
 
 // GetAppRepository returns the AppRepository to be used for App ops
@@ -61,6 +62,11 @@ func (rdbmsDataAccessor *RelationalDBDataAccessor) GetConsumerRepository() Consu
 // GetMessageRepository retrieves the MessageRepository to be used for Message ops
 func (rdbmsDataAccessor *RelationalDBDataAccessor) GetMessageRepository() MessageRepository {
 	return rdbmsDataAccessor.messageRepository
+}
+
+// GetDeliveryJobRepository retrieves the DeliveryJobRepository to be used for DeliverJob ops
+func (rdbmsDataAccessor *RelationalDBDataAccessor) GetDeliveryJobRepository() DeliveryJobRepository {
+	return rdbmsDataAccessor.deliveryJobRepository
 }
 
 // Close closes the connection to DB
@@ -167,7 +173,7 @@ var (
 	// ErrDBConnectionNeverInitialized is returned when same NewDataAccessor is called the first time and it failed to connec to DB; in all subsequent calls the accessor will remain nil
 	ErrDBConnectionNeverInitialized = errors.New("DB Connection never initialized")
 	// RDBMSStorageInternalInjector injector for data storage related implementation
-	RDBMSStorageInternalInjector = wire.NewSet(GetConnectionPool, NewAppRepository, NewProducerRepository, NewChannelRepository, NewConsumerRepository, NewMessageRepository, wire.Struct(new(RelationalDBDataAccessor), "db", "appRepository", "producerRepository", "channelRepository", "consumerRepository", "messageRepository"), wire.Bind(new(DataAccessor), new(*RelationalDBDataAccessor)))
+	RDBMSStorageInternalInjector = wire.NewSet(GetConnectionPool, NewAppRepository, NewProducerRepository, NewChannelRepository, NewConsumerRepository, NewMessageRepository, NewDeliveryJobRepository, wire.Struct(new(RelationalDBDataAccessor), "db", "appRepository", "producerRepository", "channelRepository", "consumerRepository", "messageRepository", "deliveryJobRepository"), wire.Bind(new(DataAccessor), new(*RelationalDBDataAccessor)))
 )
 
 func panicIfNoDBConnectionPool(db *sql.DB) {
@@ -296,9 +302,25 @@ var (
 		return err
 	}
 
-	transactionalSingleRowWriteExec = func(db *sql.DB, prequeryOps func(), query string, arguments func() []interface{}) error {
-		return transactionalOperations(db, func(tx *sql.Tx) error {
+	getTxWrapperForSingleWriteQuery = func(prequeryOps func(), query string, arguments func() []interface{}) func(tx *sql.Tx) error {
+		return func(tx *sql.Tx) error {
 			return inTransactionExec(tx, prequeryOps, query, arguments, int64(1))
+		}
+	}
+
+	transactionalSingleRowWriteExec = func(db *sql.DB, prequeryOps func(), query string, arguments func() []interface{}) error {
+		return transactionalWrites(db, getTxWrapperForSingleWriteQuery(prequeryOps, query, arguments))
+	}
+
+	transactionalWrites = func(db *sql.DB, ops ...func(tx *sql.Tx) error) error {
+		return transactionalOperations(db, func(tx *sql.Tx) (err error) {
+			for _, op := range ops {
+				err = op(tx)
+				if err != nil {
+					break
+				}
+			}
+			return err
 		})
 	}
 

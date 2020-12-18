@@ -3,6 +3,8 @@
 package mocks
 
 import (
+	context "context"
+
 	data "github.com/imyousuf/webhook-broker/storage/data"
 	mock "github.com/stretchr/testify/mock"
 )
@@ -70,4 +72,18 @@ func (_m *MessageRepository) GetByID(id string) (*data.Message, error) {
 	}
 
 	return r0, r1
+}
+
+// SetDispatched provides a mock function with given fields: txContext, message
+func (_m *MessageRepository) SetDispatched(txContext context.Context, message *data.Message) error {
+	ret := _m.Called(txContext, message)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *data.Message) error); ok {
+		r0 = rf(txContext, message)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
 }

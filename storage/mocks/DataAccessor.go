@@ -65,6 +65,22 @@ func (_m *DataAccessor) GetConsumerRepository() storage.ConsumerRepository {
 	return r0
 }
 
+// GetDeliveryJobRepository provides a mock function with given fields:
+func (_m *DataAccessor) GetDeliveryJobRepository() storage.DeliveryJobRepository {
+	ret := _m.Called()
+
+	var r0 storage.DeliveryJobRepository
+	if rf, ok := ret.Get(0).(func() storage.DeliveryJobRepository); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(storage.DeliveryJobRepository)
+		}
+	}
+
+	return r0
+}
+
 // GetMessageRepository provides a mock function with given fields:
 func (_m *DataAccessor) GetMessageRepository() storage.MessageRepository {
 	ret := _m.Called()
