@@ -10,7 +10,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/imyousuf/webhook-broker/dispatcher"
 	dispatchermocks "github.com/imyousuf/webhook-broker/dispatcher/mocks"
 	"github.com/imyousuf/webhook-broker/storage"
 	"github.com/imyousuf/webhook-broker/storage/data"
@@ -31,10 +30,6 @@ func BroadcastTestSetup() {
 func getNewBroadcastController(msgRepo storage.MessageRepository) (*BroadcastController, *dispatchermocks.MessageDispatcher) {
 	mockDispatcher := new(dispatchermocks.MessageDispatcher)
 	return NewBroadcastController(channelRepo, msgRepo, producerRepo, mockDispatcher), mockDispatcher
-}
-
-func getConcreteNewBroadcastController(msgRepo storage.MessageRepository) *BroadcastController {
-	return NewBroadcastController(channelRepo, msgRepo, producerRepo, dispatcher.NewMessageDispatcher(messageRepo, consumerRepo, configuration, configuration))
 }
 
 type mockCloser struct {

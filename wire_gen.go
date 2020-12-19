@@ -41,7 +41,8 @@ func GetHTTPServer(cliConfig *config.CLIConfig) (*HTTPServiceContainer, error) {
 	consumersController := controllers.NewConsumersController(consumerController, consumerRepository)
 	channelController := controllers.NewChannelController(consumersController, channelRepository)
 	messageRepository := newMessageRepository(dataAccessor)
-	messageDispatcher := dispatcher.NewMessageDispatcher(messageRepository, consumerRepository, configConfig, configConfig)
+	deliveryJobRepository := newDeliveryJobRepository(dataAccessor)
+	messageDispatcher := dispatcher.NewMessageDispatcher(deliveryJobRepository, consumerRepository, configConfig, configConfig)
 	broadcastController := controllers.NewBroadcastController(channelRepository, messageRepository, producerRepository, messageDispatcher)
 	controllersControllers := &controllers.Controllers{
 		StatusController:    statusController,

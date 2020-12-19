@@ -1,29 +1,25 @@
 package dispatcher
 
 import (
-	"fmt"
-	"net/http"
-	"strconv"
-	"strings"
-	"time"
+	"log"
 
 	"github.com/imyousuf/webhook-broker/config"
 )
 
 // Worker represents the worker that executes the job
 type Worker struct {
-	workerPool               chan chan Job
-	jobChannel               chan Job
+	workerPool               chan chan *Job
+	jobChannel               chan *Job
 	quit                     chan bool
 	consumerConnectionConfig config.ConsumerConnectionConfig
 	working                  bool
 }
 
 // NewWorker creates a Worker
-func NewWorker(workerPool chan chan Job, consumerConfig config.ConsumerConnectionConfig) Worker {
+func NewWorker(workerPool chan chan *Job, consumerConfig config.ConsumerConnectionConfig) Worker {
 	return Worker{
 		workerPool:               workerPool,
-		jobChannel:               make(chan Job, 1),
+		jobChannel:               make(chan *Job, 1),
 		quit:                     make(chan bool, 1),
 		working:                  false,
 		consumerConnectionConfig: consumerConfig}
@@ -32,7 +28,6 @@ func NewWorker(workerPool chan chan Job, consumerConfig config.ConsumerConnectio
 // Start method starts the run loop for the worker, listening for a quit channel in
 // case we need to stop it
 func (w *Worker) Start() {
-	var client = &http.Client{Timeout: time.Second * 10}
 	go func() {
 		w.working = true
 		for {
@@ -42,18 +37,7 @@ func (w *Worker) Start() {
 			select {
 			case job := <-w.jobChannel:
 				// we have received a work request.
-				req, reqErr := http.NewRequest("POST", "http://localhost:58080/consumer", strings.NewReader(job.Data.Message.Payload))
-				if reqErr != nil {
-					fmt.Println(reqErr)
-					return
-				}
-				req.Header.Set("Content-Type", "text/plain")
-				req.Header.Set("X-Broker-Message-Priority", strconv.Itoa(int(job.Priority)))
-				_, err := client.Do(req)
-				if err != nil {
-					fmt.Println(err)
-				}
-				req.Body.Close()
+				log.Println("info - processing job in worker", job.Data.ID.String())
 
 			case <-w.quit:
 				// we have received a signal to stop
