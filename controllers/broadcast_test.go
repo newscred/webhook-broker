@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/imyousuf/webhook-broker/dispatcher"
@@ -215,9 +216,10 @@ func TestBroadcastControllerPost(t *testing.T) {
 				msg.IsInValidState()
 		}
 		msgRepo.On("Create", mock.MatchedBy(matcher)).Return(nil)
-		mockDispatcher.On("Dispatch", mock.MatchedBy(matcher))
+		wg := setupAsyncDispatchMock(mockDispatcher, matcher)
 		rr := httptest.NewRecorder()
 		testRouter.ServeHTTP(rr, req)
+		wg.Wait()
 		assert.Equal(t, http.StatusAccepted, rr.Code)
 		msgRepo.AssertExpectations(t)
 		mockDispatcher.AssertExpectations(t)
@@ -273,9 +275,10 @@ func TestBroadcastControllerPost(t *testing.T) {
 				msg.IsInValidState()
 		}
 		msgRepo.On("Create", mock.MatchedBy(matcher)).Return(nil)
-		mockDispatcher.On("Dispatch", mock.MatchedBy(matcher))
+		wg := setupAsyncDispatchMock(mockDispatcher, matcher)
 		rr := httptest.NewRecorder()
 		testRouter.ServeHTTP(rr, req)
+		wg.Wait()
 		assert.Equal(t, http.StatusAccepted, rr.Code)
 		msgRepo.AssertExpectations(t)
 		mockDispatcher.AssertExpectations(t)
@@ -301,11 +304,21 @@ func TestBroadcastControllerPost(t *testing.T) {
 				msg.IsInValidState()
 		}
 		msgRepo.On("Create", mock.MatchedBy(matcher)).Return(nil)
-		mockDispatcher.On("Dispatch", mock.MatchedBy(matcher))
+		wg := setupAsyncDispatchMock(mockDispatcher, matcher)
 		rr := httptest.NewRecorder()
 		testRouter.ServeHTTP(rr, req)
+		wg.Wait()
 		assert.Equal(t, http.StatusAccepted, rr.Code)
 		msgRepo.AssertExpectations(t)
 		mockDispatcher.AssertExpectations(t)
 	})
+}
+
+func setupAsyncDispatchMock(mockDispatcher *dispatchermocks.MessageDispatcher, matcher func(msg *data.Message) bool) *sync.WaitGroup {
+	var wg sync.WaitGroup
+	wg.Add(1)
+	mockDispatcher.On("Dispatch", mock.MatchedBy(matcher)).Return().Run(func(args mock.Arguments) {
+		wg.Done()
+	})
+	return &wg
 }

@@ -82,7 +82,7 @@ func (broadcastController *BroadcastController) Post(w http.ResponseWriter, r *h
 	message, _ := data.NewMessage(channel, producer, string(body), contentType)
 	message.Priority = uint(math.Abs(float64(priority)))
 	if err = broadcastController.MessageRepository.Create(message); err == nil {
-		broadcastController.Dispatcher.Dispatch(message)
+		go broadcastController.Dispatcher.Dispatch(message)
 		writeStatus(w, http.StatusAccepted, nil)
 	} else {
 		writeErr(w, err)
