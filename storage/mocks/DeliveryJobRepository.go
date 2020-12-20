@@ -35,6 +35,29 @@ func (_m *DeliveryJobRepository) DispatchMessage(message *data.Message, delivery
 	return r0
 }
 
+// GetByID provides a mock function with given fields: id
+func (_m *DeliveryJobRepository) GetByID(id string) (*data.DeliveryJob, error) {
+	ret := _m.Called(id)
+
+	var r0 *data.DeliveryJob
+	if rf, ok := ret.Get(0).(func(string) *data.DeliveryJob); ok {
+		r0 = rf(id)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*data.DeliveryJob)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(string) error); ok {
+		r1 = rf(id)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // GetJobsForMessage provides a mock function with given fields: message, page
 func (_m *DeliveryJobRepository) GetJobsForMessage(message *data.Message, page *data.Pagination) ([]*data.DeliveryJob, *data.Pagination, error) {
 	ret := _m.Called(message, page)

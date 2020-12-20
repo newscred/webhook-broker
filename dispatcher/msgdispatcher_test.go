@@ -252,6 +252,14 @@ func TestMessageDispatcherImplDispatch(t *testing.T) {
 		t.Parallel()
 		t.Cleanup(clearConsumerHandler)
 		var wg sync.WaitGroup
+		oldDeliverJob := deliverJob
+		deliverJob = func(w *Worker, job *Job) {
+			oldDeliverJob(w, job)
+			wg.Done()
+		}
+		defer func() {
+			deliverJob = oldDeliverJob
+		}()
 		messagePayload := `{"key": "Custom JSON"}`
 		contentType := "application/json"
 		for index := 0; index < len(consumers); index++ {
@@ -267,7 +275,6 @@ func TestMessageDispatcherImplDispatch(t *testing.T) {
 				} else {
 					rw.WriteHeader(http.StatusNoContent)
 				}
-				wg.Done()
 			}
 		}
 		wg.Add(len(consumers))
@@ -281,8 +288,11 @@ func TestMessageDispatcherImplDispatch(t *testing.T) {
 		assert.Nil(t, err)
 		assert.Equal(t, len(consumers), len(jobs))
 		for _, job := range jobs {
-			// TODO: Fix status assert once repo functions are implemented
-			assert.Equal(t, data.JobQueued, job.Status)
+			if job.Listener.ConsumerID == consumerIDPrefix+"0" {
+				assert.Equal(t, data.JobQueued, job.Status)
+			} else {
+				assert.Equal(t, data.JobDelivered, job.Status)
+			}
 		}
 	})
 	t.Run("t", func(t *testing.T) { t.Parallel() })

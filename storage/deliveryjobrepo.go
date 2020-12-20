@@ -10,7 +10,8 @@ import (
 )
 
 const (
-	jobPropertyCount = 9
+	jobPropertyCount  = 9
+	commonSelectQuery = "SELECT id, messageId, consumerId, status, dispatchReceivedAt, retryAttemptCount, statusChangedAt, earliestNextAttemptAt, createdAt, updatedAt FROM job WHERE"
 )
 
 // DeliveryJobDBRepository is the DeliveryJobRepository's RDBMS implementation
@@ -48,23 +49,44 @@ func (djRepo *DeliveryJobDBRepository) DispatchMessage(message *data.Message, de
 	return err
 }
 
-// MarkJobInflight sets the status of the job to Inflight if job's current state in the object and DB is Queued; else returns error
-func (djRepo *DeliveryJobDBRepository) MarkJobInflight(deliveryJob *data.DeliveryJob) (err error) {
+func (djRepo *DeliveryJobDBRepository) updateJobStatus(deliveryJob *data.DeliveryJob, from data.JobStatus, to data.JobStatus) (err error) {
+	currentTime := time.Now()
+	err = transactionalSingleRowWriteExec(djRepo.db, emptyOps, "UPDATE job SET status = $1, statusChangedAt = $2, updatedAt = $3 WHERE id like $4 and status like $5", args2SliceFnWrapper(to, currentTime, currentTime, deliveryJob.ID, from))
+	if err == nil {
+		deliveryJob.Status = to
+		deliveryJob.StatusChangedAt = currentTime
+		deliveryJob.UpdatedAt = currentTime
+	}
 	return err
+}
+
+// MarkJobInflight sets the status of the job to Inflight if job's current state in the object and DB is Queued; else returns error
+func (djRepo *DeliveryJobDBRepository) MarkJobInflight(deliveryJob *data.DeliveryJob) error {
+	return djRepo.updateJobStatus(deliveryJob, data.JobQueued, data.JobInflight)
 }
 
 // MarkJobDelivered sets the status of the job to Delivered if the job's current status is Inflight in the object and DB; else returns error
-func (djRepo *DeliveryJobDBRepository) MarkJobDelivered(deliveryJob *data.DeliveryJob) (err error) {
-	return err
+func (djRepo *DeliveryJobDBRepository) MarkJobDelivered(deliveryJob *data.DeliveryJob) error {
+	return djRepo.updateJobStatus(deliveryJob, data.JobInflight, data.JobDelivered)
 }
 
 // MarkJobDead sets the status of the job to Dead if the job's current status is Inflight in the object and DB; else returns error
-func (djRepo *DeliveryJobDBRepository) MarkJobDead(deliveryJob *data.DeliveryJob) (err error) {
-	return err
+func (djRepo *DeliveryJobDBRepository) MarkJobDead(deliveryJob *data.DeliveryJob) error {
+	return djRepo.updateJobStatus(deliveryJob, data.JobInflight, data.JobDead)
 }
 
 // MarkJobRetry increases the retry attempt count and sets the status of the job to Queued if the job's current status is Inflight in the object and DB; else returns error
 func (djRepo *DeliveryJobDBRepository) MarkJobRetry(deliveryJob *data.DeliveryJob, earliestDelta time.Duration) (err error) {
+	currentTime := time.Now()
+	nextTime := currentTime.Add(earliestDelta)
+	err = transactionalSingleRowWriteExec(djRepo.db, emptyOps, "UPDATE job SET status = $1, statusChangedAt = $2, updatedAt = $3, earliestNextAttemptAt = $4, retryAttemptCount = $5 WHERE id like $6 and status like $7", args2SliceFnWrapper(data.JobQueued, currentTime, currentTime, nextTime, deliveryJob.RetryAttemptCount+1, deliveryJob.ID, data.JobInflight))
+	if err == nil {
+		deliveryJob.Status = data.JobQueued
+		deliveryJob.StatusChangedAt = currentTime
+		deliveryJob.UpdatedAt = currentTime
+		deliveryJob.EarliestNextAttemptAt = nextTime
+		deliveryJob.RetryAttemptCount = deliveryJob.RetryAttemptCount + 1
+	}
 	return err
 }
 
@@ -76,13 +98,14 @@ func (djRepo *DeliveryJobDBRepository) GetJobsForMessage(message *data.Message, 
 		return jobs, pagination, ErrPaginationDeadlock
 	}
 	var err error
-	baseQuery := "SELECT id, consumerId, status, dispatchReceivedAt, retryAttemptCount, statusChangedAt, earliestNextAttemptAt, createdAt, updatedAt FROM job WHERE messageId like $1" + getPaginationQueryFragmentWithConfigurablePageSize(page, true, largePageSizeWithOrder)
+	baseQuery := commonSelectQuery + " messageId like $1" + getPaginationQueryFragmentWithConfigurablePageSize(page, true, largePageSizeWithOrder)
 	scanArgs := func() []interface{} {
 		job := &data.DeliveryJob{}
 		job.Message = message
 		job.Listener = &data.Consumer{}
 		jobs = append(jobs, job)
-		return []interface{}{&job.ID, &job.Listener.ID, &job.Status, &job.DispatchReceivedAt, &job.RetryAttemptCount, &job.StatusChangedAt, &job.EarliestNextAttemptAt, &job.CreatedAt, &job.UpdatedAt}
+		var messageID string
+		return []interface{}{&job.ID, &messageID, &job.Listener.ID, &job.Status, &job.DispatchReceivedAt, &job.RetryAttemptCount, &job.StatusChangedAt, &job.EarliestNextAttemptAt, &job.CreatedAt, &job.UpdatedAt}
 	}
 	err = queryRows(djRepo.db, baseQuery, args2SliceFnWrapper(message.ID.String()), scanArgs)
 	if err == nil {
@@ -95,6 +118,23 @@ func (djRepo *DeliveryJobDBRepository) GetJobsForMessage(message *data.Message, 
 		}
 	}
 	return jobs, pagination, err
+}
+
+// GetByID loads the delivery job with specified id if it exists, else returns an error
+func (djRepo *DeliveryJobDBRepository) GetByID(id string) (job *data.DeliveryJob, err error) {
+	job = &data.DeliveryJob{}
+	var messageID string
+	var consumerID string
+	err = querySingleRow(djRepo.db, commonSelectQuery+" id like $1", args2SliceFnWrapper(id),
+		args2SliceFnWrapper(&job.ID, &messageID, &consumerID, &job.Status, &job.DispatchReceivedAt, &job.RetryAttemptCount, &job.StatusChangedAt,
+			&job.EarliestNextAttemptAt, &job.CreatedAt, &job.UpdatedAt))
+	if err == nil {
+		job.Message, err = djRepo.mesageRepository.GetByID(messageID)
+	}
+	if err == nil {
+		job.Listener, err = djRepo.consumerRepository.GetByID(consumerID)
+	}
+	return job, err
 }
 
 // NewDeliveryJobRepository creates a new instance of DeliveryJobRepository

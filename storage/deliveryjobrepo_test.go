@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"database/sql"
 	"strconv"
 	"testing"
 	"time"
@@ -146,5 +147,80 @@ func TestDispatchMessage(t *testing.T) {
 		newMsg.ID = xid.New()
 		jobs[0].Message = &newMsg
 		assert.Equal(t, ErrInvalidStateToSave, djRepo.DispatchMessage(message, jobs...))
+	})
+}
+
+func TestStatusUpdatesForJob(t *testing.T) {
+	djRepo := getDeliverJobRepository()
+	msgRepo := getMessageRepository()
+	message := getMessageForJob()
+	msgRepo.Create(message)
+	jobs := getDeliveryJobsInFixture(message)
+	err := djRepo.DispatchMessage(message, jobs...)
+	assert.Nil(t, err)
+	t.Run("GetByID", func(t *testing.T) {
+		t.Parallel()
+		iJob := jobs[0]
+		dJob, err := djRepo.GetByID(iJob.ID.String())
+		assert.Nil(t, err)
+		assert.Equal(t, data.JobQueued, dJob.Status)
+		_, err = djRepo.GetByID("random-does-not-exist")
+		assert.NotNil(t, err)
+		assert.Equal(t, sql.ErrNoRows, err)
+	})
+	t.Run("MarkJobInflight", func(t *testing.T) {
+		t.Parallel()
+		job := jobs[1]
+		err := djRepo.MarkJobInflight(job)
+		assert.Nil(t, err)
+		err = djRepo.MarkJobInflight(job)
+		assert.NotNil(t, err)
+		dJob, err := djRepo.GetByID(job.ID.String())
+		assert.Equal(t, data.JobInflight, dJob.Status)
+	})
+	t.Run("MarkJobDead", func(t *testing.T) {
+		t.Parallel()
+		job := jobs[2]
+		err = djRepo.MarkJobDead(job)
+		assert.NotNil(t, err)
+		err := djRepo.MarkJobInflight(job)
+		assert.Nil(t, err)
+		err = djRepo.MarkJobDead(job)
+		assert.Nil(t, err)
+		err = djRepo.MarkJobDead(job)
+		assert.NotNil(t, err)
+		dJob, err := djRepo.GetByID(job.ID.String())
+		assert.Equal(t, data.JobDead, dJob.Status)
+	})
+	t.Run("MarkJobDelivered", func(t *testing.T) {
+		t.Parallel()
+		job := jobs[3]
+		err = djRepo.MarkJobDelivered(job)
+		assert.NotNil(t, err)
+		err := djRepo.MarkJobInflight(job)
+		assert.Nil(t, err)
+		err = djRepo.MarkJobDelivered(job)
+		assert.Nil(t, err)
+		err = djRepo.MarkJobDelivered(job)
+		assert.NotNil(t, err)
+		dJob, err := djRepo.GetByID(job.ID.String())
+		assert.Equal(t, data.JobDelivered, dJob.Status)
+	})
+	t.Run("MarkJobRetry", func(t *testing.T) {
+		t.Parallel()
+		now := time.Now()
+		next := 10 * time.Minute
+		job := jobs[4]
+		err = djRepo.MarkJobRetry(job, next)
+		assert.NotNil(t, err)
+		err := djRepo.MarkJobInflight(job)
+		assert.Nil(t, err)
+		err = djRepo.MarkJobRetry(job, next)
+		assert.Nil(t, err)
+		err = djRepo.MarkJobRetry(job, next)
+		assert.NotNil(t, err)
+		dJob, err := djRepo.GetByID(job.ID.String())
+		assert.Equal(t, data.JobQueued, dJob.Status)
+		assert.Greater(t, dJob.EarliestNextAttemptAt.UnixNano(), now.UnixNano())
 	})
 }

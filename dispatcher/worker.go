@@ -56,9 +56,13 @@ var deliverJob = func(w *Worker, job *Job) {
 	// we have received a work request.
 	log.Println("info - processing job in worker", job.Data.ID.String())
 	// Put to Inflight
-	w.djRepo.MarkJobInflight(job.Data)
+	err := w.djRepo.MarkJobInflight(job.Data)
+	if err != nil {
+		log.Println("err - could not put job in flight", err)
+		return
+	}
 	// Attempt to deliver
-	err := w.executeJob(job)
+	err = w.executeJob(job)
 	// If err == nil, then delivered, else if at max try dead else queued with retry attempt increased
 	if err == nil {
 		w.djRepo.MarkJobDelivered(job.Data)
