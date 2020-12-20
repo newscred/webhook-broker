@@ -7,7 +7,6 @@ import (
 	"errors"
 	"net"
 	"os/user"
-	"reflect"
 	"testing"
 	"time"
 
@@ -436,7 +435,7 @@ func TestSeedDataDBDriverFuncs(t *testing.T) {
 	configuration, _ := GetAutoConfiguration()
 	var buf bytes.Buffer
 	_ = json.NewEncoder(&buf).Encode(configuration.GetSeedData())
-	jsonSeedData := buf.String()
+	jsonSeedData := sql.RawBytes(buf.Bytes())
 	t.Run("Scan", func(t *testing.T) {
 		t.Parallel()
 		seedData := &SeedData{}
@@ -447,8 +446,7 @@ func TestSeedDataDBDriverFuncs(t *testing.T) {
 		t.Parallel()
 		jsonDBVal, err := configuration.GetSeedData().Value()
 		assert.Nil(t, err)
-		assert.IsType(t, reflect.TypeOf(jsonSeedData).Name(), jsonDBVal)
-		assert.Equal(t, jsonSeedData, jsonDBVal.(string))
+		assert.Equal(t, []byte(jsonSeedData), jsonDBVal.([]byte))
 	})
 }
 

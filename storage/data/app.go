@@ -1,24 +1,11 @@
 package data
 
 import (
-	"database/sql/driver"
-
 	"github.com/imyousuf/webhook-broker/config"
 )
 
 // AppStatus represents the status of this App
 type AppStatus int
-
-// Scan de-serializes AppStatus for reading from DB
-func (u *AppStatus) Scan(value interface{}) error {
-	*u = AppStatus(value.(int64))
-	return nil
-}
-
-// Value serializes AppStatus to write to DB
-func (u AppStatus) Value() (driver.Value, error) {
-	return int64(u), nil
-}
 
 const (
 	// NotInitialized is when the App is just started and no initialization ever happened

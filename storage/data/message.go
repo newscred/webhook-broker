@@ -37,13 +37,13 @@ func (message *Message) QuickFix() bool {
 		message.ReceivedAt = time.Now()
 		madeChanges = true
 	}
+	if message.OutboxedAt.IsZero() {
+		message.OutboxedAt = time.Now()
+		madeChanges = true
+	}
 	switch message.Status {
 	case MsgStatusAcknowledged:
 	case MsgStatusDispatched:
-		if message.OutboxedAt.IsZero() {
-			message.OutboxedAt = time.Now()
-			madeChanges = true
-		}
 	default:
 		message.Status = MsgStatusAcknowledged
 		madeChanges = true

@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
 	"net/url"
@@ -67,8 +68,14 @@ type SeedData struct {
 }
 
 // Scan de-serializes SeedData for reading from DB
-func (u *SeedData) Scan(value interface{}) error {
-	err := json.NewDecoder(strings.NewReader(value.(string))).Decode(u)
+func (u *SeedData) Scan(value interface{}) (err error) {
+	if stringVal, ok := value.(string); ok {
+		err = json.NewDecoder(strings.NewReader(stringVal)).Decode(u)
+	} else if sqlRawBytes, ok := value.(sql.RawBytes); ok {
+		err = json.NewDecoder(strings.NewReader(string(sqlRawBytes))).Decode(u)
+	} else if rawBytes, ok := value.([]byte); ok {
+		err = json.NewDecoder(strings.NewReader(string(rawBytes))).Decode(u)
+	}
 	return err
 }
 
@@ -76,7 +83,7 @@ func (u *SeedData) Scan(value interface{}) error {
 func (u SeedData) Value() (driver.Value, error) {
 	var buf bytes.Buffer
 	err := json.NewEncoder(&buf).Encode(u)
-	return buf.String(), err
+	return buf.Bytes(), err
 }
 
 // SeedDataConfig provides the interface for working with SeedData in configuration
