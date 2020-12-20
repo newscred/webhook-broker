@@ -1,0 +1,36 @@
+version: "3.9"
+
+services:
+  broker:
+    build: .
+    ports:
+      - "18181:8080"
+    volumes:
+      - ./Makefile:/go/src/github.com/imyousuf/webhook-broker/Makefile
+      - ./webhook-broker-dc.cfg:/go/src/github.com/imyousuf/webhook-broker/webhook-broker.cfg
+      - ./go.mod:/go/src/github.com/imyousuf/webhook-broker/go.mod
+      - ./go.sum:/go/src/github.com/imyousuf/webhook-broker/go.sum
+      - ./main.go:/go/src/github.com/imyousuf/webhook-broker/main.go
+      - ./main_test.go:/go/src/github.com/imyousuf/webhook-broker/main_test.go
+      - ./wire.go:/go/src/github.com/imyousuf/webhook-broker/wire.go
+      - ./wire_gen.go:/go/src/github.com/imyousuf/webhook-broker/wire_gen.go
+      - ./config:/go/src/github.com/imyousuf/webhook-broker/config
+      - ./controllers:/go/src/github.com/imyousuf/webhook-broker/controllers
+      - ./dispatcher:/go/src/github.com/imyousuf/webhook-broker/dispatcher
+      - ./migration:/go/src/github.com/imyousuf/webhook-broker/migration
+      - ./storage:/go/src/github.com/imyousuf/webhook-broker/storage
+    command: ["./webhook-broker", "-migrate", "/go/src/github.com/imyousuf/webhook-broker/migration/sqls/"]
+    depends_on:
+      - mysql
+    links:
+      - mysql:mysql
+
+  mysql:
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: webhook-broker
+      MYSQL_USER: webhook_broker
+      MYSQL_PASSWORD: zxc909zxc
+    ports:
+      - "44060:3306"
