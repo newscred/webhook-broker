@@ -56,6 +56,8 @@ func TestDispatchMessage(t *testing.T) {
 		err := djRepo.DispatchMessage(message, jobs...)
 		assert.Nil(t, err)
 		assert.Equal(t, data.MsgStatusDispatched, message.Status)
+		assert.Greater(t, message.OutboxedAt.UnixNano(), message.ReceivedAt.UnixNano())
+		assert.Greater(t, message.UpdatedAt.UnixNano(), message.CreatedAt.UnixNano())
 		count := 0
 		testDB.QueryRow("select count(*) from job where messageId like $1", message.ID).Scan(&count)
 		assert.Equal(t, len(consumers), count)

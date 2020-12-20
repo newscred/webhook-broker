@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"time"
 
 	"github.com/imyousuf/webhook-broker/storage/data"
 )
@@ -86,9 +87,12 @@ func (msgRepo *MessageDBRepository) SetDispatched(txContext context.Context, mes
 	}
 	tx, ok := txContext.Value(txContextKey).(*sql.Tx)
 	if ok {
-		err := inTransactionExec(tx, emptyOps, "UPDATE message SET status = $1 WHERE id like $2 and status like $3", args2SliceFnWrapper(data.MsgStatusDispatched, message.ID, data.MsgStatusAcknowledged), int64(1))
+		currentTime := time.Now()
+		err := inTransactionExec(tx, emptyOps, "UPDATE message SET status = $1, outboxedAt = $2, updatedAt = $3 WHERE id like $4 and status like $5", args2SliceFnWrapper(data.MsgStatusDispatched, currentTime, currentTime, message.ID, data.MsgStatusAcknowledged), int64(1))
 		if err == nil {
 			message.Status = data.MsgStatusDispatched
+			message.OutboxedAt = currentTime
+			message.UpdatedAt = currentTime
 		}
 		return err
 	}
