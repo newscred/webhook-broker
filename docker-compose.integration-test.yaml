@@ -1,0 +1,28 @@
+version: "3.9"
+
+services:
+  mysql8:
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: webhook-broker
+      MYSQL_USER: webhook_broker
+      MYSQL_PASSWORD: zxc909zxc
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
+      interval: 1m30s
+      timeout: 20s
+      retries: 10
+      start_period: 40s
+
+  ibroker:
+    build: .
+    volumes:
+      - ./webhook-broker-dc.cfg:/etc/webhook-broker/webhook-broker.cfg
+    command: ["make", "ci-test"]
+    depends_on:
+      mysql8:
+        condition: service_healthy
+    links:
+      - mysql8:mysql
+
