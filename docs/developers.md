@@ -19,3 +19,16 @@ For generating mocks we use [Mockery](https://github.com/vektra/mockery). Curren
 mockery --all --dir "./config/" --output "./config/mocks"
 mockery --all --dir "./storage/" --output "./storage/mocks"
 ```
+
+When using the `docker-compose` please ensure to first start MySQL and then start the broker so that broker finds MySQL on bootup. For example,
+
+```bash
+docker-compose up -d mysql
+# Sleep for 30s
+docker-compose up broker
+# once up try the following curl -
+curl -v localhost:18181/channel/sample-channel/broadcast -X POST -H "X-Broker-Channel-Token: sample-channel-token" -H "X-Broker-Producer-Token: sample-producer-token" -H "X-Broker-Producer-ID: sample-producer" -H "Content-Type: application/json" --data '{"test": "Hello World!"}'
+# It wont deliver message anywhere since default sample-consumer's callback URL is invalid
+```
+
+Also note that for testing in docker, you will need the code to be built every time you change code.
