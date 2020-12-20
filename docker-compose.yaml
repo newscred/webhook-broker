@@ -21,7 +21,8 @@ services:
       - ./storage:/go/src/github.com/imyousuf/webhook-broker/storage
     command: ["./webhook-broker", "-migrate", "/go/src/github.com/imyousuf/webhook-broker/migration/sqls/"]
     depends_on:
-      - mysql
+      mysql:
+        condition: service_healthy
     links:
       - mysql:mysql
 
@@ -34,3 +35,9 @@ services:
       MYSQL_PASSWORD: zxc909zxc
     ports:
       - "44060:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
+      interval: 1m30s
+      timeout: 20s
+      retries: 10
+      start_period: 20s
