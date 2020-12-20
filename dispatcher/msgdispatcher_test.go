@@ -29,6 +29,7 @@ import (
 const (
 	consumerReceivedURLParamPrefix = "/consumer-"
 	consumerToken                  = "random-consumer-token"
+	consumerIDPrefix               = "test-consumer-for-dispatcher-"
 )
 
 var (
@@ -94,33 +95,42 @@ func SetupTestFixture() {
 	}
 	portString := ":" + strconv.Itoa(port)
 	baseURLString := "http://localhost" + portString
-	testConsumerRouter := httprouter.New()
-	testConsumerRouter.POST("/:consumerId", consumerController)
-	server = &http.Server{
-		Handler: testConsumerRouter,
-		Addr:    portString,
-	}
+	var wg sync.WaitGroup
+	wg.Add(2)
 	go func() {
-		if serverListenErr := server.ListenAndServe(); serverListenErr != nil {
-			log.Println(serverListenErr)
+		testConsumerRouter := httprouter.New()
+		testConsumerRouter.POST("/:consumerId", consumerController)
+		server = &http.Server{
+			Handler: testConsumerRouter,
+			Addr:    portString,
 		}
+		go func() {
+			if serverListenErr := server.ListenAndServe(); serverListenErr != nil {
+				log.Println(serverListenErr)
+			}
+		}()
+		wg.Done()
 	}()
-	consumerHandler = make(map[string]func(string, http.ResponseWriter, *http.Request))
-	channel, _ = data.NewChannel("dispatch-test-channel", "token")
-	channel.QuickFix()
-	channel, _ = dataAccessor.GetChannelRepository().Store(channel)
-	producer, _ = data.NewProducer("dispatch-test-producer", "token")
-	producer.QuickFix()
-	producer, _ = dataAccessor.GetProducerRepository().Store(producer)
-	testConsumers := 30
-	consumers = make([]*data.Consumer, 0, testConsumers)
-	for i := 0; i < testConsumers; i++ {
-		callbackURL, _ := url.Parse(baseURLString + consumerReceivedURLParamPrefix + strconv.Itoa(i))
-		consumer, _ := data.NewConsumer(channel, "test-consumer-for-dispatcher-"+strconv.Itoa(i), consumerToken, callbackURL)
-		consumer.QuickFix()
-		dataAccessor.GetConsumerRepository().Store(consumer)
-		consumers = append(consumers, consumer)
-	}
+	go func() {
+		consumerHandler = make(map[string]func(string, http.ResponseWriter, *http.Request))
+		channel, _ = data.NewChannel("dispatch-test-channel", "token")
+		channel.QuickFix()
+		channel, _ = dataAccessor.GetChannelRepository().Store(channel)
+		producer, _ = data.NewProducer("dispatch-test-producer", "token")
+		producer.QuickFix()
+		producer, _ = dataAccessor.GetProducerRepository().Store(producer)
+		testConsumers := 30
+		consumers = make([]*data.Consumer, 0, testConsumers)
+		for i := 0; i < testConsumers; i++ {
+			callbackURL, _ := url.Parse(baseURLString + consumerReceivedURLParamPrefix + strconv.Itoa(i))
+			consumer, _ := data.NewConsumer(channel, consumerIDPrefix+strconv.Itoa(i), consumerToken, callbackURL)
+			consumer.QuickFix()
+			dataAccessor.GetConsumerRepository().Store(consumer)
+			consumers = append(consumers, consumer)
+		}
+		wg.Done()
+	}()
+	wg.Wait()
 }
 
 func getMockedBrokerConfig() *configmocks.BrokerConfig {
@@ -267,6 +277,13 @@ func TestMessageDispatcherImplDispatch(t *testing.T) {
 		assert.Nil(t, err)
 		dispatcher.Dispatch(msg)
 		wg.Wait()
+		jobs, _, err := dataAccessor.GetDeliveryJobRepository().GetJobsForMessage(msg, data.NewPagination(nil, nil))
+		assert.Nil(t, err)
+		assert.Equal(t, len(consumers), len(jobs))
+		for _, job := range jobs {
+			// TODO: Fix status assert once repo functions are implemented
+			assert.Equal(t, data.JobQueued, job.Status)
+		}
 	})
 	t.Run("t", func(t *testing.T) { t.Parallel() })
 

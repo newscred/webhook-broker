@@ -106,7 +106,7 @@ func (w *Worker) executeJob(job *Job) (err error) {
 		}
 	}()
 	var req *http.Request
-	req, err = http.NewRequest("POST", job.Data.Listener.CallbackURL, strings.NewReader(job.Data.Message.Payload))
+	req, err = http.NewRequest(http.MethodPost, job.Data.Listener.CallbackURL, strings.NewReader(job.Data.Message.Payload))
 	if err == nil {
 		defer req.Body.Close()
 		req.Header.Set(headerContentType, job.Data.Message.ContentType)

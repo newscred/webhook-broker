@@ -64,4 +64,5 @@ type DeliveryJobRepository interface {
 	MarkJobDelivered(deliveryJob *data.DeliveryJob) error
 	MarkJobDead(deliveryJob *data.DeliveryJob) error
 	MarkJobRetry(deliveryJob *data.DeliveryJob, earliestDelta time.Duration) error
+	GetJobsForMessage(message *data.Message, page *data.Pagination) ([]*data.DeliveryJob, *data.Pagination, error)
 }

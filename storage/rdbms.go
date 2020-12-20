@@ -74,14 +74,20 @@ func (rdbmsDataAccessor *RelationalDBDataAccessor) Close() {
 	db.Close()
 }
 
+type orderByClause string
+
 const (
-	insertStatement                 = "INSERT INTO app (id, seedData, appStatus) VALUES ($1, $2, $3)"
-	selectStatement                 = "SELECT seedData, appStatus FROM app WHERE id = 1"
-	startInitUpdateStatement        = `UPDATE app SET seedData = $1, appStatus = $2 WHERE id = 1 AND appStatus != $2`
-	completeInitUpdateStatement     = `UPDATE app SET appStatus = $1 WHERE id = 1 AND appStatus == $2`
-	optimisticLockInitAppErrMsg     = "Initializing began in another app in the meantime"
-	optimisticLockCompleteAppErrMsg = "Initializing not started so can not complete"
-	pageSizeWithOrder               = "ORDER BY createdAt desc, id desc LIMIT 25"
+	insertStatement                               = "INSERT INTO app (id, seedData, appStatus) VALUES ($1, $2, $3)"
+	selectStatement                               = "SELECT seedData, appStatus FROM app WHERE id = 1"
+	startInitUpdateStatement                      = `UPDATE app SET seedData = $1, appStatus = $2 WHERE id = 1 AND appStatus != $2`
+	completeInitUpdateStatement                   = `UPDATE app SET appStatus = $1 WHERE id = 1 AND appStatus == $2`
+	optimisticLockInitAppErrMsg                   = "Initializing began in another app in the meantime"
+	optimisticLockCompleteAppErrMsg               = "Initializing not started so can not complete"
+	baseOrderByClause               orderByClause = "ORDER BY createdAt desc, id desc"
+	pageSizeWithOrder               orderByClause = baseOrderByClause + " LIMIT 25"
+	mediumPageSizeWithOrder         orderByClause = baseOrderByClause + " LIMIT 50"
+	largePageSizeWithOrder          orderByClause = baseOrderByClause + " LIMIT 100"
+	extraLargePageSizeWithOrder     orderByClause = baseOrderByClause + " LIMIT 500"
 )
 
 var (
@@ -324,7 +330,7 @@ var (
 		})
 	}
 
-	getPaginationQueryFragment = func(page *data.Pagination, append bool) string {
+	getPaginationQueryFragmentWithConfigurablePageSize = func(page *data.Pagination, append bool, orderByQueryClause orderByClause) string {
 		query := " "
 		if page.Next != nil {
 			if append {
@@ -342,8 +348,12 @@ var (
 			}
 			query = query + "id > '" + string(*page.Previous) + "' "
 		}
-		query = query + pageSizeWithOrder
+		query = query + string(orderByQueryClause)
 		return query
+	}
+
+	getPaginationQueryFragment = func(page *data.Pagination, append bool) string {
+		return getPaginationQueryFragmentWithConfigurablePageSize(page, append, pageSizeWithOrder)
 	}
 
 	querySingleRow = func(db *sql.DB, query string, queryArgs func() []interface{}, scanArgs func() []interface{}) error {

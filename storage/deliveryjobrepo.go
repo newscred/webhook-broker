@@ -63,9 +63,38 @@ func (djRepo *DeliveryJobDBRepository) MarkJobDead(deliveryJob *data.DeliveryJob
 	return err
 }
 
-// MarkJobRetry increases ther retry attempt and sets the status of the job to Queued if the job's current status is Inflight in the object and DB; else returns error
+// MarkJobRetry increases the retry attempt count and sets the status of the job to Queued if the job's current status is Inflight in the object and DB; else returns error
 func (djRepo *DeliveryJobDBRepository) MarkJobRetry(deliveryJob *data.DeliveryJob, earliestDelta time.Duration) (err error) {
 	return err
+}
+
+// GetJobsForMessage retrieves jobs created for a specific message
+func (djRepo *DeliveryJobDBRepository) GetJobsForMessage(message *data.Message, page *data.Pagination) ([]*data.DeliveryJob, *data.Pagination, error) {
+	jobs := make([]*data.DeliveryJob, 0)
+	pagination := &data.Pagination{}
+	if page == nil || (page.Next != nil && page.Previous != nil) {
+		return jobs, pagination, ErrPaginationDeadlock
+	}
+	var err error
+	baseQuery := "SELECT id, consumerId, status, dispatchReceivedAt, retryAttemptCount, statusChangedAt, earliestNextAttemptAt, createdAt, updatedAt FROM job WHERE messageId like $1" + getPaginationQueryFragmentWithConfigurablePageSize(page, true, largePageSizeWithOrder)
+	scanArgs := func() []interface{} {
+		job := &data.DeliveryJob{}
+		job.Message = message
+		job.Listener = &data.Consumer{}
+		jobs = append(jobs, job)
+		return []interface{}{&job.ID, &job.Listener.ID, &job.Status, &job.DispatchReceivedAt, &job.RetryAttemptCount, &job.StatusChangedAt, &job.EarliestNextAttemptAt, &job.CreatedAt, &job.UpdatedAt}
+	}
+	err = queryRows(djRepo.db, baseQuery, args2SliceFnWrapper(message.ID.String()), scanArgs)
+	if err == nil {
+		for _, job := range jobs {
+			job.Listener, _ = djRepo.consumerRepository.GetByID(job.Listener.ID.String())
+		}
+		jobCount := len(jobs)
+		if jobCount > 0 {
+			pagination = data.NewPagination(jobs[jobCount-1], jobs[0])
+		}
+	}
+	return jobs, pagination, err
 }
 
 // NewDeliveryJobRepository creates a new instance of DeliveryJobRepository

@@ -35,6 +35,38 @@ func (_m *DeliveryJobRepository) DispatchMessage(message *data.Message, delivery
 	return r0
 }
 
+// GetJobsForMessage provides a mock function with given fields: message, page
+func (_m *DeliveryJobRepository) GetJobsForMessage(message *data.Message, page *data.Pagination) ([]*data.DeliveryJob, *data.Pagination, error) {
+	ret := _m.Called(message, page)
+
+	var r0 []*data.DeliveryJob
+	if rf, ok := ret.Get(0).(func(*data.Message, *data.Pagination) []*data.DeliveryJob); ok {
+		r0 = rf(message, page)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*data.DeliveryJob)
+		}
+	}
+
+	var r1 *data.Pagination
+	if rf, ok := ret.Get(1).(func(*data.Message, *data.Pagination) *data.Pagination); ok {
+		r1 = rf(message, page)
+	} else {
+		if ret.Get(1) != nil {
+			r1 = ret.Get(1).(*data.Pagination)
+		}
+	}
+
+	var r2 error
+	if rf, ok := ret.Get(2).(func(*data.Message, *data.Pagination) error); ok {
+		r2 = rf(message, page)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
+}
+
 // MarkJobDead provides a mock function with given fields: deliveryJob
 func (_m *DeliveryJobRepository) MarkJobDead(deliveryJob *data.DeliveryJob) error {
 	ret := _m.Called(deliveryJob)
