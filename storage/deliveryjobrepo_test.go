@@ -66,7 +66,7 @@ func TestDispatchMessage(t *testing.T) {
 		assert.Greater(t, message.OutboxedAt.UnixNano(), message.ReceivedAt.UnixNano())
 		assert.Greater(t, message.UpdatedAt.UnixNano(), message.CreatedAt.UnixNano())
 		count := 0
-		testDB.QueryRow("select count(*) from job where messageId like $1", message.ID).Scan(&count)
+		testDB.QueryRow("select count(*) from job where messageId like ?", message.ID).Scan(&count)
 		assert.Equal(t, len(consumers), count)
 		// Asserts for GetJobsForMessage
 		dJobs, page, err := djRepo.GetJobsForMessage(message, data.NewPagination(nil, nil))
@@ -106,7 +106,7 @@ func TestDispatchMessage(t *testing.T) {
 		assert.NotNil(t, err)
 		assert.Equal(t, ErrNoRowsUpdated, err)
 		count := -1
-		testDB.QueryRow("select count(*) from job where messageId like $1", message.ID).Scan(&count)
+		testDB.QueryRow("select count(*) from job where messageId like ?", message.ID).Scan(&count)
 		assert.Equal(t, 0, count)
 	})
 	t.Run("MsgNil", func(t *testing.T) {

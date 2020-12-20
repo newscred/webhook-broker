@@ -41,7 +41,7 @@ func (msgRepo *MessageDBRepository) Create(message *data.Message) (err error) {
 		if msgErr == nil {
 			err = ErrDuplicateMessageIDForChannel
 		} else {
-			err = transactionalSingleRowWriteExec(msgRepo.db, emptyOps, "INSERT INTO message (id, channelId, producerId, messageId, payload, contentType, priority, status, receivedAt, outboxedAt, createdAt, updatedAt) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
+			err = transactionalSingleRowWriteExec(msgRepo.db, emptyOps, "INSERT INTO message (id, channelId, producerId, messageId, payload, contentType, priority, status, receivedAt, outboxedAt, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 				args2SliceFnWrapper(message.ID, message.BroadcastedTo.ChannelID, message.ProducedBy.ProducerID, message.MessageID, message.Payload, message.ContentType, message.Priority, message.Status, message.ReceivedAt, message.OutboxedAt, message.CreatedAt, message.UpdatedAt))
 		}
 	}
@@ -51,7 +51,7 @@ func (msgRepo *MessageDBRepository) Create(message *data.Message) (err error) {
 // Get retrieves a message for a channel if it exists
 func (msgRepo *MessageDBRepository) Get(channelID string, messageID string) (*data.Message, error) {
 	channel, err := msgRepo.channelRepository.Get(channelID)
-	message, err := msgRepo.getSingleMessage(messageSelectRowCommonQuery+" channelId like $1 and messageId like $2", args2SliceFnWrapper(channelID, messageID), false)
+	message, err := msgRepo.getSingleMessage(messageSelectRowCommonQuery+" channelId like ? and messageId like ?", args2SliceFnWrapper(channelID, messageID), false)
 	if err == nil {
 		message.BroadcastedTo = channel
 	}
@@ -77,7 +77,7 @@ func (msgRepo *MessageDBRepository) getSingleMessage(query string, queryArgs fun
 
 // GetByID retrieves a message by its ID
 func (msgRepo *MessageDBRepository) GetByID(id string) (*data.Message, error) {
-	return msgRepo.getSingleMessage(messageSelectRowCommonQuery+" id like $1", args2SliceFnWrapper(id), true)
+	return msgRepo.getSingleMessage(messageSelectRowCommonQuery+" id like ?", args2SliceFnWrapper(id), true)
 }
 
 // SetDispatched sets the status of the message to dispatched within the transaction passed via txContext
@@ -88,7 +88,7 @@ func (msgRepo *MessageDBRepository) SetDispatched(txContext context.Context, mes
 	tx, ok := txContext.Value(txContextKey).(*sql.Tx)
 	if ok {
 		currentTime := time.Now()
-		err := inTransactionExec(tx, emptyOps, "UPDATE message SET status = $1, outboxedAt = $2, updatedAt = $3 WHERE id like $4 and status like $5", args2SliceFnWrapper(data.MsgStatusDispatched, currentTime, currentTime, message.ID, data.MsgStatusAcknowledged), int64(1))
+		err := inTransactionExec(tx, emptyOps, "UPDATE message SET status = ?, outboxedAt = ?, updatedAt = ? WHERE id like ? and status like ?", args2SliceFnWrapper(data.MsgStatusDispatched, currentTime, currentTime, message.ID, data.MsgStatusAcknowledged), int64(1))
 		if err == nil {
 			message.Status = data.MsgStatusDispatched
 			message.OutboxedAt = currentTime

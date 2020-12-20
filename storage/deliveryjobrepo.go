@@ -3,7 +3,6 @@ package storage
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"time"
 
 	"github.com/imyousuf/webhook-broker/storage/data"
@@ -29,13 +28,13 @@ func (djRepo *DeliveryJobDBRepository) DispatchMessage(message *data.Message, de
 	args := make([]interface{}, 0, len(deliveryJobs)*jobPropertyCount)
 	query := "INSERT INTO job (id, messageId, consumerId, dispatchReceivedAt, statusChangedAt, earliestNextAttemptAt, status, createdAt, updatedAt) VALUES"
 	if err == nil {
-		for index, job := range deliveryJobs {
+		for _, job := range deliveryJobs {
 			if job == nil || !job.IsInValidState() || job.Message.ID != message.ID {
 				err = ErrInvalidStateToSave
 				break
 			}
 			args = append(args, job.ID, job.Message.ID, job.Listener.ID, job.DispatchReceivedAt, job.StatusChangedAt, job.EarliestNextAttemptAt, job.Status, job.CreatedAt, job.UpdatedAt)
-			query = query + fmt.Sprintf(" ($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d),", index*jobPropertyCount+1, index*jobPropertyCount+2, index*jobPropertyCount+3, index*jobPropertyCount+4, index*jobPropertyCount+5, index*jobPropertyCount+6, index*jobPropertyCount+7, index*jobPropertyCount+8, index*jobPropertyCount+9)
+			query = query + " (?, ?, ?, ?, ?, ?, ?, ?, ?),"
 		}
 	}
 	if err == nil {
@@ -51,7 +50,7 @@ func (djRepo *DeliveryJobDBRepository) DispatchMessage(message *data.Message, de
 
 func (djRepo *DeliveryJobDBRepository) updateJobStatus(deliveryJob *data.DeliveryJob, from data.JobStatus, to data.JobStatus) (err error) {
 	currentTime := time.Now()
-	err = transactionalSingleRowWriteExec(djRepo.db, emptyOps, "UPDATE job SET status = $1, statusChangedAt = $2, updatedAt = $3 WHERE id like $4 and status like $5", args2SliceFnWrapper(to, currentTime, currentTime, deliveryJob.ID, from))
+	err = transactionalSingleRowWriteExec(djRepo.db, emptyOps, "UPDATE job SET status = ?, statusChangedAt = ?, updatedAt = ? WHERE id like ? and status like ?", args2SliceFnWrapper(to, currentTime, currentTime, deliveryJob.ID, from))
 	if err == nil {
 		deliveryJob.Status = to
 		deliveryJob.StatusChangedAt = currentTime
@@ -79,7 +78,7 @@ func (djRepo *DeliveryJobDBRepository) MarkJobDead(deliveryJob *data.DeliveryJob
 func (djRepo *DeliveryJobDBRepository) MarkJobRetry(deliveryJob *data.DeliveryJob, earliestDelta time.Duration) (err error) {
 	currentTime := time.Now()
 	nextTime := currentTime.Add(earliestDelta)
-	err = transactionalSingleRowWriteExec(djRepo.db, emptyOps, "UPDATE job SET status = $1, statusChangedAt = $2, updatedAt = $3, earliestNextAttemptAt = $4, retryAttemptCount = $5 WHERE id like $6 and status like $7", args2SliceFnWrapper(data.JobQueued, currentTime, currentTime, nextTime, deliveryJob.RetryAttemptCount+1, deliveryJob.ID, data.JobInflight))
+	err = transactionalSingleRowWriteExec(djRepo.db, emptyOps, "UPDATE job SET status = ?, statusChangedAt = ?, updatedAt = ?, earliestNextAttemptAt = ?, retryAttemptCount = ? WHERE id like ? and status like ?", args2SliceFnWrapper(data.JobQueued, currentTime, currentTime, nextTime, deliveryJob.RetryAttemptCount+1, deliveryJob.ID, data.JobInflight))
 	if err == nil {
 		deliveryJob.Status = data.JobQueued
 		deliveryJob.StatusChangedAt = currentTime
@@ -98,7 +97,7 @@ func (djRepo *DeliveryJobDBRepository) GetJobsForMessage(message *data.Message, 
 		return jobs, pagination, ErrPaginationDeadlock
 	}
 	var err error
-	baseQuery := commonSelectQuery + " messageId like $1" + getPaginationQueryFragmentWithConfigurablePageSize(page, true, largePageSizeWithOrder)
+	baseQuery := commonSelectQuery + " messageId like ?" + getPaginationQueryFragmentWithConfigurablePageSize(page, true, largePageSizeWithOrder)
 	scanArgs := func() []interface{} {
 		job := &data.DeliveryJob{}
 		job.Message = message
@@ -125,7 +124,7 @@ func (djRepo *DeliveryJobDBRepository) GetByID(id string) (job *data.DeliveryJob
 	job = &data.DeliveryJob{}
 	var messageID string
 	var consumerID string
-	err = querySingleRow(djRepo.db, commonSelectQuery+" id like $1", args2SliceFnWrapper(id),
+	err = querySingleRow(djRepo.db, commonSelectQuery+" id like ?", args2SliceFnWrapper(id),
 		args2SliceFnWrapper(&job.ID, &messageID, &consumerID, &job.Status, &job.DispatchReceivedAt, &job.RetryAttemptCount, &job.StatusChangedAt,
 			&job.EarliestNextAttemptAt, &job.CreatedAt, &job.UpdatedAt))
 	if err == nil {

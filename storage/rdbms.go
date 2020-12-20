@@ -77,10 +77,10 @@ func (rdbmsDataAccessor *RelationalDBDataAccessor) Close() {
 type orderByClause string
 
 const (
-	insertStatement                               = "INSERT INTO app (id, seedData, appStatus) VALUES ($1, $2, $3)"
+	insertStatement                               = "INSERT INTO app (id, seedData, appStatus) VALUES (?, ?, ?)"
 	selectStatement                               = "SELECT seedData, appStatus FROM app WHERE id = 1"
-	startInitUpdateStatement                      = `UPDATE app SET seedData = $1, appStatus = $2 WHERE id = 1 AND appStatus != $2`
-	completeInitUpdateStatement                   = `UPDATE app SET appStatus = $1 WHERE id = 1 AND appStatus == $2`
+	startInitUpdateStatement                      = `UPDATE app SET seedData = ?, appStatus = ? WHERE id = 1 AND appStatus != ?`
+	completeInitUpdateStatement                   = `UPDATE app SET appStatus = ? WHERE id = 1 AND appStatus = ?`
 	optimisticLockInitAppErrMsg                   = "Initializing began in another app in the meantime"
 	optimisticLockCompleteAppErrMsg               = "Initializing not started so can not complete"
 	baseOrderByClause               orderByClause = "ORDER BY createdAt desc, id desc"
@@ -148,7 +148,7 @@ func (appRep *AppDBRepository) StartAppInit(seedData *config.SeedData) error {
 		appErr = ErrNoDataChangeFromInitialized
 	}
 	if appErr == nil {
-		appErr = transactionalSingleRowWriteExec(appRep.db, emptyOps, startInitUpdateStatement, args2SliceFnWrapper(*seedData, data.Initializing))
+		appErr = transactionalSingleRowWriteExec(appRep.db, emptyOps, startInitUpdateStatement, args2SliceFnWrapper(*seedData, data.Initializing, data.Initializing))
 		if appErr == ErrNoRowsUpdated {
 			appErr = ErrOptimisticAppInit
 		}
@@ -246,7 +246,10 @@ var (
 			if err != nil {
 				return err
 			}
-			migration.Steps(2)
+			err = migration.Up()
+			if err != nil && err != migrate.ErrNoChange {
+				return err
+			}
 		}
 		return nil
 	}

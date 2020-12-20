@@ -38,7 +38,7 @@ func (repo *ChannelDBRepository) updateChannel(channel *data.Channel, name, toke
 		channel.Name = name
 		channel.Token = token
 		channel.UpdatedAt = time.Now()
-	}, "UPDATE channel SET name = $1, token = $2, updatedAt = $3 WHERE channelId = $4",
+	}, "UPDATE channel SET name = ?, token = ?, updatedAt = ? WHERE channelId = ?",
 		args2SliceFnWrapper(channel.Name, channel.Token, channel.UpdatedAt, channel.ChannelID))
 	return channel, err
 }
@@ -48,7 +48,7 @@ func (repo *ChannelDBRepository) insertChannel(channel *data.Channel) (*data.Cha
 	if !channel.IsInValidState() {
 		return channel, ErrInvalidStateToSave
 	}
-	err := transactionalSingleRowWriteExec(repo.db, emptyOps, "INSERT INTO channel (id, channelId, name, token, createdAt, updatedAt) VALUES ($1, $2, $3, $4, $5, $6)",
+	err := transactionalSingleRowWriteExec(repo.db, emptyOps, "INSERT INTO channel (id, channelId, name, token, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)",
 		args2SliceFnWrapper(channel.ID, channel.ChannelID, channel.Name, channel.Token, channel.CreatedAt, channel.UpdatedAt))
 	return channel, err
 }
@@ -56,7 +56,7 @@ func (repo *ChannelDBRepository) insertChannel(channel *data.Channel) (*data.Cha
 // Get retrieves the channel with matching channel id
 func (repo *ChannelDBRepository) Get(channelID string) (*data.Channel, error) {
 	channel := &data.Channel{}
-	err := querySingleRow(repo.db, "SELECT id, channelId, name, token, createdAt, updatedAt FROM channel WHERE channelId like $1", args2SliceFnWrapper(channelID),
+	err := querySingleRow(repo.db, "SELECT id, channelId, name, token, createdAt, updatedAt FROM channel WHERE channelId like ?", args2SliceFnWrapper(channelID),
 		args2SliceFnWrapper(&channel.ID, &channel.ChannelID, &channel.Name, &channel.Token, &channel.CreatedAt, &channel.UpdatedAt))
 	return channel, err
 }

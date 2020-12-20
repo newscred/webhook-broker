@@ -42,7 +42,7 @@ func (consumerRepo *ConsumerDBRepository) updateConsumer(consumer *data.Consumer
 		consumer.Token = token
 		consumer.CallbackURL = callbackURL
 		consumer.UpdatedAt = time.Now()
-	}, "UPDATE consumer SET name = $1, token = $2, callbackUrl=$3, updatedAt = $4 WHERE consumerId = $5 and channelId = $6",
+	}, "UPDATE consumer SET name = ?, token = ?, callbackUrl=?, updatedAt = ? WHERE consumerId = ? and channelId = ?",
 		args2SliceFnWrapper(consumer.Name, consumer.Token, consumer.CallbackURL, consumer.UpdatedAt, consumer.ConsumerID, consumer.ConsumingFrom.ChannelID))
 	return consumer, err
 }
@@ -51,7 +51,7 @@ func (consumerRepo *ConsumerDBRepository) insertConsumer(consumer *data.Consumer
 	consumer.QuickFix()
 	var err error
 	if consumer.IsInValidState() {
-		err = transactionalSingleRowWriteExec(consumerRepo.db, emptyOps, "INSERT INTO consumer (id, channelId, consumerId, name, token, callbackUrl, createdAt, updatedAt) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+		err = transactionalSingleRowWriteExec(consumerRepo.db, emptyOps, "INSERT INTO consumer (id, channelId, consumerId, name, token, callbackUrl, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
 			args2SliceFnWrapper(consumer.ID, consumer.ConsumingFrom.ChannelID, consumer.ConsumerID, consumer.Name, consumer.Token, consumer.CallbackURL, consumer.CreatedAt, consumer.UpdatedAt))
 	} else {
 		err = ErrInvalidStateToSave
@@ -61,14 +61,14 @@ func (consumerRepo *ConsumerDBRepository) insertConsumer(consumer *data.Consumer
 
 // Delete deletes consumer from DB
 func (consumerRepo *ConsumerDBRepository) Delete(consumer *data.Consumer) error {
-	return transactionalSingleRowWriteExec(consumerRepo.db, emptyOps, "DELETE from consumer WHERE channelId = $1 and consumerId = $2", args2SliceFnWrapper(consumer.GetChannelIDSafely(), consumer.ConsumerID))
+	return transactionalSingleRowWriteExec(consumerRepo.db, emptyOps, "DELETE from consumer WHERE channelId = ? and consumerId = ?", args2SliceFnWrapper(consumer.GetChannelIDSafely(), consumer.ConsumerID))
 }
 
 // Get retrieves consumer for specific consumer, error if either consumer or channel does not exist
 func (consumerRepo *ConsumerDBRepository) Get(channelID string, consumerID string) (consumer *data.Consumer, err error) {
 	channel, err := consumerRepo.channelRepository.Get(channelID)
 	if err == nil {
-		consumer, err = consumerRepo.getSingleConsumer(consumerSelectRowCommonQuery+" channelId like $1 and consumerId like $2", args2SliceFnWrapper(channelID, consumerID), false)
+		consumer, err = consumerRepo.getSingleConsumer(consumerSelectRowCommonQuery+" channelId like ? and consumerId like ?", args2SliceFnWrapper(channelID, consumerID), false)
 	}
 	if err == nil {
 		consumer.ConsumingFrom = channel
@@ -116,7 +116,7 @@ func (consumerRepo *ConsumerDBRepository) GetList(channelID string, page *data.P
 
 // GetByID retrieves a consumer by its ID
 func (consumerRepo *ConsumerDBRepository) GetByID(id string) (consumer *data.Consumer, err error) {
-	return consumerRepo.getSingleConsumer(consumerSelectRowCommonQuery+" id like $1", args2SliceFnWrapper(id), true)
+	return consumerRepo.getSingleConsumer(consumerSelectRowCommonQuery+" id like ?", args2SliceFnWrapper(id), true)
 }
 
 // NewConsumerRepository initializes new consumer repository

@@ -148,11 +148,9 @@ func TestAppDBRepositoryStartAppInit(t *testing.T) {
 	seedData := configuration.GetSeedData()
 	getMockSelectAppRow := func(mock sqlmock.Sqlmock, seedData *config.SeedData, appStatus data.AppStatus) *sqlmock.Rows {
 		seedDataDriverVal, _ := seedData.Value()
-		appStatusVal, _ := appStatus.Value()
-		return mock.NewRows([]string{"seedData", "appStatus"}).AddRow(seedDataDriverVal, appStatusVal)
+		return mock.NewRows([]string{"seedData", "appStatus"}).AddRow(seedDataDriverVal, appStatus)
 	}
 	seedDataVal, _ := seedData.Value()
-	initializingVal, _ := data.Initializing.Value()
 	t.Run("NoApp", func(t *testing.T) {
 		t.Parallel()
 		db, mock, _ := sqlmock.New()
@@ -197,7 +195,7 @@ func TestAppDBRepositoryStartAppInit(t *testing.T) {
 		mock.MatchExpectationsInOrder(true)
 		mock.ExpectQuery(selectStatement).WillReturnRows(getMockSelectAppRow(mock, &seedData, data.NotInitialized))
 		mock.ExpectBegin()
-		mock.ExpectExec("UPDATE app").WithArgs(seedDataVal, initializingVal).WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectExec("UPDATE app").WithArgs(seedDataVal, data.Initializing, data.Initializing).WillReturnResult(sqlmock.NewResult(1, 1))
 		mock.ExpectCommit()
 		// Main Call
 		aErr := appRepo.StartAppInit(&seedData)
@@ -213,7 +211,7 @@ func TestAppDBRepositoryStartAppInit(t *testing.T) {
 		mock.ExpectQuery(selectStatement).WillReturnRows(getMockSelectAppRow(mock, &seedData, data.NotInitialized))
 		mock.ExpectBegin()
 		err := errors.New("Update failed")
-		mock.ExpectExec("UPDATE app").WithArgs(seedDataVal, initializingVal).WillReturnError(err)
+		mock.ExpectExec("UPDATE app").WithArgs(seedDataVal, data.Initializing, data.Initializing).WillReturnError(err)
 		mock.ExpectRollback()
 		// Main Call
 		aErr := appRepo.StartAppInit(&seedData)
@@ -228,7 +226,7 @@ func TestAppDBRepositoryStartAppInit(t *testing.T) {
 		mock.MatchExpectationsInOrder(true)
 		mock.ExpectQuery(selectStatement).WillReturnRows(getMockSelectAppRow(mock, &seedData, data.NotInitialized))
 		mock.ExpectBegin()
-		mock.ExpectExec("UPDATE app").WithArgs(seedDataVal, initializingVal).WillReturnResult(sqlmock.NewResult(1, 0))
+		mock.ExpectExec("UPDATE app").WithArgs(seedDataVal, data.Initializing, data.Initializing).WillReturnResult(sqlmock.NewResult(1, 0))
 		mock.ExpectRollback()
 		// Main Call
 		aErr := appRepo.StartAppInit(&seedData)
@@ -244,11 +242,9 @@ func TestTransactionalCommitRollbackErrors(t *testing.T) {
 	seedData := configuration.GetSeedData()
 	getMockSelectAppRow := func(mock sqlmock.Sqlmock, seedData *config.SeedData, appStatus data.AppStatus) *sqlmock.Rows {
 		seedDataDriverVal, _ := seedData.Value()
-		appStatusVal, _ := appStatus.Value()
-		return mock.NewRows([]string{"seedData", "appStatus"}).AddRow(seedDataDriverVal, appStatusVal)
+		return mock.NewRows([]string{"seedData", "appStatus"}).AddRow(seedDataDriverVal, appStatus)
 	}
 	seedDataVal, _ := seedData.Value()
-	initializingVal, _ := data.Initializing.Value()
 	t.Run("RollbackFailed", func(t *testing.T) {
 		var buf bytes.Buffer
 		log.SetOutput(&buf)
@@ -261,7 +257,7 @@ func TestTransactionalCommitRollbackErrors(t *testing.T) {
 		mock.ExpectQuery(selectStatement).WillReturnRows(getMockSelectAppRow(mock, &seedData, data.NotInitialized))
 		mock.ExpectBegin()
 		err := errors.New("Update failed")
-		mock.ExpectExec("UPDATE app").WithArgs(seedDataVal, initializingVal).WillReturnError(err)
+		mock.ExpectExec("UPDATE app").WithArgs(seedDataVal, data.Initializing, data.Initializing).WillReturnError(err)
 		mock.ExpectRollback().WillReturnError(err)
 		// Main Call
 		aErr := appRepo.StartAppInit(&seedData)
@@ -280,7 +276,7 @@ func TestTransactionalCommitRollbackErrors(t *testing.T) {
 		mock.MatchExpectationsInOrder(true)
 		mock.ExpectQuery(selectStatement).WillReturnRows(getMockSelectAppRow(mock, &seedData, data.NotInitialized))
 		mock.ExpectBegin()
-		mock.ExpectExec("UPDATE app").WithArgs(seedDataVal, initializingVal).WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectExec("UPDATE app").WithArgs(seedDataVal, data.Initializing, data.Initializing).WillReturnResult(sqlmock.NewResult(1, 1))
 		err := errors.New("Update failed")
 		mock.ExpectCommit().WillReturnError(err)
 		// Main Call
@@ -312,11 +308,9 @@ func TestAppDBRepositoryCompleteAppInit(t *testing.T) {
 	seedData := configuration.GetSeedData()
 	getMockSelectAppRow := func(mock sqlmock.Sqlmock, seedData *config.SeedData, appStatus data.AppStatus) *sqlmock.Rows {
 		seedDataDriverVal, _ := seedData.Value()
-		appStatusVal, _ := appStatus.Value()
-		return mock.NewRows([]string{"seedData", "appStatus"}).AddRow(seedDataDriverVal, appStatusVal)
+		return mock.NewRows([]string{"seedData", "appStatus"}).AddRow(seedDataDriverVal, appStatus)
+
 	}
-	initializingVal, _ := data.Initializing.Value()
-	initializedVal, _ := data.Initialized.Value()
 	t.Run("NoApp", func(t *testing.T) {
 		t.Parallel()
 		db, mock, _ := sqlmock.New()
@@ -349,7 +343,7 @@ func TestAppDBRepositoryCompleteAppInit(t *testing.T) {
 		mock.MatchExpectationsInOrder(true)
 		mock.ExpectQuery(selectStatement).WillReturnRows(getMockSelectAppRow(mock, &seedData, data.Initializing))
 		mock.ExpectBegin()
-		mock.ExpectExec("UPDATE app").WithArgs(initializedVal, initializingVal).WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectExec("UPDATE app").WithArgs(data.Initialized, data.Initializing).WillReturnResult(sqlmock.NewResult(1, 1))
 		mock.ExpectCommit()
 		// Main Call
 		aErr := appRepo.CompleteAppInit()
@@ -365,7 +359,7 @@ func TestAppDBRepositoryCompleteAppInit(t *testing.T) {
 		mock.MatchExpectationsInOrder(true)
 		mock.ExpectQuery(selectStatement).WillReturnRows(getMockSelectAppRow(mock, &seedData, data.Initializing))
 		mock.ExpectBegin()
-		mock.ExpectExec("UPDATE app").WithArgs(initializedVal, initializingVal).WillReturnError(err)
+		mock.ExpectExec("UPDATE app").WithArgs(data.Initialized, data.Initializing).WillReturnError(err)
 		mock.ExpectRollback()
 		// Main Call
 		aErr := appRepo.CompleteAppInit()
@@ -380,7 +374,7 @@ func TestAppDBRepositoryCompleteAppInit(t *testing.T) {
 		mock.MatchExpectationsInOrder(true)
 		mock.ExpectQuery(selectStatement).WillReturnRows(getMockSelectAppRow(mock, &seedData, data.Initializing))
 		mock.ExpectBegin()
-		mock.ExpectExec("UPDATE app").WithArgs(initializedVal, initializingVal).WillReturnResult(sqlmock.NewResult(1, 0))
+		mock.ExpectExec("UPDATE app").WithArgs(data.Initialized, data.Initializing).WillReturnResult(sqlmock.NewResult(1, 0))
 		mock.ExpectRollback()
 		// Main Call
 		aErr := appRepo.CompleteAppInit()
