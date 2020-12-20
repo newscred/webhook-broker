@@ -132,7 +132,7 @@ func NewMessageDispatcher(djRepo storage.DeliveryJobRepository, consumerRepo sto
 		jobQueue: make(chan *Job, brokerConfig.GetMaxMessageQueueSize())}
 	workers := make([]*Worker, brokerConfig.GetMaxWorkers())
 	for i := 0; i < len(workers); i++ {
-		worker := NewWorker(dispatcherImpl.workerPool, consumerConfig)
+		worker := NewWorker(dispatcherImpl.workerPool, consumerConfig, brokerConfig, djRepo)
 		worker.Start()
 		workers[i] = &worker
 	}

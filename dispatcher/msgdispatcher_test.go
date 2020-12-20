@@ -2,8 +2,12 @@ package dispatcher
 
 import (
 	"bytes"
+	"context"
 	"errors"
+	"io/ioutil"
 	"log"
+	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -17,8 +21,14 @@ import (
 	"github.com/imyousuf/webhook-broker/storage"
 	"github.com/imyousuf/webhook-broker/storage/data"
 	storagemocks "github.com/imyousuf/webhook-broker/storage/mocks"
+	"github.com/julienschmidt/httprouter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+)
+
+const (
+	consumerReceivedURLParamPrefix = "/consumer-"
+	consumerToken                  = "random-consumer-token"
 )
 
 var (
@@ -28,8 +38,9 @@ var (
 	channel              *data.Channel
 	producer             *data.Producer
 	consumers            []*data.Consumer
-	callbackURL          *url.URL
 	configuration        *config.Config
+	server               *http.Server
+	consumerHandler      map[string]func(string, http.ResponseWriter, *http.Request)
 )
 
 func TestMain(m *testing.M) {
@@ -41,12 +52,60 @@ func TestMain(m *testing.M) {
 	if dbErr == nil {
 		SetupTestFixture()
 		m.Run()
+		serverShutdownContext, shutdownTimeoutCancelFunc := context.WithTimeout(context.Background(), 15*time.Second)
+		defer shutdownTimeoutCancelFunc()
+		server.Shutdown(serverShutdownContext)
+		defer dataAccessor.Close()
 	}
-	dataAccessor.Close()
+}
+
+func findPort() int {
+	for port := 55666; port < 60000; port++ {
+		if checkPort(port) == nil {
+			return port
+		}
+	}
+	return 0
+}
+
+func checkPort(port int) (err error) {
+	ln, netErr := net.Listen("tcp", ":"+strconv.Itoa(port))
+	defer ln.Close()
+	if netErr != nil {
+		log.Println(netErr)
+		err = netErr
+	}
+	return err
+}
+
+func consumerController(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+	consumerID := params.ByName("consumerId")
+	if customController, ok := consumerHandler[consumerID]; ok {
+		customController(consumerID, w, r)
+	} else {
+		w.WriteHeader(http.StatusNoContent)
+	}
 }
 
 func SetupTestFixture() {
-	callbackURL, _ = url.Parse("https://imytech.net/")
+	port := findPort()
+	if port == 0 {
+		log.Fatalln("could not find port to start test consumer service")
+	}
+	portString := ":" + strconv.Itoa(port)
+	baseURLString := "http://localhost" + portString
+	testConsumerRouter := httprouter.New()
+	testConsumerRouter.POST("/:consumerId", consumerController)
+	server = &http.Server{
+		Handler: testConsumerRouter,
+		Addr:    portString,
+	}
+	go func() {
+		if serverListenErr := server.ListenAndServe(); serverListenErr != nil {
+			log.Println(serverListenErr)
+		}
+	}()
+	consumerHandler = make(map[string]func(string, http.ResponseWriter, *http.Request))
 	channel, _ = data.NewChannel("dispatch-test-channel", "token")
 	channel.QuickFix()
 	channel, _ = dataAccessor.GetChannelRepository().Store(channel)
@@ -56,7 +115,8 @@ func SetupTestFixture() {
 	testConsumers := 30
 	consumers = make([]*data.Consumer, 0, testConsumers)
 	for i := 0; i < testConsumers; i++ {
-		consumer, _ := data.NewConsumer(channel, "test-consumer-for-dispatcher-"+strconv.Itoa(i), "consumerToken", callbackURL)
+		callbackURL, _ := url.Parse(baseURLString + consumerReceivedURLParamPrefix + strconv.Itoa(i))
+		consumer, _ := data.NewConsumer(channel, "test-consumer-for-dispatcher-"+strconv.Itoa(i), consumerToken, callbackURL)
 		consumer.QuickFix()
 		dataAccessor.GetConsumerRepository().Store(consumer)
 		consumers = append(consumers, consumer)
@@ -127,6 +187,12 @@ func TestNewMessageDispatcher(t *testing.T) {
 	})
 }
 
+func clearConsumerHandler() {
+	for key := range consumerHandler {
+		delete(consumerHandler, key)
+	}
+}
+
 func TestMessageDispatcherImplDispatch(t *testing.T) {
 	t.Run("NilMessage", func(t *testing.T) {
 		t.Parallel()
@@ -173,21 +239,30 @@ func TestMessageDispatcherImplDispatch(t *testing.T) {
 		assert.Contains(t, buf.String(), expectedErr.Error())
 	})
 	t.Run("Success", func(t *testing.T) {
-		var buf bytes.Buffer
-		log.SetOutput(&buf)
-		oldDequeue := asyncDequeueToWorker
-		defer func() {
-			asyncDequeueToWorker = oldDequeue
-			log.SetOutput(os.Stderr)
-		}()
+		t.Parallel()
+		t.Cleanup(clearConsumerHandler)
 		var wg sync.WaitGroup
-		asyncDequeueToWorker = func(msgDispatcher *MessageDispatcherImpl) {
-			oldDequeue(msgDispatcher)
-			wg.Done()
+		messagePayload := `{"key": "Custom JSON"}`
+		contentType := "application/json"
+		for index := 0; index < len(consumers); index++ {
+			consumerHandler["consumer-"+strconv.Itoa(index)] = func(s string, rw http.ResponseWriter, r *http.Request) {
+				// check content body and type
+				assert.Equal(t, contentType, r.Header.Get(headerContentType))
+				assert.Equal(t, consumerToken, r.Header.Get(headerConsumerToken))
+				body, err := ioutil.ReadAll(r.Body)
+				assert.Nil(t, err)
+				assert.Equal(t, messagePayload, string(body))
+				if s == "consumer-0" {
+					rw.WriteHeader(http.StatusBadGateway)
+				} else {
+					rw.WriteHeader(http.StatusNoContent)
+				}
+				wg.Done()
+			}
 		}
 		wg.Add(len(consumers))
 		dispatcher := NewMessageDispatcher(dataAccessor.GetDeliveryJobRepository(), dataAccessor.GetConsumerRepository(), configuration, configuration)
-		msg, _ := data.NewMessage(channel, producer, "payload", "type")
+		msg, _ := data.NewMessage(channel, producer, messagePayload, contentType)
 		err := dataAccessor.GetMessageRepository().Create(msg)
 		assert.Nil(t, err)
 		dispatcher.Dispatch(msg)

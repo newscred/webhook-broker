@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/imyousuf/webhook-broker/storage/data"
 )
@@ -44,6 +45,26 @@ func (djRepo *DeliveryJobDBRepository) DispatchMessage(message *data.Message, de
 			return djRepo.mesageRepository.SetDispatched(context.WithValue(context.Background(), txContextKey, tx), message)
 		})
 	}
+	return err
+}
+
+// MarkJobInflight sets the status of the job to Inflight if job's current state in the object and DB is Queued; else returns error
+func (djRepo *DeliveryJobDBRepository) MarkJobInflight(deliveryJob *data.DeliveryJob) (err error) {
+	return err
+}
+
+// MarkJobDelivered sets the status of the job to Delivered if the job's current status is Inflight in the object and DB; else returns error
+func (djRepo *DeliveryJobDBRepository) MarkJobDelivered(deliveryJob *data.DeliveryJob) (err error) {
+	return err
+}
+
+// MarkJobDead sets the status of the job to Dead if the job's current status is Inflight in the object and DB; else returns error
+func (djRepo *DeliveryJobDBRepository) MarkJobDead(deliveryJob *data.DeliveryJob) (err error) {
+	return err
+}
+
+// MarkJobRetry increases ther retry attempt and sets the status of the job to Queued if the job's current status is Inflight in the object and DB; else returns error
+func (djRepo *DeliveryJobDBRepository) MarkJobRetry(deliveryJob *data.DeliveryJob, earliestDelta time.Duration) (err error) {
 	return err
 }
 

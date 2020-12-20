@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"time"
 
 	"github.com/imyousuf/webhook-broker/config"
 	"github.com/imyousuf/webhook-broker/storage/data"
@@ -59,4 +60,8 @@ type MessageRepository interface {
 // DeliveryJobRepository allows storage operations over DeliveryJob
 type DeliveryJobRepository interface {
 	DispatchMessage(message *data.Message, deliveryJobs ...*data.DeliveryJob) error
+	MarkJobInflight(deliveryJob *data.DeliveryJob) error
+	MarkJobDelivered(deliveryJob *data.DeliveryJob) error
+	MarkJobDead(deliveryJob *data.DeliveryJob) error
+	MarkJobRetry(deliveryJob *data.DeliveryJob, earliestDelta time.Duration) error
 }
