@@ -18,11 +18,25 @@ services:
   ibroker:
     build: .
     volumes:
-      - ./webhook-broker-dc.cfg:/etc/webhook-broker/webhook-broker.cfg
-    command: ["make", "ci-test"]
+      - ./webhook-broker-dc.cfg:/go/src/github.com/imyousuf/webhook-broker/webhook-broker.cfg
+    command: ["./webhook-broker", "-migrate", "/go/src/github.com/imyousuf/webhook-broker/migration/sqls/"]
     depends_on:
       mysql8:
         condition: service_healthy
     links:
       - mysql8:mysql
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/_status"]
+      interval: 1m30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
 
+  tester:
+    build: integration-test/.
+    command: ["make", "run"]
+    depends_on:
+      ibroker:
+        condition: service_healthy
+    links:
+      - ibroker:webhook-broker

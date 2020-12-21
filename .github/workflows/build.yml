@@ -42,7 +42,7 @@ jobs:
     - uses: actions/setup-node@master
       with:
         node-version: '12'
-    - uses: paambaati/codeclimate-action@v2.7.4
+    - uses: paambaati/codeclimate-action@v2.7.5
       env:
         CC_TEST_REPORTER_ID: ${{ secrets.CODECLIMATE_REPORTER_ID }}
       with:
@@ -51,3 +51,11 @@ jobs:
         prefix: github.com/imyousuf/webhook-broker/
         coverageLocations: |
           ${{github.workspace}}/*.out:gocov
+
+  integration-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@master
+    - uses: docker/setup-buildx-action@v1
+    - run: make itest

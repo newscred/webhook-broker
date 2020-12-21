@@ -10,7 +10,7 @@ apt-packages:
 brew-packages:
 
 alpine-packages:
-	apk add --no-cache gcc musl-dev
+	apk add --no-cache gcc musl-dev curl
 
 os-deps:
 ifeq ($(UNAME_S),Linux)
@@ -70,7 +70,7 @@ ci-test:
 test:
 	go test -mod=readonly ./...
 
-install: build-web
+install: build
 	go install -mod=readonly
 
 setup-docker:
@@ -81,3 +81,9 @@ clean:
 	-rm -vrf ./dist/*
 	-rm -v webhook-broker
 
+itest-down:
+	- docker-compose -f docker-compose.integration-test.yaml down
+
+itest: itest-down
+	docker-compose -f docker-compose.integration-test.yaml build
+	docker-compose -f docker-compose.integration-test.yaml run tester
