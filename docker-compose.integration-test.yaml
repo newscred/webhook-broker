@@ -3,20 +3,29 @@ version: "3.9"
 services:
   mysql8:
     image: mysql:8
+    container_name: mysql8
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: webhook-broker
       MYSQL_USER: webhook_broker
       MYSQL_PASSWORD: zxc909zxc
+    ports:
+      - "45060:3306"
     healthcheck:
       test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
       interval: 1m30s
       timeout: 20s
       retries: 10
       start_period: 40s
+    networks:
+      brokeritest:
+        aliases:
+          - "mysql8"
+
 
   ibroker:
     build: .
+    container_name: ibroker
     volumes:
       - ./webhook-broker-dc.cfg:/go/src/github.com/imyousuf/webhook-broker/webhook-broker.cfg
     command: ["./webhook-broker", "-migrate", "/go/src/github.com/imyousuf/webhook-broker/migration/sqls/"]
@@ -31,12 +40,24 @@ services:
       timeout: 10s
       retries: 3
       start_period: 5s
+    networks:
+      brokeritest:
+        aliases:
+          - "webhook-broker"
 
   tester:
     build: integration-test/.
+    container_name: tester
     command: ["make", "run"]
     depends_on:
       ibroker:
         condition: service_healthy
     links:
       - ibroker:webhook-broker
+    networks:
+      brokeritest:
+        aliases:
+          - "tester"
+
+networks:
+  brokeritest:

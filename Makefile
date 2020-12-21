@@ -86,4 +86,4 @@ itest-down:
 
 itest: itest-down
 	docker-compose -f docker-compose.integration-test.yaml build
-	docker-compose -f docker-compose.integration-test.yaml run tester
+	docker-compose -f docker-compose.integration-test.yaml up tester

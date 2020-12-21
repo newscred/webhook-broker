@@ -15,3 +15,4 @@ RUN make deps
 ADD main.go .
 
 RUN make build
+EXPOSE 61500-63000
