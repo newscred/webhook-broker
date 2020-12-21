@@ -96,14 +96,14 @@ func (consumerRepo *ConsumerDBRepository) GetList(channelID string, page *data.P
 	}
 	channel, err := consumerRepo.channelRepository.Get(channelID)
 	if err == nil {
-		baseQuery := "SELECT id, consumerId, name, token, callbackUrl, createdAt, updatedAt FROM consumer" + getPaginationQueryFragment(page, false)
+		baseQuery := "SELECT id, consumerId, name, token, callbackUrl, createdAt, updatedAt FROM consumer WHERE channelId like ?" + getPaginationQueryFragment(page, true)
 		scanArgs := func() []interface{} {
 			consumer := &data.Consumer{}
 			consumer.ConsumingFrom = channel
 			consumers = append(consumers, consumer)
 			return []interface{}{&consumer.ID, &consumer.ConsumerID, &consumer.Name, &consumer.Token, &consumer.CallbackURL, &consumer.CreatedAt, &consumer.UpdatedAt}
 		}
-		err = queryRows(consumerRepo.db, baseQuery, nilArgs, scanArgs)
+		err = queryRows(consumerRepo.db, baseQuery, args2SliceFnWrapper(channelID), scanArgs)
 	}
 	if err == nil {
 		consumerCount := len(consumers)

@@ -303,6 +303,9 @@ func TestConsumerGetList(t *testing.T) {
 		_, err = repo.Store(consumer)
 		assert.Nil(t, err)
 	}
+	consumer, err := data.NewConsumer(channel1, listTestConsumerIDPrefix+"100", successfulGetTestToken+" - 100", callbackURL)
+	assert.Nil(t, err)
+	_, err = repo.Store(consumer)
 	t.Run("PaginationDeadlock", func(t *testing.T) {
 		t.Parallel()
 		consumer1, _ := data.NewConsumer(channel2, dbErrUpdateTestConsumerID, successfulGetTestToken, callbackURL)
@@ -390,6 +393,7 @@ func TestConsumerGetList(t *testing.T) {
 		assert.GreaterOrEqual(t, len(result), 100)
 		count := 0
 		for _, consumer := range result {
+			assert.Equal(t, channel2.ChannelID, consumer.ConsumingFrom.ChannelID)
 			if strings.Contains(consumer.ConsumerID, listTestConsumerIDPrefix) {
 				count = count + 1
 			}
