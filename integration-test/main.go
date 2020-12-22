@@ -39,6 +39,8 @@ const (
 	headerProducerToken            = "X-Broker-Producer-Token"
 	headerProducerID               = "X-Broker-Producer-ID"
 	consumerCount                  = 5
+	payload                        = `{"test":"hello world"}`
+	contentType                    = "application/json"
 )
 
 func findPort() int {
@@ -120,29 +122,53 @@ func createConsumers(baseURI string) int {
 	}
 	return consumerCount
 }
-func broadcastMessage() (payload, contentType string, err error) {
-	payload = `{"test":"hello world"}`
-	contentType = "application/json"
-	req, _ := http.NewRequest(http.MethodPost, brokerBaseURL+"/channel/"+channelID+"/broadcast", strings.NewReader(payload))
-	req.Header.Add(headerContentType, contentType)
-	req.Header.Add(headerChannelToken, token)
-	req.Header.Add(headerProducerID, producerID)
-	req.Header.Add(headerProducerToken, token)
-	var resp *http.Response
-	resp, err = client.Do(req)
-	if err != nil {
-		log.Println("error creating consumer", err)
-	} else if resp.StatusCode != http.StatusAccepted {
-		respBody, _ := ioutil.ReadAll(resp.Body)
-		log.Println("error broadcasting message", resp.StatusCode, string(respBody))
-		err = errDuringCreation
+func broadcastMessage(sendCount int) (err error) {
+	sendFn := func() {
+		req, _ := http.NewRequest(http.MethodPost, brokerBaseURL+"/channel/"+channelID+"/broadcast", strings.NewReader(payload))
+		req.Header.Add(headerContentType, contentType)
+		req.Header.Add(headerChannelToken, token)
+		req.Header.Add(headerProducerID, producerID)
+		req.Header.Add(headerProducerToken, token)
+		var resp *http.Response
+		resp, err = client.Do(req)
+		if err != nil {
+			log.Println("error creating consumer", err)
+		} else if resp.StatusCode != http.StatusAccepted {
+			respBody, _ := ioutil.ReadAll(resp.Body)
+			log.Println("error broadcasting message", resp.StatusCode, string(respBody))
+			err = errDuringCreation
+		}
 	}
-	return payload, contentType, err
+	switch {
+	case sendCount == 1:
+		sendFn()
+	case sendCount <= 10:
+		for index := 0; index < sendCount; index++ {
+			sendFn()
+		}
+	default:
+		sendChan := make(chan int, sendCount)
+		asyncSend := func() {
+			for {
+				select {
+				case <-sendChan:
+					sendFn()
+				}
+			}
+		}
+		for index := 0; index < 50; index++ {
+			go asyncSend()
+		}
+		for index := 0; index < sendCount; index++ {
+			sendChan <- index
+		}
+	}
+	return err
 }
-func addConsumerVerified(payload, contentType string, consumerCount int) *sync.WaitGroup {
+func addConsumerVerified(expectedEventCount int) *sync.WaitGroup {
 	wg := &sync.WaitGroup{}
-	wg.Add(consumerCount)
-	for index := 0; index < consumerCount; index++ {
+	wg.Add(expectedEventCount)
+	for index := 0; index < expectedEventCount; index++ {
 		consumerHandler[consumerIDPrefix+strconv.Itoa(index)] = func(s string, rw http.ResponseWriter, r *http.Request) {
 			rw.WriteHeader(http.StatusNoContent)
 			wg.Done()
@@ -184,8 +210,8 @@ func main() {
 			log.Println(serverListenErr)
 		}
 	}()
-	var err error
 	var count = consumerCount
+	var err error
 	err = createProducer()
 	if err != nil {
 		log.Println("error creating producer", err)
@@ -203,18 +229,27 @@ func main() {
 		log.Println("error creating consumers")
 		return
 	}
-	payload, contentType, err := broadcastMessage()
-	if err != nil {
-		log.Println("error broadcasting message", err)
-		return
+	log.Println("Starting message broadcast", time.Now())
+	defaultMax := 1
+	steps := []int{1, 10, 100, 500, 1000, 2500, 5000, 10000, 100000, 1000000}
+	for _, step := range steps {
+		if step > defaultMax {
+			continue
+		}
+		wg := addConsumerVerified(step * count)
+		err := broadcastMessage(step)
+		if err != nil {
+			log.Println("error broadcasting message", err)
+			return
+		}
+		if waitTimeout(wg, time.Duration(2*step)*time.Second) {
+			log.Println("Timed out waiting for wait group")
+			os.Exit(2)
+		} else {
+			log.Println("Wait group finished", step, time.Now())
+		}
 	}
-	wg := addConsumerVerified(payload, contentType, count)
-	if waitTimeout(wg, 2*time.Second) {
-		log.Println("Timed out waiting for wait group")
-		os.Exit(2)
-	} else {
-		log.Println("Wait group finished")
-	}
+
 	defer func() {
 		serverShutdownContext, shutdownTimeoutCancelFunc := context.WithTimeout(context.Background(), 15*time.Second)
 		defer shutdownTimeoutCancelFunc()
