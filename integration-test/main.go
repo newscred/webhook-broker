@@ -18,10 +18,11 @@ import (
 )
 
 var (
-	consumerHandler   map[string]func(string, http.ResponseWriter, *http.Request)
-	server            *http.Server
-	client            *http.Client
-	errDuringCreation = errors.New("error during creating fixture")
+	consumerHandler         map[string]func(string, http.ResponseWriter, *http.Request)
+	server                  *http.Server
+	client                  *http.Client
+	errDuringCreation       = errors.New("error during creating fixture")
+	consumerAssertionFailed = false
 )
 
 const (
@@ -165,11 +166,21 @@ func broadcastMessage(sendCount int) (err error) {
 	}
 	return err
 }
-func addConsumerVerified(expectedEventCount int) *sync.WaitGroup {
+func addConsumerVerified(expectedEventCount int, assert bool) *sync.WaitGroup {
 	wg := &sync.WaitGroup{}
 	wg.Add(expectedEventCount)
 	for index := 0; index < expectedEventCount; index++ {
 		consumerHandler[consumerIDPrefix+strconv.Itoa(index)] = func(s string, rw http.ResponseWriter, r *http.Request) {
+			if assert {
+				defer r.Body.Close()
+				body, _ := ioutil.ReadAll(r.Body)
+				if string(body) != payload {
+					consumerAssertionFailed = true
+				}
+				if r.Header.Get(headerContentType) != contentType {
+					consumerAssertionFailed = true
+				}
+			}
 			rw.WriteHeader(http.StatusNoContent)
 			wg.Done()
 		}
@@ -236,7 +247,7 @@ func main() {
 		if step > defaultMax {
 			continue
 		}
-		wg := addConsumerVerified(step * count)
+		wg := addConsumerVerified(step*count, true)
 		err := broadcastMessage(step)
 		if err != nil {
 			log.Println("error broadcasting message", err)
@@ -247,6 +258,10 @@ func main() {
 			os.Exit(2)
 		} else {
 			log.Println("Wait group finished", step, time.Now())
+			if consumerAssertionFailed {
+				log.Println("Consumer assertion failed")
+				os.Exit(3)
+			}
 		}
 	}
 
