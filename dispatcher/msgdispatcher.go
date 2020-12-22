@@ -3,6 +3,7 @@ package dispatcher
 import (
 	"context"
 	"log"
+	"net/http"
 	"time"
 
 	"github.com/imyousuf/webhook-broker/config"
@@ -138,6 +139,7 @@ func NewMessageDispatcher(djRepo storage.DeliveryJobRepository, consumerRepo sto
 	}
 	dispatcherImpl.workers = workers
 	dispatcherImpl.stopTimeout = consumerConfig.GetConnectionTimeout() + 250*time.Millisecond
+	http.DefaultTransport.(*http.Transport).MaxIdleConnsPerHost = int(brokerConfig.GetMaxWorkers())
 	dispatcherImpl.StartDispatcher()
 	return dispatcherImpl
 }
