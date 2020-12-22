@@ -106,7 +106,7 @@ func (w *Worker) executeJob(job *Job) (err error) {
 	// Do not let the worker crash due to any panic
 	defer func() {
 		if r := recover(); r != nil {
-			log.Println("panic in executing job -", job.Data.ID, r)
+			log.Println("error - panic in executing job -", job.Data.ID, r)
 		}
 	}()
 	var req *http.Request
@@ -133,7 +133,7 @@ func (w *Worker) executeJob(job *Job) (err error) {
 		}
 	}
 	if err != nil {
-		log.Println(err)
+		log.Println("error - worker failed to deliver", err)
 	}
 	return err
 }
