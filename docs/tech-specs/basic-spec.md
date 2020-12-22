@@ -5,7 +5,7 @@
 | *Version* | 1 |
 | *By* | Imran M Yousuf |
 | *Date* | November 10, 2020 |
-| *Last Update* | December 16, 2020 |
+| *Last Update* | December 22, 2020 |
 
 ## Problem Statement / Goal
 
@@ -204,37 +204,46 @@ We want the broker service itself to be stateless and follow the RESTful API par
   * The POST call also will need the channel token for simple auth purpose - `X-Broker-Channel-Token`
   * The message priority will also need to be passed via header - `X-Broker-Message-Priority`
   * Message's content type will be derived from request `Content-Type`; if missing will default to `application/octet-stream`
-* The **Message** list endpoint can be filtered using _statusChangedSince_ query parameter
 * The **Message** `GET` endpoint will list all the jobs and their status in the resource itself since the **Message** and **DeliverJob** are both immutable through the API.
-  * **DeliveryJob** will expose re-trigger endpoint to be used by consumer, but only if the delivery status is _dead_.
-* **Message** delivery or **DeliveryJob** can be re-triggered using _Admin Token_ by the Fail-safe worker
-  * That means they will have special re-trigger endpoint which will need _Admin Token_.
-  * DLQ'd jobs can be re-triggered by consumer using its _Consumer Token_.
-  * The Admin token is - `X-Broker-Admin-Token`
+* **Message** delivery or **DeliveryJob** will be triggered within dispatcher without using any endpoint
+  * DLQ'd jobs can be re-triggered by consumer using its _Consumer Token_; in such case all dead jobs will be requeued.
   * The delivery to a consumer will also contain `X-Broker-Consumer-Token` to ensure the request is coming from Broker, in addition to a custom `User-Agent`
 
 So the endpoints available would be -
 
 1. PUT /producer/{producer-id}
-1. GET /producers (Query Params - size, first)
+1. GET /producers (query params for pagination)
 1. GET /producer/{producer-id}
 1. PUT /channel/{channel-id}
-1. GET /channels (Query Params - size, first)
+1. GET /channels (query params for pagination)
 1. GET /channel/{channel-id}
 1. PUT /channel/{channel-id}/consumer/{consumer-id}
-1. GET /channel/{channel-id}/consumers (Query Params - size, first)
+1. GET /channel/{channel-id}/consumers (query params for pagination)
 1. GET /channel/{channel-id}/consumer/{consumer-id}
 1. DELETE /channel/{channel-id}/consumer/{consumer-id}
-1. GET /channel/{channel-id}/consumer/{consumer-id}/dlq - The dead letter queue
 1. POST /channel/{channel-id}/broadcast
-1. GET /channel/{channel-id}/messages (Query Params - statusChangedSince, size, first)
 1. GET /channel/{channel-id}/message/{message-id}
-1. POST /channel/{channel-id}/message/{message-id}/re-trigger (fail-safe only)
-1. POST /channel/{channel-id}/message/{message-id}/job/{job-id}/re-trigger (DLQ or fail-safe)
+1. GET /channel/{channel-id}/consumer/{consumer-id}/dlq - The dead letter queue
+1. POST /channel/{channel-id}/consumer/{consumer-id}/dlq - Requeue all dead messages
+1. GET /channel/{channel-id}/messages (query params for pagination)
 
 ### Fail-safe worker
 
-Whether the fail-safe worker is working, that will be a configuration; similarly the _Admin Token_ will also be a configuration. Fail-safe worker will simply re-trigger a state using Load-Balanced endpoint of the broker (that is call itself) so that rest of the process works as usual. The spinning up of fail-safe worker will be configurable so that fail-safe is executed from a single execution-unit.
+All broker processes will run the fail-safe workers in the background. The motivation for this choice is the fact that, we want fault tolerance even in recovery/fail-safe workers and what that will entail is we will need some form of guarantee that a **DeliveryJob** or a **Message** will not be picked for recovery by multiple workers regardless. So instead of going for dedicated fail-safe workers all worker instance by default will work as recovery agent and use MUTEX described as follows.
+
+We will have a _recovery_ table in the DB that will contain the message or job being recovered and once recovered it will be removed. Here is how the pseudo code for any recovery agent look like -
+
+1. Delete any recovery lock older than rational delay
+1. Query DB to get all the objects that need recovery
+1. For each object first insert to _recovery_ table
+1. If insertion succeeded follow with the recovery act
+1. After recovery delete the lock-record from _recovery_ table
+
+There are 3 primary recovery/fail-safe scenario -
+
+1. Message is acknowledged but not dispatched - query using status acknowledged and received at prior to rational delay
+1. Message is queued but not picked for delivery (first time or retry) - query using status queued, earliest next delivery at older than now
+1. Message is in-flight and past timeout settings (which means most likely the worker crashed in between) - query using status inflight and statusChanged at is older than (consumer timeout + rational delay); in this case just mark the job as dead.
 
 ### Libraries
 
