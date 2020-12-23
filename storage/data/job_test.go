@@ -143,3 +143,10 @@ func TestNewDeliveryJob_InvalidParams(t *testing.T) {
 	assert.Equal(t, ErrInsufficientInformationForCreating, err)
 	assert.NotNil(t, job)
 }
+
+func TestDJGetNewLockID(t *testing.T) {
+	job := getDeliveryJob()
+	lock, err := NewLock(job)
+	assert.Nil(t, err)
+	assert.Equal(t, deliverJobLockPrefix+job.ID.String(), lock.LockID)
+}

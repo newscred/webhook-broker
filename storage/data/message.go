@@ -10,6 +10,7 @@ import (
 type MsgStatus int
 
 const (
+	messageLockPrefix = "msg-"
 	// MsgStatusAcknowledged represents the state after receiving the message but before it is dispatched
 	MsgStatusAcknowledged MsgStatus = iota + 100
 	// MsgStatusDispatched represents the fact that the dispatch jobs have been created for the message
@@ -89,6 +90,11 @@ func (message *Message) GetChannelIDSafely() (channelID string) {
 		channelID = message.BroadcastedTo.ChannelID
 	}
 	return channelID
+}
+
+// GetLockID retrieves lock ID for the current instance of message
+func (message *Message) GetLockID() string {
+	return messageLockPrefix + message.ID.String()
 }
 
 // NewMessage creates and returns new instance of message

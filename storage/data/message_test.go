@@ -179,3 +179,10 @@ func TestNewMessage(t *testing.T) {
 		assert.NotNil(t, err)
 	})
 }
+
+func TestMessageGetNewLockID(t *testing.T) {
+	msg, _ := NewMessage(getChannel(), getProducer(), "valid", "valid-ct")
+	lock, err := NewLock(msg)
+	assert.Nil(t, err)
+	assert.Equal(t, messageLockPrefix+msg.ID.String(), lock.LockID)
+}

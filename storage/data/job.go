@@ -8,6 +8,7 @@ import (
 type JobStatus int
 
 const (
+	deliverJobLockPrefix = "dj-"
 	// JobQueued is the job status during first attempt
 	JobQueued JobStatus = iota + 1000
 	// JobInflight is to signify that the DeliveryJob is in its first attempt
@@ -78,6 +79,11 @@ func (job *DeliveryJob) IsInValidState() bool {
 		}
 	}
 	return valid
+}
+
+// GetLockID retrieves the Lock ID representing this instance of DeliveryJob
+func (job *DeliveryJob) GetLockID() string {
+	return deliverJobLockPrefix + job.ID.String()
 }
 
 // NewDeliveryJob creates a new instance of DeliveryJob; returns insufficient info error if parameters are not valid for a new DeliveryJob
