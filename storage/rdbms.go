@@ -36,6 +36,7 @@ type RelationalDBDataAccessor struct {
 	consumerRepository    ConsumerRepository
 	messageRepository     MessageRepository
 	deliveryJobRepository DeliveryJobRepository
+	lockRepository        LockRepository
 	db                    *sql.DB
 }
 
@@ -67,6 +68,11 @@ func (rdbmsDataAccessor *RelationalDBDataAccessor) GetMessageRepository() Messag
 // GetDeliveryJobRepository retrieves the DeliveryJobRepository to be used for DeliverJob ops
 func (rdbmsDataAccessor *RelationalDBDataAccessor) GetDeliveryJobRepository() DeliveryJobRepository {
 	return rdbmsDataAccessor.deliveryJobRepository
+}
+
+// GetLockRepository retrieves the LockRepository to be used for Lock ops
+func (rdbmsDataAccessor *RelationalDBDataAccessor) GetLockRepository() LockRepository {
+	return rdbmsDataAccessor.lockRepository
 }
 
 // Close closes the connection to DB
@@ -179,7 +185,7 @@ var (
 	// ErrDBConnectionNeverInitialized is returned when same NewDataAccessor is called the first time and it failed to connec to DB; in all subsequent calls the accessor will remain nil
 	ErrDBConnectionNeverInitialized = errors.New("DB Connection never initialized")
 	// RDBMSStorageInternalInjector injector for data storage related implementation
-	RDBMSStorageInternalInjector = wire.NewSet(GetConnectionPool, NewAppRepository, NewProducerRepository, NewChannelRepository, NewConsumerRepository, NewMessageRepository, NewDeliveryJobRepository, wire.Struct(new(RelationalDBDataAccessor), "db", "appRepository", "producerRepository", "channelRepository", "consumerRepository", "messageRepository", "deliveryJobRepository"), wire.Bind(new(DataAccessor), new(*RelationalDBDataAccessor)))
+	RDBMSStorageInternalInjector = wire.NewSet(GetConnectionPool, NewLockRepository, NewAppRepository, NewProducerRepository, NewChannelRepository, NewConsumerRepository, NewMessageRepository, NewDeliveryJobRepository, wire.Struct(new(RelationalDBDataAccessor), "db", "appRepository", "producerRepository", "channelRepository", "consumerRepository", "messageRepository", "deliveryJobRepository", "lockRepository"), wire.Bind(new(DataAccessor), new(*RelationalDBDataAccessor)))
 )
 
 func panicIfNoDBConnectionPool(db *sql.DB) {
@@ -304,7 +310,7 @@ var (
 		result, err = tx.Exec(query, arguments()...)
 		if err == nil {
 			var rowsAffected int64
-			if rowsAffected, err = result.RowsAffected(); rowsAffected != expectedRowEffected && err == nil {
+			if rowsAffected, err = result.RowsAffected(); expectedRowEffected > 0 && rowsAffected != expectedRowEffected && err == nil {
 				err = ErrNoRowsUpdated
 			}
 		}

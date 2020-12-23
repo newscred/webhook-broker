@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/go-sql-driver/mysql"
+	sqlite "github.com/mattn/go-sqlite3"
 	"github.com/imyousuf/webhook-broker/storage/data"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -168,4 +169,7 @@ func TestMessageSetDispatched(t *testing.T) {
 
 func TestNormalizeMySQLError(t *testing.T) {
 	assert.Equal(t, ErrDuplicateMessageIDForChannel, normalizeDBError(&mysql.MySQLError{Number: 1062}, mysqlErrorMap))
+	assert.Nil(t, normalizeDBError(nil, mysqlErrorMap))
+	assert.Equal(t, ErrDuplicateMessageIDForChannel, normalizeDBError(&sqlite.ErrConstraint, mysqlErrorMap))
+	assert.Equal(t, ErrDuplicateMessageIDForChannel, normalizeDBError(&sqlite.ErrConstraintUnique, mysqlErrorMap))
 }

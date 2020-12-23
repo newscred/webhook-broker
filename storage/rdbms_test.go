@@ -126,6 +126,7 @@ func TestGetNewDataAccessor(t *testing.T) {
 		assert.NotNil(t, dataAccessor.GetConsumerRepository())
 		assert.NotNil(t, dataAccessor.GetMessageRepository())
 		assert.NotNil(t, dataAccessor.GetDeliveryJobRepository())
+		assert.NotNil(t, dataAccessor.GetLockRepository())
 		// Does nothing
 		dataAccessor.Close()
 		t.Run("InitAppSkip", func(t *testing.T) {

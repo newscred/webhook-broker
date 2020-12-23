@@ -16,6 +16,7 @@ type DataAccessor interface {
 	GetConsumerRepository() ConsumerRepository
 	GetMessageRepository() MessageRepository
 	GetDeliveryJobRepository() DeliveryJobRepository
+	GetLockRepository() LockRepository
 	Close()
 }
 
@@ -66,4 +67,11 @@ type DeliveryJobRepository interface {
 	MarkJobRetry(deliveryJob *data.DeliveryJob, earliestDelta time.Duration) error
 	GetJobsForMessage(message *data.Message, page *data.Pagination) ([]*data.DeliveryJob, *data.Pagination, error)
 	GetByID(id string) (*data.DeliveryJob, error)
+}
+
+// LockRepository allows storage operations over Lock
+type LockRepository interface {
+	TryLock(lock *data.Lock) error
+	ReleaseLock(lock *data.Lock) error
+	TimeoutLocks(threshold time.Duration) error
 }
