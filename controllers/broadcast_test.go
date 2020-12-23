@@ -307,6 +307,66 @@ func TestBroadcastControllerPost(t *testing.T) {
 		msgRepo.AssertExpectations(t)
 		mockDispatcher.AssertExpectations(t)
 	})
+	t.Run("WithMessageID", func(t *testing.T) {
+		t.Parallel()
+		msgRepo := new(storagemocks.MessageRepository)
+		controller, mockDispatcher := getNewBroadcastController(msgRepo)
+		testRouter := createTestRouter(controller)
+		testURI := controller.FormatAsRelativeLink(getRouterParam(consumerTestChannel.ChannelID))
+		req, _ := http.NewRequest("POST", testURI, nil)
+		bodyString := "test message body"
+		req.Body = ioutil.NopCloser(strings.NewReader(bodyString))
+		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
+		req.Header.Add(headerChannelToken, consumerTestChannel.Token)
+		indexString := "0"
+		messageID := "non-conflict-message-id"
+		producerID := listTestProducerIDPrefix + indexString
+		req.Header.Add(headerProducerID, producerID)
+		req.Header.Add(headerProducerToken, successfulGetTestToken+" - "+indexString)
+		req.Header.Add(headerMessageID, messageID)
+		matcher := func(msg *data.Message) bool {
+			return msg.Priority == uint(0) && msg.ContentType == formDataContentTypeHeaderValue && msg.Payload == bodyString &&
+				msg.Status == data.MsgStatusAcknowledged && msg.BroadcastedTo.ChannelID == consumerTestChannel.ChannelID && msg.ProducedBy.ProducerID == producerID &&
+				msg.IsInValidState() && msg.MessageID == messageID
+		}
+		msgRepo.On("Create", mock.MatchedBy(matcher)).Return(nil)
+		wg := setupAsyncDispatchMock(mockDispatcher, matcher)
+		rr := httptest.NewRecorder()
+		testRouter.ServeHTTP(rr, req)
+		wg.Wait()
+		assert.Equal(t, http.StatusAccepted, rr.Code)
+		msgRepo.AssertExpectations(t)
+		mockDispatcher.AssertExpectations(t)
+	})
+	t.Run("MessageIDConflict", func(t *testing.T) {
+		t.Parallel()
+		msgRepo := new(storagemocks.MessageRepository)
+		controller, mockDispatcher := getNewBroadcastController(msgRepo)
+		testRouter := createTestRouter(controller)
+		testURI := controller.FormatAsRelativeLink(getRouterParam(consumerTestChannel.ChannelID))
+		req, _ := http.NewRequest("POST", testURI, nil)
+		bodyString := "test message body"
+		req.Body = ioutil.NopCloser(strings.NewReader(bodyString))
+		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
+		req.Header.Add(headerChannelToken, consumerTestChannel.Token)
+		indexString := "0"
+		messageID := "conflict-message-id"
+		req.Header.Add(headerMessageID, messageID)
+		producerID := listTestProducerIDPrefix + indexString
+		req.Header.Add(headerProducerID, producerID)
+		req.Header.Add(headerProducerToken, successfulGetTestToken+" - "+indexString)
+		matcher := func(msg *data.Message) bool {
+			return msg.Priority == uint(0) && msg.ContentType == formDataContentTypeHeaderValue && msg.Payload == bodyString &&
+				msg.Status == data.MsgStatusAcknowledged && msg.BroadcastedTo.ChannelID == consumerTestChannel.ChannelID && msg.ProducedBy.ProducerID == producerID &&
+				msg.IsInValidState() && msg.MessageID == messageID
+		}
+		msgRepo.On("Create", mock.MatchedBy(matcher)).Return(storage.ErrDuplicateMessageIDForChannel)
+		rr := httptest.NewRecorder()
+		testRouter.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusConflict, rr.Code)
+		msgRepo.AssertExpectations(t)
+		mockDispatcher.AssertExpectations(t)
+	})
 }
 
 func setupAsyncDispatchMock(mockDispatcher *dispatchermocks.MessageDispatcher, matcher func(msg *data.Message) bool) *sync.WaitGroup {

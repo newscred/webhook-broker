@@ -20,6 +20,7 @@ const (
 	headerChannelToken        = "X-Broker-Channel-Token"
 	headerProducerToken       = "X-Broker-Producer-Token"
 	headerProducerID          = "X-Broker-Producer-ID"
+	headerMessageID           = "X-Broker-Message-ID"
 	defaultMessageContentType = "application/octet-stream"
 )
 
@@ -80,10 +81,16 @@ func (broadcastController *BroadcastController) Post(w http.ResponseWriter, r *h
 		return
 	}
 	message, _ := data.NewMessage(channel, producer, string(body), contentType)
+	incomingMsgID := r.Header.Get(headerMessageID)
+	if len(incomingMsgID) > 0 {
+		message.MessageID = incomingMsgID
+	}
 	message.Priority = uint(math.Abs(float64(priority)))
 	if err = broadcastController.MessageRepository.Create(message); err == nil {
 		go broadcastController.Dispatcher.Dispatch(message)
 		writeStatus(w, http.StatusAccepted, nil)
+	} else if err == storage.ErrDuplicateMessageIDForChannel {
+		writeStatus(w, http.StatusConflict, err)
 	} else {
 		writeErr(w, err)
 	}

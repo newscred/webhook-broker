@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/imyousuf/webhook-broker/storage/data"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -163,4 +164,8 @@ func TestMessageSetDispatched(t *testing.T) {
 		tx, _ := testDB.Begin()
 		assert.Equal(t, ErrNoTxInContext, msgRepo.SetDispatched(context.WithValue(context.Background(), ContextKey("hello"), tx), message))
 	})
+}
+
+func TestNormalizeMySQLError(t *testing.T) {
+	assert.Equal(t, ErrDuplicateMessageIDForChannel, normalizeDBError(&mysql.MySQLError{Number: 1062}, mysqlErrorMap))
 }

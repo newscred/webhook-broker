@@ -21,6 +21,10 @@ var (
 	ErrDuplicateMessageIDForChannel = errors.New("duplicate message id for channel")
 	// ErrNoTxInContext represents the case where transaction is not passed in the context
 	ErrNoTxInContext = errors.New("no tx value in content")
+	mysqlErrorMap    = map[uint16]error{
+		// https://dev.mysql.com/doc/mysql-errors/8.0/en/server-error-reference.html#error_er_dup_entry
+		1062: ErrDuplicateMessageIDForChannel,
+	}
 )
 
 // ContextKey represents context key
@@ -43,6 +47,7 @@ func (msgRepo *MessageDBRepository) Create(message *data.Message) (err error) {
 		} else {
 			err = transactionalSingleRowWriteExec(msgRepo.db, emptyOps, "INSERT INTO message (id, channelId, producerId, messageId, payload, contentType, priority, status, receivedAt, outboxedAt, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 				args2SliceFnWrapper(message.ID, message.BroadcastedTo.ChannelID, message.ProducedBy.ProducerID, message.MessageID, message.Payload, message.ContentType, message.Priority, message.Status, message.ReceivedAt, message.OutboxedAt, message.CreatedAt, message.UpdatedAt))
+			err = normalizeDBError(err, mysqlErrorMap)
 		}
 	}
 	return err
