@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/imyousuf/webhook-broker/config"
@@ -23,14 +24,19 @@ type MessageDispatcher interface {
 
 // MessageDispatcherImpl is responsible for dispatching delivery jobs from acknowledged message
 type MessageDispatcherImpl struct {
-	consumerRepo     storage.ConsumerRepository
-	djRepo           storage.DeliveryJobRepository
-	workerPool       chan chan *Job
-	workers          []*Worker
-	jobQueue         chan *Job
-	jobPriorityQueue *PriorityQueue
-	stopTimeout      time.Duration
-	dispatcherStop   chan bool
+	consumerRepo             storage.ConsumerRepository
+	djRepo                   storage.DeliveryJobRepository
+	lockRepo                 storage.LockRepository
+	msgRepo                  storage.MessageRepository
+	workerPool               chan chan *Job
+	workers                  []*Worker
+	jobQueue                 chan *Job
+	jobPriorityQueue         *PriorityQueue
+	stopTimeout              time.Duration
+	rationalDelay            time.Duration
+	dispatcherStop           chan bool
+	messageRecoverWorkerStop chan bool
+	recoveryWorkersEnabled   bool
 }
 
 // Dispatch is responsible for dispatching delivery jobs for the message
@@ -69,23 +75,80 @@ func (msgDispatcher *MessageDispatcherImpl) Dispatch(message *data.Message) {
 	}
 }
 
-// StartDispatcher starts consuming jobs and should be called as a coroutine.
-func (msgDispatcher *MessageDispatcherImpl) StartDispatcher() {
-	go func() {
-		for {
-			select {
-			case job := <-msgDispatcher.jobQueue:
-				msgDispatcher.dispatchJob(job)
-			case <-msgDispatcher.dispatcherStop:
-				return
+func (msgDispatcher *MessageDispatcherImpl) startMessageDispatcher() {
+	for {
+		select {
+		case job := <-msgDispatcher.jobQueue:
+			msgDispatcher.dispatchJob(job)
+		case <-msgDispatcher.dispatcherStop:
+			return
+		}
+	}
+}
+
+var (
+	genericPanicRecoveryFunc = func() {
+		if r := recover(); r != nil {
+			log.Println("error - had to recover from panic", r)
+		}
+	}
+
+	attemptMessageDispatch = func(msgDispatcher MessageDispatcher, message *data.Message) (err error) {
+		msgDispatcher.Dispatch(message)
+		return err
+	}
+
+	recoverMessagesNotYetDispatched = func(msgDispatcher *MessageDispatcherImpl) {
+		defer genericPanicRecoveryFunc()
+		msgDispatcher.lockRepo.TimeoutLocks(msgDispatcher.rationalDelay)
+		messages := msgDispatcher.msgRepo.GetMessagesNotDispatchedForCertainPeriod(msgDispatcher.rationalDelay)
+		for _, message := range messages {
+			err := inLockRun(msgDispatcher.lockRepo, message, func() error {
+				return attemptMessageDispatch(msgDispatcher, message)
+			})
+			if err != nil {
+				log.Println("error - could ensure dispatch from recover worker", err, message.MessageID)
 			}
 		}
-	}()
+	}
+	inLockRun = func(lockRepo storage.LockRepository, lockable data.Lockable, run func() error) (err error) {
+		lock, err := data.NewLock(lockable)
+		if err == nil {
+			err = lockRepo.TryLock(lock)
+		}
+		if err == nil {
+			defer lockRepo.ReleaseLock(lock)
+			err = run()
+		}
+		if err == storage.ErrAlreadyLocked {
+			err = nil
+		}
+		return err
+	}
+)
+
+func (msgDispatcher *MessageDispatcherImpl) ensureMessageDispatched() {
+	for {
+		timer := time.After(msgDispatcher.rationalDelay)
+		select {
+		case <-msgDispatcher.messageRecoverWorkerStop:
+			return
+		case <-timer:
+			recoverMessagesNotYetDispatched(msgDispatcher)
+		}
+	}
+}
+
+// StartDispatcher starts consuming jobs and should be called as a coroutine.
+func (msgDispatcher *MessageDispatcherImpl) StartDispatcher() {
+	go msgDispatcher.startMessageDispatcher()
+	if msgDispatcher.recoveryWorkersEnabled {
+		go msgDispatcher.ensureMessageDispatched()
+	}
 }
 
 // Stop stops the workers of the dispatcher
 func (msgDispatcher *MessageDispatcherImpl) Stop() {
-	msgDispatcher.dispatcherStop <- true
 	timeoutContext, cancelFunc := context.WithTimeout(context.Background(), msgDispatcher.stopTimeout)
 	defer cancelFunc()
 	select {
@@ -93,10 +156,23 @@ func (msgDispatcher *MessageDispatcherImpl) Stop() {
 		log.Println("warn - dispatcher stop timedout")
 		return
 	default:
+		wg := sync.WaitGroup{}
+		wg.Add(1)
+		go func() {
+			msgDispatcher.dispatcherStop <- true
+			if msgDispatcher.recoveryWorkersEnabled {
+				msgDispatcher.messageRecoverWorkerStop <- true
+			}
+			wg.Done()
+		}()
 		log.Println("stopping workers", len(msgDispatcher.workers))
 		anyRunning := true
 		for i := 0; i < len(msgDispatcher.workers); i++ {
-			msgDispatcher.workers[i].Stop()
+			wg.Add(1)
+			go func(index int) {
+				msgDispatcher.workers[index].Stop()
+				wg.Done()
+			}(i)
 		}
 		for anyRunning {
 			localRun := false
@@ -105,6 +181,7 @@ func (msgDispatcher *MessageDispatcherImpl) Stop() {
 			}
 			anyRunning = localRun
 		}
+		wg.Wait()
 	}
 }
 
@@ -123,14 +200,34 @@ func (msgDispatcher *MessageDispatcherImpl) dispatchJob(job *Job) {
 	go asyncDequeueToWorker(msgDispatcher)
 }
 
+// Configuration represents the configuration for a dispatcher
+type Configuration struct {
+	DeliveryJobRepo          storage.DeliveryJobRepository
+	ConsumerRepo             storage.ConsumerRepository
+	LockRepo                 storage.LockRepository
+	MsgRepo                  storage.MessageRepository
+	BrokerConfig             config.BrokerConfig
+	ConsumerConnectionConfig config.ConsumerConnectionConfig
+}
+
 // NewMessageDispatcher retrieves new instance of MessageDispatcher
-func NewMessageDispatcher(djRepo storage.DeliveryJobRepository, consumerRepo storage.ConsumerRepository, brokerConfig config.BrokerConfig, consumerConfig config.ConsumerConnectionConfig) MessageDispatcher {
-	if djRepo == nil || consumerRepo == nil || brokerConfig == nil || consumerConfig == nil {
+func NewMessageDispatcher(configuration *Configuration) MessageDispatcher {
+	if configuration.DeliveryJobRepo == nil || configuration.ConsumerRepo == nil || configuration.MsgRepo == nil || configuration.LockRepo == nil {
 		panic(panicString)
 	}
-	dispatcherImpl := &MessageDispatcherImpl{djRepo: djRepo, consumerRepo: consumerRepo, dispatcherStop: make(chan bool),
-		workerPool: make(chan chan *Job, brokerConfig.GetMaxWorkers()), jobPriorityQueue: NewJobPriorityQueue(),
-		jobQueue: make(chan *Job, brokerConfig.GetMaxMessageQueueSize())}
+	if configuration.BrokerConfig == nil || configuration.ConsumerConnectionConfig == nil {
+		panic(panicString)
+	}
+	brokerConfig := configuration.BrokerConfig
+	djRepo := configuration.DeliveryJobRepo
+	consumerRepo := configuration.ConsumerRepo
+	consumerConfig := configuration.ConsumerConnectionConfig
+	msgRepo := configuration.MsgRepo
+	lockRepo := configuration.LockRepo
+	dispatcherImpl := &MessageDispatcherImpl{djRepo: djRepo, consumerRepo: consumerRepo, msgRepo: msgRepo, dispatcherStop: make(chan bool),
+		workerPool: make(chan chan *Job, brokerConfig.GetMaxWorkers()), jobPriorityQueue: NewJobPriorityQueue(), messageRecoverWorkerStop: make(chan bool),
+		jobQueue: make(chan *Job, brokerConfig.GetMaxMessageQueueSize()), rationalDelay: brokerConfig.GetRationalDelay(), lockRepo: lockRepo,
+		recoveryWorkersEnabled: brokerConfig.IsRecoveryWorkersEnabled()}
 	workers := make([]*Worker, brokerConfig.GetMaxWorkers())
 	for i := 0; i < len(workers); i++ {
 		worker := NewWorker(dispatcherImpl.workerPool, consumerConfig, brokerConfig, djRepo)

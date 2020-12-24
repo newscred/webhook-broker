@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log"
 	"time"
 
 	"github.com/imyousuf/webhook-broker/storage/data"
@@ -102,6 +103,47 @@ func (msgRepo *MessageDBRepository) SetDispatched(txContext context.Context, mes
 		return err
 	}
 	return ErrNoTxInContext
+}
+
+// GetMessagesNotDispatchedForCertainPeriod retrieves messages in acknowledged state despite `delta` being passed.
+func (msgRepo *MessageDBRepository) GetMessagesNotDispatchedForCertainPeriod(delta time.Duration) []*data.Message {
+	messages := make([]*data.Message, 0)
+	if delta > 0 {
+		delta = -1 * delta
+	}
+	page := data.NewPagination(nil, nil)
+	more := true
+	for more {
+		pageMessages := make([]*data.Message, 0, 100)
+		baseQuery := messageSelectRowCommonQuery + " status like ? AND receivedAt <= ?" + getPaginationQueryFragmentWithConfigurablePageSize(page, true, largePageSizeWithOrder)
+		scanArgs := func() []interface{} {
+			msg := &data.Message{}
+			msg.ProducedBy = &data.Producer{}
+			msg.BroadcastedTo = &data.Channel{}
+			pageMessages = append(pageMessages, msg)
+			return []interface{}{&msg.ID, &msg.MessageID, &msg.ProducedBy.ProducerID, &msg.BroadcastedTo.ChannelID, &msg.Payload, &msg.ContentType, &msg.Priority, &msg.Status, &msg.ReceivedAt, &msg.OutboxedAt, &msg.CreatedAt, &msg.UpdatedAt}
+		}
+		args := []interface{}{data.MsgStatusAcknowledged, time.Now().Add(delta)}
+		args = append(args, getPaginationTimestampQueryArgs(page)...)
+		err := queryRows(msgRepo.db, baseQuery, args2SliceFnWrapper(args...), scanArgs)
+		if err == nil {
+			for _, msg := range pageMessages {
+				msg.BroadcastedTo, _ = msgRepo.channelRepository.Get(msg.BroadcastedTo.ChannelID)
+				msg.ProducedBy, _ = msgRepo.producerRepository.Get(msg.ProducedBy.ProducerID)
+			}
+			msgCount := len(pageMessages)
+			if msgCount > 0 {
+				page = data.NewPagination(pageMessages[msgCount-1], nil)
+			} else {
+				more = false
+			}
+			messages = append(messages, pageMessages...)
+		} else {
+			log.Println("error - could get list messages needing to be dispatched", err)
+			more = false
+		}
+	}
+	return messages
 }
 
 // NewMessageRepository creates a new instance of MessageRepository

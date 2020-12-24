@@ -1,15 +1,19 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"errors"
+	"log"
+	"os"
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-sql-driver/mysql"
-	sqlite "github.com/mattn/go-sqlite3"
 	"github.com/imyousuf/webhook-broker/storage/data"
+	sqlite "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -172,4 +176,38 @@ func TestNormalizeMySQLError(t *testing.T) {
 	assert.Nil(t, normalizeDBError(nil, mysqlErrorMap))
 	assert.Equal(t, ErrDuplicateMessageIDForChannel, normalizeDBError(&sqlite.ErrConstraint, mysqlErrorMap))
 	assert.Equal(t, ErrDuplicateMessageIDForChannel, normalizeDBError(&sqlite.ErrConstraintUnique, mysqlErrorMap))
+}
+
+func TestGetMessagesNotDispatchedForCertainPeriod(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
+		t.Parallel()
+		msgRepo := getMessageRepository()
+		msg, err := data.NewMessage(channel1, producer1, samplePayload, sampleContentType)
+		assert.Nil(t, err)
+		msg.ReceivedAt = msg.ReceivedAt.Add(-5 * time.Second)
+		msg2, err := data.NewMessage(channel1, producer1, samplePayload, sampleContentType)
+		err = msgRepo.Create(msg)
+		assert.Nil(t, err)
+		err = msgRepo.Create(msg2)
+		assert.Nil(t, err)
+		msgs := msgRepo.GetMessagesNotDispatchedForCertainPeriod(2 * time.Second)
+		assert.Equal(t, 1, len(msgs))
+		assert.Equal(t, msg.MessageID, msgs[0].MessageID)
+	})
+	t.Run("QueryError", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		log.SetOutput(&buf)
+		defer func() { log.SetOutput(os.Stderr) }()
+		errString := "sample select error"
+		expectedErr := errors.New(errString)
+		db, mock, _ := sqlmock.New()
+		msgRepo := NewMessageRepository(db, NewChannelRepository(testDB), NewProducerRepository(testDB))
+		mock.ExpectQuery(messageSelectRowCommonQuery).WillReturnError(expectedErr)
+		mock.MatchExpectationsInOrder(true)
+		msgs := msgRepo.GetMessagesNotDispatchedForCertainPeriod(2 * time.Second)
+		assert.Equal(t, 0, len(msgs))
+		assert.Nil(t, mock.ExpectationsWereMet())
+		assert.Contains(t, buf.String(), errString)
+	})
 }

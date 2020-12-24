@@ -10,7 +10,7 @@ import (
 
 const (
 	jobPropertyCount  = 9
-	commonSelectQuery = "SELECT id, messageId, consumerId, status, dispatchReceivedAt, retryAttemptCount, statusChangedAt, earliestNextAttemptAt, createdAt, updatedAt FROM job WHERE"
+	jobCommonSelectQuery = "SELECT id, messageId, consumerId, status, dispatchReceivedAt, retryAttemptCount, statusChangedAt, earliestNextAttemptAt, createdAt, updatedAt FROM job WHERE"
 )
 
 // DeliveryJobDBRepository is the DeliveryJobRepository's RDBMS implementation
@@ -97,7 +97,7 @@ func (djRepo *DeliveryJobDBRepository) GetJobsForMessage(message *data.Message, 
 		return jobs, pagination, ErrPaginationDeadlock
 	}
 	var err error
-	baseQuery := commonSelectQuery + " messageId like ?" + getPaginationQueryFragmentWithConfigurablePageSize(page, true, largePageSizeWithOrder)
+	baseQuery := jobCommonSelectQuery + " messageId like ?" + getPaginationQueryFragmentWithConfigurablePageSize(page, true, largePageSizeWithOrder)
 	scanArgs := func() []interface{} {
 		job := &data.DeliveryJob{}
 		job.Message = message
@@ -129,7 +129,7 @@ func (djRepo *DeliveryJobDBRepository) GetByID(id string) (job *data.DeliveryJob
 	job = &data.DeliveryJob{}
 	var messageID string
 	var consumerID string
-	err = querySingleRow(djRepo.db, commonSelectQuery+" id like ?", args2SliceFnWrapper(id),
+	err = querySingleRow(djRepo.db, jobCommonSelectQuery+" id like ?", args2SliceFnWrapper(id),
 		args2SliceFnWrapper(&job.ID, &messageID, &consumerID, &job.Status, &job.DispatchReceivedAt, &job.RetryAttemptCount, &job.StatusChangedAt,
 			&job.EarliestNextAttemptAt, &job.CreatedAt, &job.UpdatedAt))
 	if err == nil {

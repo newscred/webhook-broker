@@ -56,6 +56,7 @@ type MessageRepository interface {
 	Get(channelID string, messageID string) (*data.Message, error)
 	GetByID(id string) (*data.Message, error)
 	SetDispatched(txContext context.Context, message *data.Message) error
+	GetMessagesNotDispatchedForCertainPeriod(delta time.Duration) []*data.Message
 }
 
 // DeliveryJobRepository allows storage operations over DeliveryJob

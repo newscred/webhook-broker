@@ -71,10 +71,11 @@ func findPort() int {
 
 func checkPort(port int) (err error) {
 	ln, netErr := net.Listen("tcp", ":"+strconv.Itoa(port))
-	defer ln.Close()
 	if netErr != nil {
 		log.Println(netErr)
 		err = netErr
+	} else {
+		defer ln.Close()
 	}
 	return err
 }
@@ -133,10 +134,18 @@ func SetupTestFixture() {
 	wg.Wait()
 }
 
-func getMockedBrokerConfig() *configmocks.BrokerConfig {
+func getMockedBrokerConfig(workerEnabled ...bool) *configmocks.BrokerConfig {
 	mockedConfig := new(configmocks.BrokerConfig)
 	mockedConfig.On("GetMaxMessageQueueSize").Return(uint(10))
 	mockedConfig.On("GetMaxWorkers").Return(uint(10))
+	if len(workerEnabled) <= 0 {
+		mockedConfig.On("IsRecoveryWorkersEnabled").Return(false)
+	} else {
+		mockedConfig.On("IsRecoveryWorkersEnabled").Return(workerEnabled[0])
+	}
+	mockedConfig.On("GetRationalDelay").Return(100 * time.Millisecond)
+	mockedConfig.On("GetMaxRetry").Return(uint8(41))
+	mockedConfig.On("GetRetryBackoffDelays").Return([]time.Duration{5 * time.Second})
 	return mockedConfig
 }
 
@@ -144,6 +153,22 @@ func getMockedConsumerConfig() *configmocks.ConsumerConnectionConfig {
 	mockedConfig := new(configmocks.ConsumerConnectionConfig)
 	mockedConfig.On("GetConnectionTimeout").Return(100 * time.Millisecond)
 	return mockedConfig
+}
+
+func getCompleteDispatcherConfiguration(msgRepo storage.MessageRepository, djRepo storage.DeliveryJobRepository, consumerRepo storage.ConsumerRepository, brokerConfig config.BrokerConfig, consumerConfig config.ConsumerConnectionConfig, lockRepo storage.LockRepository) *Configuration {
+	return &Configuration{
+		DeliveryJobRepo:          djRepo,
+		ConsumerRepo:             consumerRepo,
+		BrokerConfig:             brokerConfig,
+		ConsumerConnectionConfig: consumerConfig,
+		LockRepo:                 lockRepo,
+		MsgRepo:                  msgRepo,
+	}
+}
+
+func getDispatcherConfiguration(djRepo storage.DeliveryJobRepository, consumerRepo storage.ConsumerRepository, brokerConfig config.BrokerConfig, consumerConfig config.ConsumerConnectionConfig, lockRepo storage.LockRepository) *Configuration {
+	mockMsgRepo := new(storagemocks.MessageRepository)
+	return getCompleteDispatcherConfiguration(mockMsgRepo, djRepo, consumerRepo, brokerConfig, consumerConfig, lockRepo)
 }
 
 func TestNewMessageDispatcher(t *testing.T) {
@@ -154,14 +179,15 @@ func TestNewMessageDispatcher(t *testing.T) {
 	}
 	t.Run("Success", func(t *testing.T) {
 		t.Parallel()
-		mockBrokerConfig := getMockedBrokerConfig()
+		mockBrokerConfig := getMockedBrokerConfig(true)
 		mockConsumerConfig := getMockedConsumerConfig()
 		mRepo := new(storagemocks.DeliveryJobRepository)
 		cRepo := new(storagemocks.ConsumerRepository)
-		dispatcher := NewMessageDispatcher(mRepo, cRepo, mockBrokerConfig, mockConsumerConfig)
+		lockRepo := new(storagemocks.LockRepository)
+		dispatcher := NewMessageDispatcher(getDispatcherConfiguration(mRepo, cRepo, mockBrokerConfig, mockConsumerConfig, lockRepo))
 		assert.NotNil(t, dispatcher)
+		time.Sleep(110 * time.Millisecond)
 		dispatcher.Stop()
-		mockBrokerConfig.AssertExpectations(t)
 	})
 	t.Run("MsgRepoNil", func(t *testing.T) {
 		t.Parallel()
@@ -169,7 +195,8 @@ func TestNewMessageDispatcher(t *testing.T) {
 		mockBrokerConfig := new(configmocks.BrokerConfig)
 		mockConsumerConfig := new(configmocks.ConsumerConnectionConfig)
 		cRepo := new(storagemocks.ConsumerRepository)
-		assert.NotNil(t, NewMessageDispatcher(nil, cRepo, mockBrokerConfig, mockConsumerConfig))
+		lockRepo := new(storagemocks.LockRepository)
+		assert.NotNil(t, NewMessageDispatcher(getDispatcherConfiguration(nil, cRepo, mockBrokerConfig, mockConsumerConfig, lockRepo)))
 	})
 	t.Run("ConsumerRepoNil", func(t *testing.T) {
 		t.Parallel()
@@ -177,7 +204,8 @@ func TestNewMessageDispatcher(t *testing.T) {
 		mockBrokerConfig := new(configmocks.BrokerConfig)
 		mockConsumerConfig := new(configmocks.ConsumerConnectionConfig)
 		mRepo := new(storagemocks.DeliveryJobRepository)
-		assert.NotNil(t, NewMessageDispatcher(mRepo, nil, mockBrokerConfig, mockConsumerConfig))
+		lockRepo := new(storagemocks.LockRepository)
+		assert.NotNil(t, NewMessageDispatcher(getDispatcherConfiguration(mRepo, nil, mockBrokerConfig, mockConsumerConfig, lockRepo)))
 	})
 	t.Run("BrokerConfigNil", func(t *testing.T) {
 		t.Parallel()
@@ -185,7 +213,8 @@ func TestNewMessageDispatcher(t *testing.T) {
 		mockConsumerConfig := new(configmocks.ConsumerConnectionConfig)
 		mRepo := new(storagemocks.DeliveryJobRepository)
 		cRepo := new(storagemocks.ConsumerRepository)
-		assert.NotNil(t, NewMessageDispatcher(mRepo, cRepo, nil, mockConsumerConfig))
+		lockRepo := new(storagemocks.LockRepository)
+		assert.NotNil(t, NewMessageDispatcher(getDispatcherConfiguration(mRepo, cRepo, nil, mockConsumerConfig, lockRepo)))
 	})
 	t.Run("ConsumerConnectionConfigNil", func(t *testing.T) {
 		t.Parallel()
@@ -193,7 +222,17 @@ func TestNewMessageDispatcher(t *testing.T) {
 		mockBrokerConfig := new(configmocks.BrokerConfig)
 		mRepo := new(storagemocks.DeliveryJobRepository)
 		cRepo := new(storagemocks.ConsumerRepository)
-		assert.NotNil(t, NewMessageDispatcher(mRepo, cRepo, mockBrokerConfig, nil))
+		lockRepo := new(storagemocks.LockRepository)
+		assert.NotNil(t, NewMessageDispatcher(getDispatcherConfiguration(mRepo, cRepo, mockBrokerConfig, nil, lockRepo)))
+	})
+	t.Run("DispatcherLockRepoNil", func(t *testing.T) {
+		t.Parallel()
+		defer deferFunc()
+		mockBrokerConfig := getMockedBrokerConfig()
+		mockConsumerConfig := getMockedConsumerConfig()
+		mRepo := new(storagemocks.DeliveryJobRepository)
+		cRepo := new(storagemocks.ConsumerRepository)
+		assert.NotNil(t, NewMessageDispatcher(getDispatcherConfiguration(mRepo, cRepo, mockBrokerConfig, mockConsumerConfig, nil)))
 	})
 }
 
@@ -210,10 +249,10 @@ func TestMessageDispatcherImplDispatch(t *testing.T) {
 		cRepo := new(storagemocks.ConsumerRepository)
 		mockBrokerConfig := getMockedBrokerConfig()
 		mockConsumerConfig := getMockedConsumerConfig()
-		dispatcher := NewMessageDispatcher(mRepo, cRepo, mockBrokerConfig, mockConsumerConfig)
+		lockRepo := new(storagemocks.LockRepository)
+		dispatcher := NewMessageDispatcher(getDispatcherConfiguration(mRepo, cRepo, mockBrokerConfig, mockConsumerConfig, lockRepo))
 		assert.NotNil(t, dispatcher)
 		dispatcher.Dispatch(nil)
-		mockBrokerConfig.AssertExpectations(t)
 	})
 	t.Run("InvalidMessage", func(t *testing.T) {
 		t.Parallel()
@@ -221,12 +260,12 @@ func TestMessageDispatcherImplDispatch(t *testing.T) {
 		cRepo := new(storagemocks.ConsumerRepository)
 		mockBrokerConfig := getMockedBrokerConfig()
 		mockConsumerConfig := getMockedConsumerConfig()
-		dispatcher := NewMessageDispatcher(mRepo, cRepo, mockBrokerConfig, mockConsumerConfig)
+		lockRepo := new(storagemocks.LockRepository)
+		dispatcher := NewMessageDispatcher(getDispatcherConfiguration(mRepo, cRepo, mockBrokerConfig, mockConsumerConfig, lockRepo))
 		assert.NotNil(t, dispatcher)
 		msg, _ := data.NewMessage(channel, producer, "payload", "type")
 		msg.ReceivedAt = time.Time{}
 		dispatcher.Dispatch(msg)
-		mockBrokerConfig.AssertExpectations(t)
 	})
 	t.Run("ListError", func(t *testing.T) {
 		var buf bytes.Buffer
@@ -238,7 +277,8 @@ func TestMessageDispatcherImplDispatch(t *testing.T) {
 		cRepo := new(storagemocks.ConsumerRepository)
 		mockBrokerConfig := getMockedBrokerConfig()
 		mockConsumerConfig := getMockedConsumerConfig()
-		dispatcher := NewMessageDispatcher(mRepo, cRepo, mockBrokerConfig, mockConsumerConfig)
+		lockRepo := new(storagemocks.LockRepository)
+		dispatcher := NewMessageDispatcher(getDispatcherConfiguration(mRepo, cRepo, mockBrokerConfig, mockConsumerConfig, lockRepo))
 		assert.NotNil(t, dispatcher)
 		msg, _ := data.NewMessage(channel, producer, "payload", "type")
 		err := dataAccessor.GetMessageRepository().Create(msg)
@@ -278,7 +318,8 @@ func TestMessageDispatcherImplDispatch(t *testing.T) {
 			}
 		}
 		wg.Add(len(consumers))
-		dispatcher := NewMessageDispatcher(dataAccessor.GetDeliveryJobRepository(), dataAccessor.GetConsumerRepository(), configuration, configuration)
+		brokerConf := getMockedBrokerConfig()
+		dispatcher := NewMessageDispatcher(getDispatcherConfiguration(dataAccessor.GetDeliveryJobRepository(), dataAccessor.GetConsumerRepository(), brokerConf, configuration, dataAccessor.GetLockRepository()))
 		msg, _ := data.NewMessage(channel, producer, messagePayload, contentType)
 		err := dataAccessor.GetMessageRepository().Create(msg)
 		assert.Nil(t, err)
@@ -297,4 +338,122 @@ func TestMessageDispatcherImplDispatch(t *testing.T) {
 	})
 	t.Run("t", func(t *testing.T) { t.Parallel() })
 
+}
+
+func TestInLockRun(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
+		t.Parallel()
+		mockLockRepo := new(storagemocks.LockRepository)
+		mockLockable := new(storagemocks.Lockable)
+		lockID := "testlocking"
+		mockLockable.On("GetLockID").Return(lockID)
+		lockMatcher := func(lock *data.Lock) bool {
+			return lock.LockID == lockID
+		}
+		mockLockRepo.On("TryLock", mock.MatchedBy(lockMatcher)).Return(nil)
+		mockLockRepo.On("ReleaseLock", mock.MatchedBy(lockMatcher)).Return(nil)
+		err := inLockRun(mockLockRepo, mockLockable, func() error {
+			return nil
+		})
+		assert.Nil(t, err)
+		mockLockRepo.AssertExpectations(t)
+		mockLockable.AssertExpectations(t)
+	})
+	t.Run("AlreadyLocked", func(t *testing.T) {
+		t.Parallel()
+		mockLockRepo := new(storagemocks.LockRepository)
+		mockLockable := new(storagemocks.Lockable)
+		lockID := "testlocking"
+		mockLockable.On("GetLockID").Return(lockID)
+		lockMatcher := func(lock *data.Lock) bool {
+			return lock.LockID == lockID
+		}
+		mockLockRepo.On("TryLock", mock.MatchedBy(lockMatcher)).Return(storage.ErrAlreadyLocked)
+		err := inLockRun(mockLockRepo, mockLockable, func() error {
+			return nil
+		})
+		assert.Nil(t, err)
+		mockLockRepo.AssertExpectations(t)
+		mockLockable.AssertExpectations(t)
+	})
+	t.Run("OtherLockError", func(t *testing.T) {
+		t.Parallel()
+		mockLockRepo := new(storagemocks.LockRepository)
+		mockLockable := new(storagemocks.Lockable)
+		lockID := "testlocking"
+		mockLockable.On("GetLockID").Return(lockID)
+		lockMatcher := func(lock *data.Lock) bool {
+			return lock.LockID == lockID
+		}
+		expectedErr := errors.New("unknown error")
+		mockLockRepo.On("TryLock", mock.MatchedBy(lockMatcher)).Return(expectedErr)
+		err := inLockRun(mockLockRepo, mockLockable, func() error {
+			return nil
+		})
+		assert.NotNil(t, err)
+		assert.Equal(t, expectedErr, err)
+		mockLockRepo.AssertExpectations(t)
+		mockLockable.AssertExpectations(t)
+	})
+	t.Run("RunError", func(t *testing.T) {
+		t.Parallel()
+		mockLockRepo := new(storagemocks.LockRepository)
+		mockLockable := new(storagemocks.Lockable)
+		lockID := "testlocking"
+		mockLockable.On("GetLockID").Return(lockID)
+		lockMatcher := func(lock *data.Lock) bool {
+			return lock.LockID == lockID
+		}
+		expectedErr := errors.New("unknown error")
+		mockLockRepo.On("TryLock", mock.MatchedBy(lockMatcher)).Return(nil)
+		mockLockRepo.On("ReleaseLock", mock.MatchedBy(lockMatcher)).Return(nil)
+		err := inLockRun(mockLockRepo, mockLockable, func() error {
+			return expectedErr
+		})
+		assert.NotNil(t, err)
+		assert.Equal(t, expectedErr, err)
+		mockLockRepo.AssertExpectations(t)
+		mockLockable.AssertExpectations(t)
+	})
+}
+
+func TestRecoverMessagesNotYetDispatched(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
+		t.Parallel()
+		messagePayload := `{"key": "Custom JSON"}`
+		contentType := "application/json"
+		brokerConf := getMockedBrokerConfig()
+		dispatcher := NewMessageDispatcher(getCompleteDispatcherConfiguration(dataAccessor.GetMessageRepository(), dataAccessor.GetDeliveryJobRepository(), dataAccessor.GetConsumerRepository(), brokerConf, configuration, dataAccessor.GetLockRepository()))
+		msg, _ := data.NewMessage(channel, producer, messagePayload, contentType)
+		msg.ReceivedAt = msg.ReceivedAt.Add(-5 * time.Second)
+		err := dataAccessor.GetMessageRepository().Create(msg)
+		assert.Nil(t, err)
+		recoverMessagesNotYetDispatched(dispatcher.(*MessageDispatcherImpl))
+		nMsg, _ := dataAccessor.GetMessageRepository().GetByID(msg.ID.String())
+		assert.Equal(t, data.MsgStatusDispatched, nMsg.Status)
+	})
+	t.Run("LogError", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		log.SetOutput(&buf)
+		defer func() { log.SetOutput(os.Stderr) }()
+		errString := "sample select error"
+		expectedErr := errors.New(errString)
+		messagePayload := `{"key": "Custom JSON"}`
+		contentType := "application/json"
+		brokerConf := getMockedBrokerConfig()
+		mockLockRepo := new(storagemocks.LockRepository)
+		mockLockRepo.On("TimeoutLocks", mock.Anything).Return(nil)
+		mockLockRepo.On("TryLock", mock.Anything).Return(expectedErr)
+		dispatcher := NewMessageDispatcher(getCompleteDispatcherConfiguration(dataAccessor.GetMessageRepository(), dataAccessor.GetDeliveryJobRepository(), dataAccessor.GetConsumerRepository(), brokerConf, configuration, mockLockRepo))
+		msg, _ := data.NewMessage(channel, producer, messagePayload, contentType)
+		msg.ReceivedAt = msg.ReceivedAt.Add(-5 * time.Second)
+		err := dataAccessor.GetMessageRepository().Create(msg)
+		assert.Nil(t, err)
+		recoverMessagesNotYetDispatched(dispatcher.(*MessageDispatcherImpl))
+		nMsg, _ := dataAccessor.GetMessageRepository().GetByID(msg.ID.String())
+		assert.Equal(t, data.MsgStatusAcknowledged, nMsg.Status)
+		assert.Contains(t, buf.String(), msg.MessageID)
+		assert.Contains(t, buf.String(), errString)
+	})
 }
