@@ -37,9 +37,7 @@ func TestNewProducer(t *testing.T) {
 func TestGetCursor(t *testing.T) {
 	producer, err := NewProducer(someID, someToken)
 	assert.Nil(t, err)
-	text, err := producer.ID.MarshalText()
-	assert.Nil(t, err)
-	expectedCursor := Cursor(string(text))
+	expectedCursor := Cursor{ID: producer.ID.String(), Timestamp: producer.CreatedAt}
 	actualCursor, err := producer.GetCursor()
 	assert.Nil(t, err)
 	assert.Equal(t, expectedCursor, *actualCursor)

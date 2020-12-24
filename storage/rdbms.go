@@ -347,7 +347,8 @@ var (
 			} else {
 				query = query + "WHERE "
 			}
-			query = query + "id < '" + string(*page.Next) + "' "
+			query = query + "id < '" + page.Next.ID + "' "
+			query = query + "AND createdAt <= ? "
 		}
 		if page.Previous != nil {
 			if append {
@@ -355,7 +356,8 @@ var (
 			} else {
 				query = query + "WHERE "
 			}
-			query = query + "id > '" + string(*page.Previous) + "' "
+			query = query + "id > '" + page.Previous.ID + "' "
+			query = query + "AND createdAt >= ? "
 		}
 		query = query + string(orderByQueryClause)
 		return query
@@ -363,6 +365,17 @@ var (
 
 	getPaginationQueryFragment = func(page *data.Pagination, append bool) string {
 		return getPaginationQueryFragmentWithConfigurablePageSize(page, append, pageSizeWithOrder)
+	}
+
+	getPaginationTimestampQueryArgs = func(page *data.Pagination) []interface{} {
+		times := make([]interface{}, 0, 2)
+		if page.Next != nil {
+			times = append(times, page.Next.Timestamp)
+		}
+		if page.Previous != nil {
+			times = append(times, page.Previous.Timestamp)
+		}
+		return times
 	}
 
 	querySingleRow = func(db *sql.DB, query string, queryArgs func() []interface{}, scanArgs func() []interface{}) error {

@@ -106,7 +106,12 @@ func (djRepo *DeliveryJobDBRepository) GetJobsForMessage(message *data.Message, 
 		var messageID string
 		return []interface{}{&job.ID, &messageID, &job.Listener.ID, &job.Status, &job.DispatchReceivedAt, &job.RetryAttemptCount, &job.StatusChangedAt, &job.EarliestNextAttemptAt, &job.CreatedAt, &job.UpdatedAt}
 	}
-	err = queryRows(djRepo.db, baseQuery, args2SliceFnWrapper(message.ID.String()), scanArgs)
+	argsFunc := args2SliceFnWrapper(message.ID.String())
+	times := getPaginationTimestampQueryArgs(page)
+	if len(times) > 0 {
+		argsFunc = args2SliceFnWrapper(message.ID.String(), times[0])
+	}
+	err = queryRows(djRepo.db, baseQuery, argsFunc, scanArgs)
 	if err == nil {
 		for _, job := range jobs {
 			job.Listener, _ = djRepo.consumerRepository.GetByID(job.Listener.ID.String())

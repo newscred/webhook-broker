@@ -102,6 +102,7 @@ func TestConsumersControllerGet(t *testing.T) {
 	listController := NewConsumersController(getNewConsumerController(consumerRepo), consumerRepo)
 	testRouter := createTestRouter(listController)
 	testURI := listController.FormatAsRelativeLink(httprouter.Param{Key: channelIDPathParamKey, Value: consumerTestChannel.ChannelID})
+	t.Log(testURI)
 	req, _ := http.NewRequest("GET", testURI, nil)
 	rr := httptest.NewRecorder()
 	testRouter.ServeHTTP(rr, req)
@@ -116,11 +117,13 @@ func TestConsumersControllerGet(t *testing.T) {
 	previousURL := bodyChannels.Pages[previousPaginationQueryParamKey]
 
 	// Previous of first page should be empty
+	t.Log(previousURL)
 	preq, _ := http.NewRequest("GET", previousURL, nil)
 	pr := httptest.NewRecorder()
 	testRouter.ServeHTTP(pr, preq)
 	assert.Equal(t, http.StatusOK, pr.Code)
 	json.NewDecoder(strings.NewReader(pr.Body.String())).Decode(bodyChannels)
+	t.Log(pr.Body.String())
 	assert.Equal(t, 0, len(bodyChannels.Result))
 
 	// Next of first page should have 25

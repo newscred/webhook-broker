@@ -152,13 +152,17 @@ func getPagination(req *http.Request) *data.Pagination {
 	originalURL := req.URL
 	previous := originalURL.Query().Get(previousPaginationQueryParamKey)
 	if len(previous) > 0 {
-		prevCursor := data.Cursor(previous)
-		result.Previous = &prevCursor
+		prevCursor, err := data.ParseCursor(previous)
+		if err == nil {
+			result.Previous = prevCursor
+		}
 	}
 	next := originalURL.Query().Get(nextPaginationQueryParamKey)
 	if len(next) > 0 {
-		nextCursor := data.Cursor(next)
-		result.Next = &nextCursor
+		nextCursor, err := data.ParseCursor(next)
+		if err == nil {
+			result.Next = nextCursor
+		}
 	}
 	return result
 }
@@ -170,14 +174,14 @@ func getPaginationLinks(req *http.Request, pagination *data.Pagination) map[stri
 		if pagination.Previous != nil {
 			previous := cloneBaseURL(originalURL)
 			prevQueries := make(url.Values)
-			prevQueries.Set(previousPaginationQueryParamKey, string(*pagination.Previous))
+			prevQueries.Set(previousPaginationQueryParamKey, pagination.Previous.String())
 			previous.RawQuery = prevQueries.Encode()
 			links[previousPaginationQueryParamKey] = previous.String()
 		}
 		if pagination.Next != nil {
 			next := cloneBaseURL(originalURL)
 			nextQueries := make(url.Values)
-			nextQueries.Set(nextPaginationQueryParamKey, string(*pagination.Next))
+			nextQueries.Set(nextPaginationQueryParamKey, pagination.Next.String())
 			next.RawQuery = nextQueries.Encode()
 			links[nextPaginationQueryParamKey] = next.String()
 		}

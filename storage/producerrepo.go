@@ -68,7 +68,7 @@ func (repo *ProducerDBRepository) GetList(page *data.Pagination) ([]*data.Produc
 		producers = append(producers, producer)
 		return []interface{}{&producer.ID, &producer.ProducerID, &producer.Name, &producer.Token, &producer.CreatedAt, &producer.UpdatedAt}
 	}
-	err := queryRows(repo.db, baseQuery, nilArgs, scanArgs)
+	err := queryRows(repo.db, baseQuery, args2SliceFnWrapper(getPaginationTimestampQueryArgs(page)...), scanArgs)
 	if err == nil {
 		producerCount := len(producers)
 		if producerCount > 0 {

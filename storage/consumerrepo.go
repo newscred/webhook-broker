@@ -103,7 +103,12 @@ func (consumerRepo *ConsumerDBRepository) GetList(channelID string, page *data.P
 			consumers = append(consumers, consumer)
 			return []interface{}{&consumer.ID, &consumer.ConsumerID, &consumer.Name, &consumer.Token, &consumer.CallbackURL, &consumer.CreatedAt, &consumer.UpdatedAt}
 		}
-		err = queryRows(consumerRepo.db, baseQuery, args2SliceFnWrapper(channelID), scanArgs)
+		var argsFunc func() []interface{} = args2SliceFnWrapper(channelID)
+		times := getPaginationTimestampQueryArgs(page)
+		if len(times) > 0 {
+			argsFunc = args2SliceFnWrapper(channelID, times[0])
+		}
+		err = queryRows(consumerRepo.db, baseQuery, argsFunc, scanArgs)
 	}
 	if err == nil {
 		consumerCount := len(consumers)

@@ -1,6 +1,7 @@
 package data
 
 import (
+	"encoding/base64"
 	"errors"
 	"net/http"
 	"testing"
@@ -22,8 +23,8 @@ func (m *MockPaginateableImpl) GetCursor() (*Cursor, error) {
 
 func TestNewPagination(t *testing.T) {
 	err := errors.New("Nil Error")
-	cursor := Cursor("test")
-	cursor2 := Cursor("test2")
+	cursor := Cursor{ID: "test"}
+	cursor2 := Cursor{ID: "test2"}
 	t.Run("AfterNilBeforeNil", func(t *testing.T) {
 		t.Parallel()
 		pagination := NewPagination(nil, nil)
@@ -89,4 +90,46 @@ func TestGetLastUpdatedHTTPTimeString(t *testing.T) {
 	currentTime := time.Now()
 	base := BasePaginateable{UpdatedAt: currentTime}
 	assert.Equal(t, currentTime.Format(http.TimeFormat), base.GetLastUpdatedHTTPTimeString())
+}
+
+func TestCursorString(t *testing.T) {
+	testTime := time.Now()
+	testID := "testing"
+	cursor := &Cursor{ID: testID, Timestamp: testTime}
+	assert.Equal(t, string(base64.StdEncoding.EncodeToString([]byte(testID+cursorSeparator+testTime.Format(time.RFC3339Nano)))), cursor.String())
+}
+
+func TestParseCursor(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
+		t.Parallel()
+		testTime := time.Now()
+		testID := "testing"
+		cursor := &Cursor{ID: testID, Timestamp: testTime}
+		parsedCursor, err := ParseCursor(cursor.String())
+		assert.Nil(t, err)
+		assert.Equal(t, testID, parsedCursor.ID)
+		assert.True(t, cursor.Timestamp.Equal(parsedCursor.Timestamp))
+	})
+	t.Run("NoEnoughSplits", func(t *testing.T) {
+		t.Parallel()
+		testTime := time.Now()
+		testID := "testing"
+		cursorString := string(base64.StdEncoding.EncodeToString([]byte(testID + testTime.Format(time.RFC3339Nano))))
+		parsedCursor, err := ParseCursor(cursorString)
+		assert.Equal(t, ErrInsufficientInformationForCreating, err)
+		assert.NotNil(t, parsedCursor)
+		cursorString = string(base64.StdEncoding.EncodeToString([]byte(testID + cursorString + testTime.Format(time.RFC3339Nano) + cursorString)))
+		parsedCursor, err = ParseCursor(cursorString)
+		assert.Equal(t, ErrInsufficientInformationForCreating, err)
+		assert.NotNil(t, parsedCursor)
+	})
+	t.Run("TimeFormatIncorrect", func(t *testing.T) {
+		t.Parallel()
+		testTime := time.Now()
+		testID := "testing"
+		cursorString := string(base64.StdEncoding.EncodeToString([]byte(testID + testTime.Format(time.RFC1123))))
+		parsedCursor, err := ParseCursor(cursorString)
+		assert.NotNil(t, err)
+		assert.NotNil(t, parsedCursor)
+	})
 }

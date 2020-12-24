@@ -74,7 +74,7 @@ func (repo *ChannelDBRepository) GetList(page *data.Pagination) ([]*data.Channel
 		channels = append(channels, channel)
 		return []interface{}{&channel.ID, &channel.ChannelID, &channel.Name, &channel.Token, &channel.CreatedAt, &channel.UpdatedAt}
 	}
-	err := queryRows(repo.db, baseQuery, nilArgs, scanArgs)
+	err := queryRows(repo.db, baseQuery, args2SliceFnWrapper(getPaginationTimestampQueryArgs(page)...), scanArgs)
 	if err == nil {
 		channelCount := len(channels)
 		if channelCount > 0 {

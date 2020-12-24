@@ -1,8 +1,10 @@
 package data
 
 import (
+	"encoding/base64"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/rs/xid"
@@ -13,8 +15,40 @@ var (
 	ErrInsufficientInformationForCreating = errors.New("Necessary information missing for persistence")
 )
 
+const (
+	cursorSeparator = "|"
+)
+
 // Cursor represents a string used for pagination
-type Cursor string
+type Cursor struct {
+	ID        string
+	Timestamp time.Time
+}
+
+func (c *Cursor) String() string {
+	cursorString := c.ID + cursorSeparator + c.Timestamp.Format(time.RFC3339Nano)
+	return base64.StdEncoding.EncodeToString([]byte(cursorString))
+}
+
+// ParseCursor creates Cursor from its string representation
+func ParseCursor(encodedCursorString string) (cursor *Cursor, err error) {
+	cursor = &Cursor{}
+	cursorString, err := base64.StdEncoding.DecodeString(encodedCursorString)
+	var splits []string
+	if err == nil {
+		splits = strings.Split(string(cursorString), cursorSeparator)
+		if len(splits) != 2 {
+			err = ErrInsufficientInformationForCreating
+		}
+	}
+	if err == nil {
+		cursor.ID = splits[0]
+	}
+	if err == nil {
+		cursor.Timestamp, err = time.Parse(time.RFC3339Nano, splits[1])
+	}
+	return cursor, err
+}
 
 // Updateable represents interface for objects that expose updated date
 type Updateable interface {
@@ -34,10 +68,9 @@ func (paginateable *BasePaginateable) GetLastUpdatedHTTPTimeString() string {
 }
 
 // GetCursor returns the cursor value for this producer
-func (paginateable *BasePaginateable) GetCursor() (*Cursor, error) {
-	text, err := paginateable.ID.Value()
-	cursor := Cursor(text.(string))
-	return &cursor, err
+func (paginateable *BasePaginateable) GetCursor() (cursor *Cursor, err error) {
+	cursor = &Cursor{ID: paginateable.ID.String(), Timestamp: paginateable.CreatedAt}
+	return cursor, err
 }
 
 // QuickFix fixes base paginate-able model's attribute
