@@ -24,8 +24,9 @@ max-workers=200
 priority-dispatcher-enabled=true
 retrigger-base-endpoint=http://localhost:8080
 max-retry=5
-rational-delay-in-seconds=20
+rational-delay-in-seconds=2
 retry-backoff-delays-in-seconds=5,30,60
+recovery-workers-enabled=true
 [consumer-connection]
 token-header-name=X-Broker-Consumer-Token
 user-agent=Webhook Message Broker

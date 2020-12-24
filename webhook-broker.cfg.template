@@ -38,9 +38,11 @@ priority-dispatcher-enabled=true
 # If retrigger base endpoint is not a absolute URL config initialization will error out
 retrigger-base-endpoint=http://localhost:8080
 max-retry=5
-rational-delay-in-seconds=20
+rational-delay-in-seconds=2
 # Expected comma separated list of numbers; in case any value is a non number it will be defaulted to 15
 retry-backoff-delays-in-seconds=5,30,60
+# Whether to run recovery workers
+recovery-workers-enabled=true
 
 # Generic consumer configuration such as - Token Header name, User Agent, Consumer connection timeout
 [consumer-connection]

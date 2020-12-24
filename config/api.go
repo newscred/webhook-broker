@@ -107,4 +107,5 @@ type BrokerConfig interface {
 	GetMaxRetry() uint8
 	GetRationalDelay() time.Duration
 	GetRetryBackoffDelays() []time.Duration
+	IsRecoveryWorkersEnabled() bool
 }

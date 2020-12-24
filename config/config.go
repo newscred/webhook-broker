@@ -97,6 +97,7 @@ type Config struct {
 	MaxMessageQueueSize       uint
 	MaxWorkers                uint
 	PriorityDispatcherEnabled bool
+	RecoveryWorkersEnabled    bool
 	RetriggerBaseEndpoint     string
 	MaxRetry                  uint8
 	RationalDelay             time.Duration
@@ -231,6 +232,11 @@ func (config *Config) GetRationalDelay() time.Duration {
 // GetRetryBackoffDelays returns the delay steps in retrying delivery; retry will be the index and if index is greater than size use the last value times retry-attempt
 func (config *Config) GetRetryBackoffDelays() []time.Duration {
 	return config.RetryBackoffDelays
+}
+
+// IsRecoveryWorkersEnabled retrieves whether the recovery worker should be enabled or not
+func (config *Config) IsRecoveryWorkersEnabled() bool {
+	return config.RecoveryWorkersEnabled
 }
 
 // func (config *Config) () {}
@@ -492,6 +498,7 @@ func setupBrokerConfiguration(cfg *ini.File, configuration *Config) {
 	maxMsgQueueSize, _ := broker.GetKey("max-message-queue-size")
 	maxWorkers, _ := broker.GetKey("max-workers")
 	priorityDispatcher, _ := broker.GetKey("priority-dispatcher-enabled")
+	recoveryWorkersEnabled, _ := broker.GetKey("recovery-workers-enabled")
 	retriggerBaseEndpoint, _ := broker.GetKey("retrigger-base-endpoint")
 	maxRetry, _ := broker.GetKey("max-retry")
 	rationalDelayInSecs, _ := broker.GetKey("rational-delay-in-seconds")
@@ -499,6 +506,7 @@ func setupBrokerConfiguration(cfg *ini.File, configuration *Config) {
 	configuration.MaxMessageQueueSize = maxMsgQueueSize.MustUint(100000)
 	configuration.MaxWorkers = maxWorkers.MustUint(100)
 	configuration.PriorityDispatcherEnabled = priorityDispatcher.MustBool(false)
+	configuration.RecoveryWorkersEnabled = recoveryWorkersEnabled.MustBool(true)
 	configuration.RetriggerBaseEndpoint = retriggerBaseEndpoint.MustString("")
 	configuration.MaxRetry = uint8(maxRetry.MustUint(10))
 	configuration.RationalDelay = time.Duration(rationalDelayInSecs.MustUint(30)) * time.Second

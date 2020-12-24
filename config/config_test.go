@@ -41,7 +41,8 @@ const (
 	retrigger-base-endpoint=http://localhost:6080
 	max-retry=5ad
 	rational-delay-in-seconds=2sd0
-	retry-backoff-delays-in-seconds=5,30,asd 6a 0
+	retry-backoff-delays-in-seconds=5,30,asd 6a 
+	recovery-workers-enabled=random
 
 	# Generic consumer configuration such as - Token Header name, User Agent, Consumer connection timeout
 	[consumer-connection]
@@ -127,7 +128,8 @@ func TestGetAutoConfiguration_Default(t *testing.T) {
 	assert.Equal(t, true, config.IsPriorityDispatcherEnabled())
 	assert.Equal(t, "http://localhost:8080", config.GetRetriggerBaseEndpoint())
 	assert.Equal(t, uint8(5), config.GetMaxRetry())
-	assert.Equal(t, toSecond(20), config.GetRationalDelay())
+	assert.Equal(t, toSecond(2), config.GetRationalDelay())
+	assert.Equal(t, true, config.IsRecoveryWorkersEnabled())
 	assert.Equal(t, []time.Duration{toSecond(5), toSecond(30), toSecond(60)}, config.GetRetryBackoffDelays())
 }
 
@@ -164,6 +166,7 @@ func TestGetAutoConfiguration_WrongValues(t *testing.T) {
 	assert.Equal(t, toSecond(30), config.GetRationalDelay())
 	assert.Equal(t, []time.Duration{toSecond(5), toSecond(30), toSecond(15)}, config.GetRetryBackoffDelays())
 	assert.Equal(t, 0, len(config.GetSeedData().Consumers))
+	assert.Equal(t, true, config.IsRecoveryWorkersEnabled())
 	defer func() {
 		loadConfiguration = defaultLoadFunc
 	}()
@@ -272,6 +275,7 @@ func TestGetConfiguration(t *testing.T) {
 	assert.Equal(t, uint8(7), config.GetMaxRetry())
 	assert.Equal(t, toSecond(30), config.GetRationalDelay())
 	assert.Equal(t, []time.Duration{toSecond(15), toSecond(30), toSecond(60), toSecond(120)}, config.GetRetryBackoffDelays())
+	assert.False(t, config.IsRecoveryWorkersEnabled())
 }
 
 func TestGetConfigurationFromParseConfig_ValueError(t *testing.T) {
