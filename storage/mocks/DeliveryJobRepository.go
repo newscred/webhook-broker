@@ -90,6 +90,38 @@ func (_m *DeliveryJobRepository) GetJobsForMessage(message *data.Message, page *
 	return r0, r1, r2
 }
 
+// GetJobsInflightSince provides a mock function with given fields: delta
+func (_m *DeliveryJobRepository) GetJobsInflightSince(delta time.Duration) []*data.DeliveryJob {
+	ret := _m.Called(delta)
+
+	var r0 []*data.DeliveryJob
+	if rf, ok := ret.Get(0).(func(time.Duration) []*data.DeliveryJob); ok {
+		r0 = rf(delta)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*data.DeliveryJob)
+		}
+	}
+
+	return r0
+}
+
+// GetJobsReadyForInflightSince provides a mock function with given fields: delta
+func (_m *DeliveryJobRepository) GetJobsReadyForInflightSince(delta time.Duration) []*data.DeliveryJob {
+	ret := _m.Called(delta)
+
+	var r0 []*data.DeliveryJob
+	if rf, ok := ret.Get(0).(func(time.Duration) []*data.DeliveryJob); ok {
+		r0 = rf(delta)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*data.DeliveryJob)
+		}
+	}
+
+	return r0
+}
+
 // MarkJobDead provides a mock function with given fields: deliveryJob
 func (_m *DeliveryJobRepository) MarkJobDead(deliveryJob *data.DeliveryJob) error {
 	ret := _m.Called(deliveryJob)

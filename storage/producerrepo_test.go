@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"database/sql"
 	"errors"
 	"strconv"
 	"strings"
@@ -12,8 +11,6 @@ import (
 	"github.com/imyousuf/webhook-broker/storage/data"
 	"github.com/stretchr/testify/assert"
 )
-
-var testDB *sql.DB
 
 const (
 	successfulGetTestProducerID      = "get-test"

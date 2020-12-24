@@ -3,13 +3,14 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"log"
 	"time"
 
 	"github.com/imyousuf/webhook-broker/storage/data"
 )
 
 const (
-	jobPropertyCount  = 9
+	jobPropertyCount     = 9
 	jobCommonSelectQuery = "SELECT id, messageId, consumerId, status, dispatchReceivedAt, retryAttemptCount, statusChangedAt, earliestNextAttemptAt, createdAt, updatedAt FROM job WHERE"
 )
 
@@ -89,39 +90,90 @@ func (djRepo *DeliveryJobDBRepository) MarkJobRetry(deliveryJob *data.DeliveryJo
 	return err
 }
 
+func (djRepo *DeliveryJobDBRepository) getJobs(baseQuery string, message *data.Message, args []interface{}) (jobs []*data.DeliveryJob, err error) {
+	jobs = make([]*data.DeliveryJob, 0)
+	scanArgs := func() []interface{} {
+		job := &data.DeliveryJob{}
+		job.Message = &data.Message{}
+		job.Listener = &data.Consumer{}
+		jobs = append(jobs, job)
+		return []interface{}{&job.ID, &job.Message.ID, &job.Listener.ID, &job.Status, &job.DispatchReceivedAt, &job.RetryAttemptCount, &job.StatusChangedAt, &job.EarliestNextAttemptAt, &job.CreatedAt, &job.UpdatedAt}
+	}
+	err = queryRows(djRepo.db, baseQuery, args2SliceFnWrapper(args...), scanArgs)
+	if err == nil {
+		for _, job := range jobs {
+			job.Listener, _ = djRepo.consumerRepository.GetByID(job.Listener.ID.String())
+			if message == nil {
+				job.Message, _ = djRepo.mesageRepository.GetByID(job.Message.ID.String())
+			} else {
+				job.Message = message
+			}
+		}
+	}
+	return jobs, err
+}
+
+func (djRepo *DeliveryJobDBRepository) getJobsForStatusAndDelta(status data.JobStatus, delta time.Duration, useStatusChangedAt bool) []*data.DeliveryJob {
+	jobs := make([]*data.DeliveryJob, 0)
+	page := data.NewPagination(nil, nil)
+	if delta > 0 {
+		delta = -1 * delta
+	}
+	more := true
+	dateCol := "earliestNextAttemptAt"
+	if useStatusChangedAt {
+		dateCol = "statusChangedAt"
+	}
+	for more {
+		baseQuery := jobCommonSelectQuery + " status like ? AND " + dateCol + " <= ?" + getPaginationQueryFragmentWithConfigurablePageSize(page, true, largePageSizeWithOrder)
+		args := []interface{}{status, time.Now().Add(delta)}
+		args = append(args, getPaginationTimestampQueryArgs(page)...)
+		pageJobs, err := djRepo.getJobs(baseQuery, nil, args)
+		if err == nil {
+			jobs = append(jobs, pageJobs...)
+			jobCount := len(pageJobs)
+			if jobCount > 0 {
+				page = data.NewPagination(pageJobs[jobCount-1], nil)
+			} else {
+				more = false
+			}
+		} else {
+			log.Println("error - could get list jobs (status, use status changed at date field, err)", status, useStatusChangedAt, err)
+			more = false
+		}
+	}
+	return jobs
+}
+
 // GetJobsForMessage retrieves jobs created for a specific message
 func (djRepo *DeliveryJobDBRepository) GetJobsForMessage(message *data.Message, page *data.Pagination) ([]*data.DeliveryJob, *data.Pagination, error) {
-	jobs := make([]*data.DeliveryJob, 0)
+	jobs := make([]*data.DeliveryJob, 0, 100)
 	pagination := &data.Pagination{}
 	if page == nil || (page.Next != nil && page.Previous != nil) {
 		return jobs, pagination, ErrPaginationDeadlock
 	}
 	var err error
 	baseQuery := jobCommonSelectQuery + " messageId like ?" + getPaginationQueryFragmentWithConfigurablePageSize(page, true, largePageSizeWithOrder)
-	scanArgs := func() []interface{} {
-		job := &data.DeliveryJob{}
-		job.Message = message
-		job.Listener = &data.Consumer{}
-		jobs = append(jobs, job)
-		var messageID string
-		return []interface{}{&job.ID, &messageID, &job.Listener.ID, &job.Status, &job.DispatchReceivedAt, &job.RetryAttemptCount, &job.StatusChangedAt, &job.EarliestNextAttemptAt, &job.CreatedAt, &job.UpdatedAt}
-	}
-	argsFunc := args2SliceFnWrapper(message.ID.String())
-	times := getPaginationTimestampQueryArgs(page)
-	if len(times) > 0 {
-		argsFunc = args2SliceFnWrapper(message.ID.String(), times[0])
-	}
-	err = queryRows(djRepo.db, baseQuery, argsFunc, scanArgs)
+	args := []interface{}{message.ID.String()}
+	args = append(args, getPaginationTimestampQueryArgs(page)...)
+	jobs, err = djRepo.getJobs(baseQuery, message, args)
 	if err == nil {
-		for _, job := range jobs {
-			job.Listener, _ = djRepo.consumerRepository.GetByID(job.Listener.ID.String())
-		}
 		jobCount := len(jobs)
 		if jobCount > 0 {
 			pagination = data.NewPagination(jobs[jobCount-1], jobs[0])
 		}
 	}
 	return jobs, pagination, err
+}
+
+// GetJobsInflightSince retrieves jobs in inflight status since the delta duration
+func (djRepo *DeliveryJobDBRepository) GetJobsInflightSince(delta time.Duration) []*data.DeliveryJob {
+	return djRepo.getJobsForStatusAndDelta(data.JobInflight, delta, true)
+}
+
+// GetJobsReadyForInflightSince retrieves jobs in queued status and earliestNextAttemptAt < `now`-delta
+func (djRepo *DeliveryJobDBRepository) GetJobsReadyForInflightSince(delta time.Duration) []*data.DeliveryJob {
+	return djRepo.getJobsForStatusAndDelta(data.JobQueued, delta, false)
 }
 
 // GetByID loads the delivery job with specified id if it exists, else returns an error

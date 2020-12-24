@@ -24,19 +24,22 @@ type MessageDispatcher interface {
 
 // MessageDispatcherImpl is responsible for dispatching delivery jobs from acknowledged message
 type MessageDispatcherImpl struct {
-	consumerRepo             storage.ConsumerRepository
-	djRepo                   storage.DeliveryJobRepository
-	lockRepo                 storage.LockRepository
-	msgRepo                  storage.MessageRepository
-	workerPool               chan chan *Job
-	workers                  []*Worker
-	jobQueue                 chan *Job
-	jobPriorityQueue         *PriorityQueue
-	stopTimeout              time.Duration
-	rationalDelay            time.Duration
-	dispatcherStop           chan bool
-	messageRecoverWorkerStop chan bool
-	recoveryWorkersEnabled   bool
+	consumerRepo                      storage.ConsumerRepository
+	djRepo                            storage.DeliveryJobRepository
+	lockRepo                          storage.LockRepository
+	msgRepo                           storage.MessageRepository
+	workerPool                        chan chan *Job
+	workers                           []*Worker
+	jobQueue                          chan *Job
+	jobPriorityQueue                  *PriorityQueue
+	stopTimeout                       time.Duration
+	rationalDelay                     time.Duration
+	brokerConfig                      config.BrokerConfig
+	dispatcherStop                    chan bool
+	messageRecoverWorkerStop          chan bool
+	jobRecoverStaleInflightWorkerStop chan bool
+	jobRecoverRetryWorkerStop         chan bool
+	recoveryWorkersEnabled            bool
 }
 
 // Dispatch is responsible for dispatching delivery jobs for the message
@@ -44,30 +47,13 @@ func (msgDispatcher *MessageDispatcherImpl) Dispatch(message *data.Message) {
 	if message == nil || !message.IsInValidState() {
 		return
 	}
-	channelID := message.BroadcastedTo.ChannelID
-	consumers := make([]*data.Consumer, 0)
-	page := data.NewPagination(nil, nil)
-	more := true
-	var err error
-	for more {
-		var consumersPage []*data.Consumer
-		consumersPage, page, err = msgDispatcher.consumerRepo.GetList(channelID, page)
-		more = page.Next != nil && err == nil
-		page.Previous = nil
-		consumers = append(consumers, consumersPage...)
-	}
-	jobs := make([]*data.DeliveryJob, len(consumers))
-	for index, consumer := range consumers {
-		if err == nil {
-			jobs[index], err = data.NewDeliveryJob(message, consumer)
-		}
-	}
+	jobs, err := createJobs(msgDispatcher, message)
 	if err == nil {
 		err = msgDispatcher.djRepo.DispatchMessage(message, jobs...)
 	}
 	if err == nil {
 		for _, job := range jobs {
-			msgDispatcher.jobQueue <- NewJob(job)
+			queueJob(msgDispatcher, job)
 		}
 	}
 	if err != nil {
@@ -87,6 +73,32 @@ func (msgDispatcher *MessageDispatcherImpl) startMessageDispatcher() {
 }
 
 var (
+	createJobs = func(msgDispatcher *MessageDispatcherImpl, message *data.Message) ([]*data.DeliveryJob, error) {
+		channelID := message.BroadcastedTo.ChannelID
+		consumers := make([]*data.Consumer, 0)
+		page := data.NewPagination(nil, nil)
+		more := true
+		var err error
+		for more {
+			var consumersPage []*data.Consumer
+			consumersPage, page, err = msgDispatcher.consumerRepo.GetList(channelID, page)
+			more = page.Next != nil && err == nil
+			page.Previous = nil
+			consumers = append(consumers, consumersPage...)
+		}
+		jobs := make([]*data.DeliveryJob, len(consumers))
+		for index, consumer := range consumers {
+			if err == nil {
+				jobs[index], err = data.NewDeliveryJob(message, consumer)
+			}
+		}
+		return jobs, err
+	}
+
+	queueJob = func(msgDispatcher *MessageDispatcherImpl, job *data.DeliveryJob) {
+		msgDispatcher.jobQueue <- NewJob(job)
+	}
+
 	genericPanicRecoveryFunc = func() {
 		if r := recover(); r != nil {
 			log.Println("error - had to recover from panic", r)
@@ -111,6 +123,44 @@ var (
 			}
 		}
 	}
+
+	computeEarliestDelta = func(retryAttempt uint, brokerConfig config.BrokerConfig) time.Duration {
+		backoffsCount := len(brokerConfig.GetRetryBackoffDelays())
+		if retryAttempt < uint(backoffsCount) {
+			return brokerConfig.GetRetryBackoffDelays()[int(retryAttempt)-1]
+		}
+		return time.Duration(int(retryAttempt)-backoffsCount+1) * brokerConfig.GetRetryBackoffDelays()[backoffsCount-1]
+	}
+
+	retryQueuedJobs = func(msgDispatcher *MessageDispatcherImpl) {
+		defer genericPanicRecoveryFunc()
+		jobs := msgDispatcher.djRepo.GetJobsReadyForInflightSince(msgDispatcher.rationalDelay)
+		for _, job := range jobs {
+			err := inLockRun(msgDispatcher.lockRepo, job, func() error {
+				queueJob(msgDispatcher, job)
+				return nil
+			})
+			if err != nil {
+				log.Println("error - could not retry job", err, job.ID)
+			}
+		}
+	}
+
+	recoverJobsFromLongInflight = func(msgDispatcher *MessageDispatcherImpl) {
+		defer genericPanicRecoveryFunc()
+		jobs := msgDispatcher.djRepo.GetJobsInflightSince(msgDispatcher.stopTimeout + msgDispatcher.rationalDelay)
+		for _, job := range jobs {
+			// Ignore max retry intentionally since we are recovering likely from a process crash during delivery.
+			err := inLockRun(msgDispatcher.lockRepo, job, func() error {
+				msgDispatcher.djRepo.MarkJobRetry(job, computeEarliestDelta(job.RetryAttemptCount+1, msgDispatcher.brokerConfig))
+				return nil
+			})
+			if err != nil {
+				log.Println("error - could not requeue job", err, job.ID)
+			}
+		}
+	}
+
 	inLockRun = func(lockRepo storage.LockRepository, lockable data.Lockable, run func() error) (err error) {
 		lock, err := data.NewLock(lockable)
 		if err == nil {
@@ -126,6 +176,30 @@ var (
 		return err
 	}
 )
+
+func (msgDispatcher *MessageDispatcherImpl) retryJob() {
+	for {
+		timer := time.After(msgDispatcher.rationalDelay)
+		select {
+		case <-msgDispatcher.jobRecoverRetryWorkerStop:
+			return
+		case <-timer:
+			retryQueuedJobs(msgDispatcher)
+		}
+	}
+}
+
+func (msgDispatcher *MessageDispatcherImpl) recoverStaleInflight() {
+	for {
+		timer := time.After(msgDispatcher.rationalDelay)
+		select {
+		case <-msgDispatcher.jobRecoverStaleInflightWorkerStop:
+			return
+		case <-timer:
+			recoverJobsFromLongInflight(msgDispatcher)
+		}
+	}
+}
 
 func (msgDispatcher *MessageDispatcherImpl) ensureMessageDispatched() {
 	for {
@@ -144,6 +218,8 @@ func (msgDispatcher *MessageDispatcherImpl) StartDispatcher() {
 	go msgDispatcher.startMessageDispatcher()
 	if msgDispatcher.recoveryWorkersEnabled {
 		go msgDispatcher.ensureMessageDispatched()
+		go msgDispatcher.recoverStaleInflight()
+		go msgDispatcher.retryJob()
 	}
 }
 
@@ -162,6 +238,8 @@ func (msgDispatcher *MessageDispatcherImpl) Stop() {
 			msgDispatcher.dispatcherStop <- true
 			if msgDispatcher.recoveryWorkersEnabled {
 				msgDispatcher.messageRecoverWorkerStop <- true
+				msgDispatcher.jobRecoverRetryWorkerStop <- true
+				msgDispatcher.jobRecoverStaleInflightWorkerStop <- true
 			}
 			wg.Done()
 		}()
@@ -227,7 +305,8 @@ func NewMessageDispatcher(configuration *Configuration) MessageDispatcher {
 	dispatcherImpl := &MessageDispatcherImpl{djRepo: djRepo, consumerRepo: consumerRepo, msgRepo: msgRepo, dispatcherStop: make(chan bool),
 		workerPool: make(chan chan *Job, brokerConfig.GetMaxWorkers()), jobPriorityQueue: NewJobPriorityQueue(), messageRecoverWorkerStop: make(chan bool),
 		jobQueue: make(chan *Job, brokerConfig.GetMaxMessageQueueSize()), rationalDelay: brokerConfig.GetRationalDelay(), lockRepo: lockRepo,
-		recoveryWorkersEnabled: brokerConfig.IsRecoveryWorkersEnabled()}
+		recoveryWorkersEnabled: brokerConfig.IsRecoveryWorkersEnabled(), jobRecoverStaleInflightWorkerStop: make(chan bool), jobRecoverRetryWorkerStop: make(chan bool),
+		brokerConfig: brokerConfig}
 	workers := make([]*Worker, brokerConfig.GetMaxWorkers())
 	for i := 0; i < len(workers); i++ {
 		worker := NewWorker(dispatcherImpl.workerPool, consumerConfig, brokerConfig, djRepo)

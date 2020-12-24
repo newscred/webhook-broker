@@ -68,6 +68,8 @@ type DeliveryJobRepository interface {
 	MarkJobRetry(deliveryJob *data.DeliveryJob, earliestDelta time.Duration) error
 	GetJobsForMessage(message *data.Message, page *data.Pagination) ([]*data.DeliveryJob, *data.Pagination, error)
 	GetByID(id string) (*data.DeliveryJob, error)
+	GetJobsInflightSince(delta time.Duration) []*data.DeliveryJob
+	GetJobsReadyForInflightSince(delta time.Duration) []*data.DeliveryJob
 }
 
 // LockRepository allows storage operations over Lock

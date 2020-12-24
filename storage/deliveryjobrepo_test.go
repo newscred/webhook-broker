@@ -1,12 +1,17 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"errors"
+	"log"
+	"os"
 	"strconv"
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/imyousuf/webhook-broker/storage/data"
 	"github.com/rs/xid"
 	"github.com/stretchr/testify/assert"
@@ -222,5 +227,59 @@ func TestStatusUpdatesForJob(t *testing.T) {
 		dJob, err := djRepo.GetByID(job.ID.String())
 		assert.Equal(t, data.JobQueued, dJob.Status)
 		assert.Greater(t, dJob.EarliestNextAttemptAt.UnixNano(), now.UnixNano())
+	})
+}
+
+func TestStatusBasedJobsListing(t *testing.T) {
+	t.Run("SuccessRetryList", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		log.SetOutput(&buf)
+		defer func() { log.SetOutput(os.Stderr) }()
+		errString := "sample select error"
+		expectedErr := errors.New(errString)
+		db, mock, _ := sqlmock.New()
+		djRepo := &DeliveryJobDBRepository{db: db}
+		mock.ExpectQuery(jobCommonSelectQuery).WillReturnError(expectedErr)
+		mock.MatchExpectationsInOrder(true)
+		jobs := djRepo.GetJobsInflightSince(configuration.RationalDelay)
+		assert.Equal(t, 0, len(jobs))
+		assert.Contains(t, buf.String(), errString)
+
+	})
+	djRepo := getDeliverJobRepository()
+	msgRepo := getMessageRepository()
+	message := getMessageForJob()
+	msgRepo.Create(message)
+	jobs := getDeliveryJobsInFixture(message)
+	err := djRepo.DispatchMessage(message, jobs...)
+	djRepo.MarkJobInflight(jobs[0])
+	assert.Nil(t, err)
+	time.Sleep(configuration.RationalDelay + 1)
+	t.Run("SuccessInflightRecoveryList", func(t *testing.T) {
+		t.Parallel()
+		thisJobs := djRepo.GetJobsInflightSince(configuration.RationalDelay)
+		assert.LessOrEqual(t, 1, len(thisJobs))
+		found := false
+		for _, job := range thisJobs {
+			if job.ID == jobs[0].ID {
+				found = true
+			}
+		}
+		assert.True(t, found)
+	})
+	t.Run("SuccessRetryList", func(t *testing.T) {
+		t.Parallel()
+		thisJobs := djRepo.GetJobsReadyForInflightSince(configuration.RationalDelay)
+		assert.LessOrEqual(t, len(jobs)-1, len(thisJobs))
+		found := false
+		for index := 1; index < len(jobs); index++ {
+			for _, job := range thisJobs {
+				if job.ID == jobs[index].ID {
+					found = true
+				}
+			}
+			assert.True(t, found)
+		}
 	})
 }

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/golang-migrate/migrate/v4"
@@ -19,10 +20,16 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+var (
+	configuration *config.Config
+	testDB        *sql.DB
+)
+
 func TestMain(m *testing.M) {
 	// Setup DB and migration
 	os.Remove("./webhook-broker.sqlite3")
-	configuration, _ := config.GetAutoConfiguration()
+	configuration, _ = config.GetAutoConfiguration()
+	configuration.RationalDelay = 20 * time.Millisecond
 	var dbErr error
 	testDB, dbErr = GetConnectionPool(configuration, defaultMigrationConf, configuration)
 	if dbErr == nil {

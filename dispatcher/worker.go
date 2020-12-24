@@ -58,7 +58,7 @@ var deliverJob = func(w *Worker, job *Job) {
 	// Put to Inflight
 	err := w.djRepo.MarkJobInflight(job.Data)
 	if err != nil {
-		log.Println("err - could not put job in flight", err)
+		log.Println("err - could not put job in flight", err, job.Data.ID)
 		return
 	}
 	// Attempt to deliver
@@ -66,7 +66,7 @@ var deliverJob = func(w *Worker, job *Job) {
 	// If err == nil, then delivered, else if at max try dead else queued with retry attempt increased
 	if err == nil {
 		w.djRepo.MarkJobDelivered(job.Data)
-	} else if job.Data.RetryAttemptCount == uint(w.brokerConfig.GetMaxRetry()) {
+	} else if job.Data.RetryAttemptCount >= uint(w.brokerConfig.GetMaxRetry()) {
 		w.djRepo.MarkJobDead(job.Data)
 	} else {
 		w.djRepo.MarkJobRetry(job.Data, w.earliestDelta(job.Data.RetryAttemptCount+1))
@@ -95,11 +95,7 @@ func (w *Worker) Start() {
 }
 
 func (w *Worker) earliestDelta(retryAttempt uint) time.Duration {
-	backoffsCount := len(w.brokerConfig.GetRetryBackoffDelays())
-	if retryAttempt < uint(backoffsCount) {
-		return w.brokerConfig.GetRetryBackoffDelays()[int(retryAttempt)-1]
-	}
-	return time.Duration(int(retryAttempt)-backoffsCount+1) * w.brokerConfig.GetRetryBackoffDelays()[backoffsCount-1]
+	return computeEarliestDelta(retryAttempt, w.brokerConfig)
 }
 
 func (w *Worker) executeJob(job *Job) (err error) {

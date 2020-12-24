@@ -134,10 +134,10 @@ func SetupTestFixture() {
 	wg.Wait()
 }
 
-func getMockedBrokerConfig(workerEnabled ...bool) *configmocks.BrokerConfig {
+func getMockedBrokerConfig(workerEnabled ...interface{}) *configmocks.BrokerConfig {
 	mockedConfig := new(configmocks.BrokerConfig)
-	mockedConfig.On("GetMaxMessageQueueSize").Return(uint(10))
-	mockedConfig.On("GetMaxWorkers").Return(uint(10))
+	mockedConfig.On("GetMaxMessageQueueSize").Return(uint(100))
+	mockedConfig.On("GetMaxWorkers").Return(uint(5))
 	if len(workerEnabled) <= 0 {
 		mockedConfig.On("IsRecoveryWorkersEnabled").Return(false)
 	} else {
@@ -145,7 +145,11 @@ func getMockedBrokerConfig(workerEnabled ...bool) *configmocks.BrokerConfig {
 	}
 	mockedConfig.On("GetRationalDelay").Return(100 * time.Millisecond)
 	mockedConfig.On("GetMaxRetry").Return(uint8(41))
-	mockedConfig.On("GetRetryBackoffDelays").Return([]time.Duration{5 * time.Second})
+	if len(workerEnabled) <= 1 {
+		mockedConfig.On("GetRetryBackoffDelays").Return([]time.Duration{5 * time.Second})
+	} else {
+		mockedConfig.On("GetRetryBackoffDelays").Return(workerEnabled[1])
+	}
 	return mockedConfig
 }
 
@@ -455,5 +459,76 @@ func TestRecoverMessagesNotYetDispatched(t *testing.T) {
 		assert.Equal(t, data.MsgStatusAcknowledged, nMsg.Status)
 		assert.Contains(t, buf.String(), msg.MessageID)
 		assert.Contains(t, buf.String(), errString)
+	})
+}
+
+func TestJobWorkers(t *testing.T) {
+	messagePayload := `{"key": "Custom JSON"}`
+	contentType := "application/json"
+	brokerConf := getMockedBrokerConfig()
+	outerDispatcher := NewMessageDispatcher(getCompleteDispatcherConfiguration(dataAccessor.GetMessageRepository(), dataAccessor.GetDeliveryJobRepository(), dataAccessor.GetConsumerRepository(), brokerConf, configuration, dataAccessor.GetLockRepository()))
+	msg, _ := data.NewMessage(channel, producer, messagePayload, contentType)
+	msg.ReceivedAt = msg.ReceivedAt.Add(-5 * time.Second)
+	err := dataAccessor.GetMessageRepository().Create(msg)
+	assert.Nil(t, err)
+	msgDispatcher := outerDispatcher.(*MessageDispatcherImpl)
+	jobs, err := createJobs(msgDispatcher, msg)
+	if err == nil {
+		err = msgDispatcher.djRepo.DispatchMessage(msg, jobs...)
+	}
+	jobs, _, err = dataAccessor.GetDeliveryJobRepository().GetJobsForMessage(msg, data.NewPagination(nil, nil))
+	assert.Nil(t, err)
+	inflightJob := jobs[0]
+	err = dataAccessor.GetDeliveryJobRepository().MarkJobInflight(inflightJob)
+	assert.Nil(t, err)
+	db, _ := storage.GetConnectionPool(configuration, nil, configuration)
+	db.Exec("UPDATE job SET statusChangedAt = ? WHERE messageId = ?", time.Now().Add(-1*time.Hour), msg.ID)
+	// Did not make them parallel since states are inter-dependent
+	t.Run("Error", func(t *testing.T) {
+		var buf bytes.Buffer
+		log.SetOutput(&buf)
+		defer func() { log.SetOutput(os.Stderr) }()
+		errString := "sample select error"
+		expectedErr := errors.New(errString)
+		brokerConf := getMockedBrokerConfig()
+		mockLockRepo := new(storagemocks.LockRepository)
+		mockLockRepo.On("TimeoutLocks", mock.Anything).Return(nil)
+		mockLockRepo.On("TryLock", mock.Anything).Return(expectedErr)
+		dispatcher := NewMessageDispatcher(getCompleteDispatcherConfiguration(dataAccessor.GetMessageRepository(), dataAccessor.GetDeliveryJobRepository(), dataAccessor.GetConsumerRepository(), brokerConf, configuration, mockLockRepo))
+		impl := dispatcher.(*MessageDispatcherImpl)
+		recoverJobsFromLongInflight(impl)
+		retryQueuedJobs(impl)
+		assert.Nil(t, err)
+	})
+	t.Run("SuccessRecoverInflight", func(t *testing.T) {
+		brokerConf := getMockedBrokerConfig(false, []time.Duration{5 * time.Second, 10 * time.Second, 20 * time.Second})
+		dispatcher := NewMessageDispatcher(getCompleteDispatcherConfiguration(dataAccessor.GetMessageRepository(), dataAccessor.GetDeliveryJobRepository(), dataAccessor.GetConsumerRepository(), brokerConf, configuration, dataAccessor.GetLockRepository()))
+		impl := dispatcher.(*MessageDispatcherImpl)
+		recoverJobsFromLongInflight(impl)
+		nJob, err := msgDispatcher.djRepo.GetByID(inflightJob.ID.String())
+		assert.Nil(t, err)
+		assert.Equal(t, data.JobQueued, nJob.Status)
+		assert.Equal(t, uint(1), nJob.RetryAttemptCount)
+	})
+	t.Run("SuccessRetry", func(t *testing.T) {
+		dispatcher := NewMessageDispatcher(getCompleteDispatcherConfiguration(dataAccessor.GetMessageRepository(), dataAccessor.GetDeliveryJobRepository(), dataAccessor.GetConsumerRepository(), brokerConf, configuration, dataAccessor.GetLockRepository()))
+		impl := dispatcher.(*MessageDispatcherImpl)
+		impl.stopTimeout = 4 * time.Millisecond
+		impl.rationalDelay = 5 * time.Millisecond
+		retryQueuedJobs(impl)
+		time.Sleep(200 * time.Millisecond)
+		count := 0
+		nJobs, _, err := dataAccessor.GetDeliveryJobRepository().GetJobsForMessage(msg, data.NewPagination(nil, nil))
+		for _, job := range nJobs {
+			if job.ID == inflightJob.ID {
+				continue
+			}
+			if job.Status != data.JobQueued {
+				count++
+			}
+		}
+		// This assertion is done to avoid the impact of time on test assertion
+		assert.GreaterOrEqual(t, count, 20)
+		assert.Nil(t, err)
 	})
 }
