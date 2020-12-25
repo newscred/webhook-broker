@@ -166,10 +166,11 @@ func broadcastMessage(sendCount int) (err error) {
 	}
 	return err
 }
-func addConsumerVerified(expectedEventCount int, assert bool) *sync.WaitGroup {
+func addConsumerVerified(expectedEventCount int, assert bool, simulateFailures int) *sync.WaitGroup {
 	wg := &sync.WaitGroup{}
 	wg.Add(expectedEventCount)
-	for index := 0; index < expectedEventCount; index++ {
+	failuresLeft := simulateFailures
+	for index := 0; index < consumerCount; index++ {
 		consumerHandler[consumerIDPrefix+strconv.Itoa(index)] = func(s string, rw http.ResponseWriter, r *http.Request) {
 			if assert {
 				defer r.Body.Close()
@@ -181,7 +182,12 @@ func addConsumerVerified(expectedEventCount int, assert bool) *sync.WaitGroup {
 					consumerAssertionFailed = true
 				}
 			}
-			rw.WriteHeader(http.StatusNoContent)
+			if failuresLeft > 0 {
+				failuresLeft--
+				rw.WriteHeader(http.StatusNotFound)
+			} else {
+				rw.WriteHeader(http.StatusNoContent)
+			}
 			wg.Done()
 		}
 	}
@@ -243,18 +249,20 @@ func main() {
 	log.Println("Starting message broadcast", time.Now())
 	defaultMax := 1
 	steps := []int{1, 10, 100, 500, 1000, 2500, 5000, 10000, 100000, 1000000}
+	failures := 2
 	for _, step := range steps {
 		if step > defaultMax {
 			continue
 		}
-		wg := addConsumerVerified(step*count, true)
+		wg := addConsumerVerified(step*count+failures, true, failures)
 		err := broadcastMessage(step)
 		if err != nil {
 			log.Println("error broadcasting message", err)
 			return
 		}
-		if waitTimeout(wg, time.Duration(2*step)*time.Second) {
-			log.Println("Timed out waiting for wait group")
+		timeoutDuration := time.Duration(2*step)*time.Second + time.Duration(failures)*time.Second*4
+		if waitTimeout(wg, timeoutDuration) {
+			log.Println("Timed out waiting for wait group after", timeoutDuration)
 			os.Exit(2)
 		} else {
 			log.Println("Wait group finished", step, time.Now())

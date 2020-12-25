@@ -28,7 +28,7 @@ func (lockRepo *LockDBRepository) TryLock(lock *data.Lock) (err error) {
 	if lock == nil {
 		err = ErrNoLock
 	} else {
-		err = normalizeDBError(transactionalSingleRowWriteExec(lockRepo.db, emptyOps, "INSERT INTO lock (lockId, attainedAt) VALUES (?, ?)",
+		err = normalizeDBError(transactionalSingleRowWriteExec(lockRepo.db, emptyOps, "INSERT INTO `lock` (lockId, attainedAt) VALUES (?, ?)",
 			args2SliceFnWrapper(lock.LockID, lock.AttainedAt)), lockErrorMap)
 	}
 	return err
@@ -39,7 +39,7 @@ func (lockRepo *LockDBRepository) ReleaseLock(lock *data.Lock) (err error) {
 	if lock == nil {
 		err = ErrNoLock
 	} else {
-		err = transactionalSingleRowWriteExec(lockRepo.db, emptyOps, "DELETE FROM lock WHERE lockId like ?",
+		err = transactionalSingleRowWriteExec(lockRepo.db, emptyOps, "DELETE FROM `lock` WHERE lockId like ?",
 			args2SliceFnWrapper(lock.LockID))
 	}
 	return err
@@ -49,7 +49,7 @@ func (lockRepo *LockDBRepository) ReleaseLock(lock *data.Lock) (err error) {
 func (lockRepo *LockDBRepository) TimeoutLocks(threshold time.Duration) (err error) {
 	// Pass 0 expected row change else otherwise tx will fail due to row change check
 	err = transactionalWrites(lockRepo.db, func(tx *sql.Tx) error {
-		return inTransactionExec(tx, emptyOps, "DELETE FROM lock WHERE attainedAt < ?", args2SliceFnWrapper(time.Now().Add(-1*threshold)), int64(0))
+		return inTransactionExec(tx, emptyOps, "DELETE FROM `lock` WHERE attainedAt < ?", args2SliceFnWrapper(time.Now().Add(-1*threshold)), int64(0))
 	})
 	return err
 }
