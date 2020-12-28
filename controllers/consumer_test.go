@@ -3,7 +3,6 @@ package controllers
 import (
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -11,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/rs/zerolog/log"
 
 	"github.com/imyousuf/webhook-broker/storage"
 	"github.com/imyousuf/webhook-broker/storage/data"
@@ -42,15 +43,15 @@ func ConsumerTestSetup() {
 	consumerRepo = storage.NewConsumerRepository(db, channelRepo)
 	channel, err := data.NewChannel(channelTestConsumerID, successfulGetTestToken)
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatal()
 	}
 	consumerTestChannel, err = channelRepo.Store(channel)
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatal().Err(err)
 	}
 	callbackURL, err = url.Parse("https://imytech.net/")
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatal().Err(err)
 	}
 	for index := 49; index > -1; index = index - 1 {
 		indexString := strconv.Itoa(index)
@@ -59,7 +60,7 @@ func ConsumerTestSetup() {
 			_, err = consumerRepo.Store(consumer)
 		}
 		if err != nil {
-			log.Fatalln(err)
+			log.Fatal().Err(err)
 		}
 	}
 	for _, deleteID := range []string{deleteConsumerIDWithData, deleteConsumerIDFailed} {
@@ -68,7 +69,7 @@ func ConsumerTestSetup() {
 			_, err = consumerRepo.Store(consumer)
 		}
 		if err != nil {
-			log.Fatalln(err)
+			log.Fatal().Err(err)
 		}
 		if deleteID == deleteConsumerIDWithData {
 			deleteUnmodifiedSince = consumer.GetLastUpdatedHTTPTimeString()

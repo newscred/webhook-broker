@@ -3,8 +3,9 @@ package storage
 import (
 	"database/sql"
 	"errors"
-	"log"
 	"sync"
+
+	"github.com/rs/zerolog/log"
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database"
@@ -276,7 +277,7 @@ var (
 	rollback = func(tx *sql.Tx) {
 		txErr := tx.Rollback()
 		if txErr != nil {
-			log.Println("tx rollback error", txErr)
+			log.Print("tx rollback error", txErr)
 		}
 	}
 
@@ -285,7 +286,7 @@ var (
 		tx, err = db.Begin()
 		defer func() {
 			if r := recover(); r != nil {
-				log.Println("recovered from in-tx panic", r)
+				log.Print("recovered from in-tx panic", r)
 				rollback(tx)
 			}
 		}()
@@ -294,7 +295,7 @@ var (
 			if err == nil {
 				txErr := tx.Commit()
 				if txErr != nil {
-					log.Println("tx commit error", txErr)
+					log.Print("tx commit error", txErr)
 					err = txErr
 				}
 			} else {

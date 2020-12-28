@@ -3,8 +3,9 @@ package storage
 import (
 	"context"
 	"database/sql"
-	"log"
 	"time"
+
+	"github.com/rs/zerolog/log"
 
 	"github.com/imyousuf/webhook-broker/storage/data"
 )
@@ -138,7 +139,7 @@ func (djRepo *DeliveryJobDBRepository) getJobsForStatusAndDelta(status data.JobS
 				more = false
 			}
 		} else {
-			log.Println("error - could get list jobs (status, use status changed at date field, err)", status, useStatusChangedAt, err)
+			log.Print("error - could get list jobs (status, use status changed at date field, err)", status, useStatusChangedAt, err)
 			more = false
 		}
 	}

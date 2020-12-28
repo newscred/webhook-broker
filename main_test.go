@@ -6,13 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/rs/zerolog/log"
 
 	"github.com/imyousuf/webhook-broker/config"
 	"github.com/imyousuf/webhook-broker/controllers"
@@ -67,6 +68,7 @@ func TestMainFunc(t *testing.T) {
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
+					log.Print(r)
 					assert.Equal(t, 4, r.(int))
 				} else {
 					t.Fail()
@@ -120,13 +122,14 @@ func TestMainFunc(t *testing.T) {
 	})
 	t.Run("SuccessRun", func(t *testing.T) {
 		var buf bytes.Buffer
-		log.SetOutput(&buf)
+		oldLogger := log.Logger
+		log.Logger = log.Output(&buf)
 		oldArgs := os.Args
 		os.Args = []string{"webhook-broker", "-migrate", "./migration/sqls/"}
 		oldNotify := controllers.NotifyOnInterrupt
 		controllers.NotifyOnInterrupt = mainFunctionBreaker
 		defer func() {
-			log.SetOutput(os.Stderr)
+			log.Logger = oldLogger
 			os.Args = oldArgs
 			controllers.NotifyOnInterrupt = oldNotify
 		}()
@@ -311,7 +314,7 @@ func TestSetupLog(t *testing.T) {
 		os.Remove(testLogFile)
 	}
 	setupLogger(&MockLogConfig{})
-	log.Println("unit test")
+	log.Print("unit test")
 	dat, err := ioutil.ReadFile(testLogFile)
 	assert.Nil(t, err)
 	assert.Contains(t, string(dat), "unit test")
@@ -319,14 +322,15 @@ func TestSetupLog(t *testing.T) {
 
 func TestCreateSeedData_ErrorFlows(t *testing.T) {
 	var buf bytes.Buffer
-	log.SetOutput(&buf)
+	oldLogger := log.Logger
+	log.Logger = log.Output(&buf)
 	expectedErr := errors.New("expected main seed data error")
 	defer func() {
 		assert.Contains(t, expectedErr.Error(), buf.String())
 		assert.Contains(t, "Error creating producer", buf.String())
 		assert.Contains(t, "Error creating channel", buf.String())
 		assert.Contains(t, "Error creating consumer", buf.String())
-		log.SetOutput(os.Stderr)
+		log.Logger = oldLogger
 	}()
 	configuration, _ := config.GetAutoConfiguration()
 	t.Run("StoreError", func(t *testing.T) {

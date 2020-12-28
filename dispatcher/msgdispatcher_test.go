@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -15,6 +14,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/rs/zerolog/log"
 
 	"github.com/imyousuf/webhook-broker/config"
 	configmocks "github.com/imyousuf/webhook-broker/config/mocks"
@@ -72,7 +73,7 @@ func findPort() int {
 func checkPort(port int) (err error) {
 	ln, netErr := net.Listen("tcp", ":"+strconv.Itoa(port))
 	if netErr != nil {
-		log.Println(netErr)
+		log.Print(netErr)
 		err = netErr
 	} else {
 		defer ln.Close()
@@ -92,7 +93,7 @@ func consumerController(w http.ResponseWriter, r *http.Request, params httproute
 func SetupTestFixture() {
 	port := findPort()
 	if port == 0 {
-		log.Fatalln("could not find port to start test consumer service")
+		log.Fatal().Msg("could not find port to start test consumer service")
 	}
 	portString := ":" + strconv.Itoa(port)
 	baseURLString := "http://localhost" + portString
@@ -107,7 +108,7 @@ func SetupTestFixture() {
 		}
 		go func() {
 			if serverListenErr := server.ListenAndServe(); serverListenErr != nil {
-				log.Println(serverListenErr)
+				log.Print(serverListenErr)
 			}
 		}()
 		wg.Done()
@@ -273,9 +274,10 @@ func TestMessageDispatcherImplDispatch(t *testing.T) {
 	})
 	t.Run("ListError", func(t *testing.T) {
 		var buf bytes.Buffer
-		log.SetOutput(&buf)
+		oldLogger := log.Logger
+		log.Logger = log.Output(&buf)
 		defer func() {
-			log.SetOutput(os.Stderr)
+			log.Logger = oldLogger
 		}()
 		mRepo := new(storagemocks.DeliveryJobRepository)
 		cRepo := new(storagemocks.ConsumerRepository)
@@ -439,8 +441,9 @@ func TestRecoverMessagesNotYetDispatched(t *testing.T) {
 	t.Run("LogError", func(t *testing.T) {
 		t.Parallel()
 		var buf bytes.Buffer
-		log.SetOutput(&buf)
-		defer func() { log.SetOutput(os.Stderr) }()
+		oldLogger := log.Logger
+		log.Logger = log.Output(&buf)
+		defer func() { log.Logger = oldLogger }()
 		errString := "sample select error"
 		expectedErr := errors.New(errString)
 		messagePayload := `{"key": "Custom JSON"}`
@@ -486,8 +489,9 @@ func TestJobWorkers(t *testing.T) {
 	// Did not make them parallel since states are inter-dependent
 	t.Run("Error", func(t *testing.T) {
 		var buf bytes.Buffer
-		log.SetOutput(&buf)
-		defer func() { log.SetOutput(os.Stderr) }()
+		oldLogger := log.Logger
+		log.Logger = log.Output(&buf)
+		defer func() { log.Logger = oldLogger }()
 		errString := "sample select error"
 		expectedErr := errors.New(errString)
 		brokerConf := getMockedBrokerConfig()

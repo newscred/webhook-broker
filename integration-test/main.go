@@ -187,6 +187,11 @@ func addConsumerVerified(expectedEventCount int, assert bool, simulateFailures i
 	failuresLeft := simulateFailures
 	for index := 0; index < consumerCount; index++ {
 		consumerHandler[consumerIDPrefix+strconv.Itoa(index)] = func(s string, rw http.ResponseWriter, r *http.Request) {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Println("Recovered", r)
+				}
+			}()
 			if assert {
 				body, _ := ioutil.ReadAll(r.Body)
 				if string(body) != payload {
@@ -198,15 +203,11 @@ func addConsumerVerified(expectedEventCount int, assert bool, simulateFailures i
 			}
 			if failuresLeft > 0 {
 				failuresLeft--
+				log.Println("SENDING FAILURE")
 				rw.WriteHeader(http.StatusNotFound)
 			} else {
 				rw.WriteHeader(http.StatusNoContent)
 			}
-			defer func() {
-				if r := recover(); r != nil {
-					log.Println("Recovered", r)
-				}
-			}()
 			wg.Done()
 		}
 	}

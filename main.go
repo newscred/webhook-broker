@@ -6,11 +6,12 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/rs/zerolog/log"
 
 	"github.com/google/wire"
 	"github.com/imyousuf/webhook-broker/config"
@@ -122,14 +123,14 @@ var (
 						switch initErr {
 						case nil:
 							createSeedData(httpServiceContainer.DataAccessor, httpServiceContainer.Configuration)
-							log.Println(httpServiceContainer.DataAccessor.GetAppRepository().CompleteAppInit())
+							log.Print(httpServiceContainer.DataAccessor.GetAppRepository().CompleteAppInit())
 							run = false
 						case storage.ErrAppInitializing:
 							run = false
 						case storage.ErrOptimisticAppInit:
 							run = false
 						default:
-							log.Println(initErr)
+							log.Print(initErr)
 							time.Sleep(waitDuration)
 						}
 					}
@@ -148,7 +149,7 @@ var (
 				_, err = dataAccessor.GetProducerRepository().Store(producer)
 			}
 			if err != nil {
-				log.Println("Error creating producer", seedProducer.ID, err)
+				log.Print("Error creating producer", seedProducer.ID, err)
 			}
 		}
 		for _, seedChannel := range seedDataConfig.GetSeedData().Channels {
@@ -158,13 +159,13 @@ var (
 				_, err = dataAccessor.GetChannelRepository().Store(channel)
 			}
 			if err != nil {
-				log.Println("Error creating channel", seedChannel.ID, err)
+				log.Print("Error creating channel", seedChannel.ID, err)
 			}
 		}
 		for _, seedConsumer := range seedDataConfig.GetSeedData().Consumers {
 			channel, err := dataAccessor.GetChannelRepository().Get(seedConsumer.Channel)
 			if err != nil {
-				log.Println(err)
+				log.Print(err)
 				continue
 			}
 			consumer, err := data.NewConsumer(channel, seedConsumer.ID, seedConsumer.Token, seedConsumer.CallbackURL)
@@ -175,39 +176,39 @@ var (
 				_, err = dataAccessor.GetConsumerRepository().Store(consumer)
 			}
 			if err != nil {
-				log.Println("Error creating consumer", seedConsumer.ID, err)
+				log.Print("Error creating consumer", seedConsumer.ID, err)
 			}
 		}
 	}
 )
 
 func main() {
-	log.Println("Webhook Broker - " + string(GetAppVersion()))
+	log.Print("Webhook Broker - " + string(GetAppVersion()))
 	inConfig, output, cliCfgErr := parseArgs(os.Args[0], os.Args[1:])
 	if cliCfgErr != nil {
 		consolePrintln(output)
 		if cliCfgErr != flag.ErrHelp {
-			log.Println(cliCfgErr)
+			log.Print(cliCfgErr)
 		}
 		exit(1)
 	}
-	log.Println("Configuration File (optional): " + inConfig.ConfigPath)
+	log.Print("Configuration File (optional): " + inConfig.ConfigPath)
 	// Setup HTTP Server and listen (implicitly init DB and run migration if arg passed)
 	httpServiceContainer, err := GetHTTPServer(inConfig)
 	if err != nil {
-		log.Println(err)
+		log.Print(err)
 		exit(3)
 	}
 	_, err = getApp(httpServiceContainer)
 	if err == nil {
 		initApp(httpServiceContainer)
 	} else {
-		log.Println(err)
+		log.Print(err)
 		exit(4)
 	}
 	var buf bytes.Buffer
 	json.NewEncoder(&buf).Encode(httpServiceContainer.Configuration)
-	log.Println("Configuration in Use : " + buf.String())
+	log.Print("Configuration in Use : " + buf.String())
 	// Setup Log Output
 	setupLogger(httpServiceContainer.Configuration)
 	<-httpServiceContainer.Listener.shutdownListener
@@ -216,7 +217,7 @@ func main() {
 
 func setupLogger(config config.LogConfig) {
 	if config.IsLoggerConfigAvailable() {
-		log.SetOutput(&lumberjack.Logger{
+		log.Logger = log.Output(&lumberjack.Logger{
 			Filename:   config.GetLogFilename(),
 			MaxSize:    int(config.GetMaxLogFileSize()), // megabytes
 			MaxBackups: int(config.GetMaxLogBackups()),

@@ -5,11 +5,11 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"log"
-	"os"
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/rs/zerolog/log"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/imyousuf/webhook-broker/storage/data"
@@ -234,8 +234,9 @@ func TestStatusBasedJobsListing(t *testing.T) {
 	t.Run("SuccessRetryList", func(t *testing.T) {
 		t.Parallel()
 		var buf bytes.Buffer
-		log.SetOutput(&buf)
-		defer func() { log.SetOutput(os.Stderr) }()
+		oldLogger := log.Logger
+		log.Logger = log.Output(&buf)
+		defer func() { log.Logger = oldLogger }()
 		errString := "sample select error"
 		expectedErr := errors.New(errString)
 		db, mock, _ := sqlmock.New()

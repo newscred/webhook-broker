@@ -4,8 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"log"
 	"time"
+
+	"github.com/rs/zerolog/log"
 
 	"github.com/imyousuf/webhook-broker/storage/data"
 )
@@ -139,7 +140,7 @@ func (msgRepo *MessageDBRepository) GetMessagesNotDispatchedForCertainPeriod(del
 			}
 			messages = append(messages, pageMessages...)
 		} else {
-			log.Println("error - could get list messages needing to be dispatched", err)
+			log.Print("error - could get list messages needing to be dispatched", err)
 			more = false
 		}
 	}

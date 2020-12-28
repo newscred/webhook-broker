@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"database/sql"
 	"errors"
-	"log"
 	"os"
 	"path/filepath"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/rs/zerolog/log"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/golang-migrate/migrate/v4"
@@ -255,9 +256,10 @@ func TestTransactionalCommitRollbackErrors(t *testing.T) {
 	seedDataVal, _ := seedData.Value()
 	t.Run("RollbackFailed", func(t *testing.T) {
 		var buf bytes.Buffer
-		log.SetOutput(&buf)
+		oldLogger := log.Logger
+		log.Logger = log.Output(&buf)
 		defer func() {
-			log.SetOutput(os.Stderr)
+			log.Logger = oldLogger
 		}()
 		db, mock, _ := sqlmock.New()
 		appRepo := &AppDBRepository{db: db}
@@ -275,9 +277,10 @@ func TestTransactionalCommitRollbackErrors(t *testing.T) {
 		assert.Contains(t, buf.String(), "tx rollback error")
 	})
 	t.Run("CommitFailed", func(t *testing.T) {
-		log.SetOutput(&buf)
+		oldLogger := log.Logger
+		log.Logger = log.Output(&buf)
 		defer func() {
-			log.SetOutput(os.Stderr)
+			log.Logger = oldLogger
 		}()
 		db, mock, _ := sqlmock.New()
 		appRepo := &AppDBRepository{db: db}
@@ -295,9 +298,10 @@ func TestTransactionalCommitRollbackErrors(t *testing.T) {
 		assert.Contains(t, buf.String(), "tx commit error")
 	})
 	t.Run("PanicRollbackFailed", func(t *testing.T) {
-		log.SetOutput(&buf)
+		oldLogger := log.Logger
+		log.Logger = log.Output(&buf)
 		defer func() {
-			log.SetOutput(os.Stderr)
+			log.Logger = oldLogger
 		}()
 		db, mock, _ := sqlmock.New()
 		mock.MatchExpectationsInOrder(true)

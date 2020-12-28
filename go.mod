@@ -8,10 +8,10 @@ require (
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/golang-migrate/migrate/v4 v4.14.1
 	github.com/google/wire v0.4.0
-	github.com/gorilla/handlers v1.5.1
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/mattn/go-sqlite3 v1.14.6
 	github.com/rs/xid v1.2.1
+	github.com/rs/zerolog v1.15.0
 	github.com/smartystreets/goconvey v1.6.4 // indirect
 	github.com/stretchr/testify v1.6.1
 	gopkg.in/ini.v1 v1.62.0 // indirect

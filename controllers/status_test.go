@@ -5,13 +5,14 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/rs/zerolog/log"
 
 	"github.com/imyousuf/webhook-broker/config"
 	"github.com/imyousuf/webhook-broker/storage"
@@ -48,7 +49,7 @@ func TestMain(m *testing.M) {
 		}
 	}
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatal().Err(err)
 	}
 }
 

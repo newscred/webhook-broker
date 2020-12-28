@@ -3,11 +3,12 @@ package dispatcher
 import (
 	"errors"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/rs/zerolog/log"
 
 	"github.com/imyousuf/webhook-broker/config"
 	"github.com/imyousuf/webhook-broker/storage"
@@ -54,21 +55,23 @@ func createHTTPClient(consumerConfig config.ConsumerConnectionConfig) *http.Clie
 
 var deliverJob = func(w *Worker, job *Job) {
 	// we have received a work request.
-	log.Println("info - processing job in worker", job.Data.ID.String())
+	log.Debug().Msg("processing job in worker " + job.Data.ID.String())
 	// Put to Inflight
 	err := w.djRepo.MarkJobInflight(job.Data)
 	if err != nil {
-		log.Println("err - could not put job in flight", err, job.Data.ID)
+		log.Print("err - could not put job in flight", err, job.Data.ID)
 		return
 	}
 	// Attempt to deliver
 	err = w.executeJob(job)
 	// If err == nil, then delivered, else if at max try dead else queued with retry attempt increased
 	if err == nil {
+		log.Debug().Msg("delivered job " + job.Data.ID.String())
 		w.djRepo.MarkJobDelivered(job.Data)
 	} else if job.Data.RetryAttemptCount >= uint(w.brokerConfig.GetMaxRetry()) {
 		w.djRepo.MarkJobDead(job.Data)
 	} else {
+		log.Debug().Msg("schedule for retry job " + job.Data.ID.String())
 		w.djRepo.MarkJobRetry(job.Data, w.earliestDelta(job.Data.RetryAttemptCount+1))
 	}
 }
@@ -102,7 +105,7 @@ func (w *Worker) executeJob(job *Job) (err error) {
 	// Do not let the worker crash due to any panic
 	defer func() {
 		if r := recover(); r != nil {
-			log.Println("error - panic in executing job -", job.Data.ID, r)
+			log.Print("error - panic in executing job -", job.Data.ID, r)
 		}
 	}()
 	var req *http.Request
@@ -123,13 +126,13 @@ func (w *Worker) executeJob(job *Job) (err error) {
 				if rErr == nil {
 					errString = string(errBody)
 				}
-				log.Println("error - consumer connection error", resp.Status, errString)
+				log.Print("error - consumer connection error", resp.Status, errString, job.Data.ID)
 				err = errConsumer
 			}
 		}
 	}
 	if err != nil {
-		log.Println("error - worker failed to deliver", err)
+		log.Print("error - worker failed to deliver", err, job.Data.ID)
 	}
 	return err
 }

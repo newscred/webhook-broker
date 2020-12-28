@@ -2,12 +2,13 @@ package storage
 
 import (
 	"errors"
-	"log"
 	"net/url"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/rs/zerolog/log"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/imyousuf/webhook-broker/storage/data"
@@ -50,7 +51,7 @@ func SetupForConsumerTests() {
 func parseTestURL(urlString string) *url.URL {
 	url, err := url.Parse(urlString)
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatal().Err(err)
 	}
 	return url
 }
@@ -58,7 +59,7 @@ func parseTestURL(urlString string) *url.URL {
 func createTestChannel(channelID, token string, channelRepo ChannelRepository) *data.Channel {
 	channel, err := data.NewChannel(channelID, token)
 	if channel, err = channelRepo.Store(channel); err != nil {
-		log.Fatalln(err)
+		log.Fatal().Err(err)
 	}
 	return channel
 }

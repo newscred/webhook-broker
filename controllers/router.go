@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"log"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -14,8 +13,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rs/zerolog/log"
+
+	"net/http/pprof"
+
 	"github.com/google/wire"
-	"github.com/gorilla/handlers"
 	"github.com/imyousuf/webhook-broker/config"
 	"github.com/imyousuf/webhook-broker/storage/data"
 	"github.com/julienschmidt/httprouter"
@@ -96,7 +98,7 @@ type RequestLogger struct {
 }
 
 func (rLogger RequestLogger) Write(p []byte) (n int, err error) {
-	log.Println(string(p))
+	log.Print(string(p))
 	return len(p), nil
 }
 
@@ -109,17 +111,17 @@ var NotifyOnInterrupt = func(stop *chan os.Signal) {
 func ConfigureAPI(httpConfig config.HTTPConfig, iListener ServerLifecycleListener, apiRouter *httprouter.Router) *http.Server {
 	listener = iListener
 	server = &http.Server{
-		Handler:      handlers.LoggingHandler(RequestLogger{}, apiRouter),
+		Handler:      apiRouter,
 		Addr:         httpConfig.GetHTTPListeningAddr(),
 		ReadTimeout:  httpConfig.GetHTTPReadTimeout(),
 		WriteTimeout: httpConfig.GetHTTPWriteTimeout(),
 	}
 	go func() {
-		log.Println("Listening to http at -", httpConfig.GetHTTPListeningAddr())
+		log.Print("Listening to http at -", httpConfig.GetHTTPListeningAddr())
 		iListener.StartingServer()
 		if serverListenErr := server.ListenAndServe(); serverListenErr != nil {
 			iListener.ServerStartFailed(serverListenErr)
-			log.Println(serverListenErr)
+			log.Print(serverListenErr)
 		}
 	}()
 	stop := make(chan os.Signal, 1)
@@ -132,17 +134,27 @@ func ConfigureAPI(httpConfig config.HTTPConfig, iListener ServerLifecycleListene
 }
 
 func handleExit() {
-	log.Println("Shutting down the server...")
+	log.Print("Shutting down the server...")
 	serverShutdownContext, shutdownTimeoutCancelFunc := context.WithTimeout(context.Background(), 15*time.Second)
 	defer shutdownTimeoutCancelFunc()
 	server.Shutdown(serverShutdownContext)
-	log.Println("Server gracefully stopped!")
+	log.Print("Server gracefully stopped!")
 	listener.ServerShutdownCompleted()
 }
 
 // NewRouter returns a new instance of the router
 func NewRouter(controllers *Controllers) *httprouter.Router {
 	apiRouter := httprouter.New()
+	apiRouter.HandlerFunc(http.MethodGet, "/debug/pprof/", pprof.Index)
+	apiRouter.HandlerFunc(http.MethodGet, "/debug/pprof/cmdline", pprof.Cmdline)
+	apiRouter.HandlerFunc(http.MethodGet, "/debug/pprof/profile", pprof.Profile)
+	apiRouter.HandlerFunc(http.MethodGet, "/debug/pprof/symbol", pprof.Symbol)
+	apiRouter.HandlerFunc(http.MethodGet, "/debug/pprof/trace", pprof.Trace)
+	apiRouter.Handler(http.MethodGet, "/debug/pprof/goroutine", pprof.Handler("goroutine"))
+	apiRouter.Handler(http.MethodGet, "/debug/pprof/mutex", pprof.Handler("mutex"))
+	apiRouter.Handler(http.MethodGet, "/debug/pprof/heap", pprof.Handler("heap"))
+	apiRouter.Handler(http.MethodGet, "/debug/pprof/threadcreate", pprof.Handler("threadcreate"))
+	apiRouter.Handler(http.MethodGet, "/debug/pprof/block", pprof.Handler("block"))
 	setupAPIRoutes(apiRouter, controllers.StatusController, controllers.ProducersController, controllers.ProducerController, controllers.ChannelController, controllers.ConsumerController, controllers.ConsumersController, controllers.BroadcastController)
 	return apiRouter
 }

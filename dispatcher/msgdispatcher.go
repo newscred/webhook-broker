@@ -2,10 +2,11 @@ package dispatcher
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/rs/zerolog/log"
 
 	"github.com/imyousuf/webhook-broker/config"
 	"github.com/imyousuf/webhook-broker/storage"
@@ -57,7 +58,7 @@ func (msgDispatcher *MessageDispatcherImpl) Dispatch(message *data.Message) {
 		}
 	}
 	if err != nil {
-		log.Println("error dispatching -", err)
+		log.Print("error dispatching -", err)
 	}
 }
 
@@ -101,7 +102,7 @@ var (
 
 	genericPanicRecoveryFunc = func() {
 		if r := recover(); r != nil {
-			log.Println("error - had to recover from panic", r)
+			log.Print("error - had to recover from panic", r)
 		}
 	}
 
@@ -119,7 +120,7 @@ var (
 				return attemptMessageDispatch(msgDispatcher, message)
 			})
 			if err != nil {
-				log.Println("error - could ensure dispatch from recover worker", err, message.MessageID)
+				log.Print("error - could ensure dispatch from recover worker", err, message.MessageID)
 			}
 		}
 	}
@@ -141,7 +142,7 @@ var (
 				return nil
 			})
 			if err != nil {
-				log.Println("error - could not retry job", err, job.ID)
+				log.Print("error - could not retry job", err, job.ID)
 			}
 		}
 	}
@@ -156,7 +157,7 @@ var (
 				return nil
 			})
 			if err != nil {
-				log.Println("error - could not requeue job", err, job.ID)
+				log.Print("error - could not requeue job", err, job.ID)
 			}
 		}
 	}
@@ -229,7 +230,7 @@ func (msgDispatcher *MessageDispatcherImpl) Stop() {
 	defer cancelFunc()
 	select {
 	case <-timeoutContext.Done():
-		log.Println("warn - dispatcher stop timedout")
+		log.Print("warn - dispatcher stop timedout")
 		return
 	default:
 		wg := sync.WaitGroup{}
@@ -243,7 +244,7 @@ func (msgDispatcher *MessageDispatcherImpl) Stop() {
 			}
 			wg.Done()
 		}()
-		log.Println("stopping workers", len(msgDispatcher.workers))
+		log.Print("stopping workers", len(msgDispatcher.workers))
 		anyRunning := true
 		for i := 0; i < len(msgDispatcher.workers); i++ {
 			wg.Add(1)

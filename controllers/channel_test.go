@@ -3,7 +3,6 @@ package controllers
 import (
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -11,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/rs/zerolog/log"
 
 	"github.com/imyousuf/webhook-broker/storage"
 	"github.com/imyousuf/webhook-broker/storage/data"
@@ -37,7 +38,7 @@ func ChannelTestSetup() {
 			_, err = channelRepo.Store(channel)
 		}
 		if err != nil {
-			log.Fatalln(err)
+			log.Fatal().Err(err)
 		}
 	}
 }

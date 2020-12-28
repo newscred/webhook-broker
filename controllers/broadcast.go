@@ -3,10 +3,11 @@ package controllers
 import (
 	"errors"
 	"io/ioutil"
-	"log"
 	"math"
 	"net/http"
 	"strconv"
+
+	"github.com/rs/zerolog/log"
 
 	"github.com/imyousuf/webhook-broker/dispatcher"
 	"github.com/imyousuf/webhook-broker/storage"
@@ -76,7 +77,7 @@ func (broadcastController *BroadcastController) Post(w http.ResponseWriter, r *h
 	}
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		log.Println("error reading body", err)
+		log.Print("error reading body", err)
 		writeErr(w, errBodyCouldNotBeRead)
 		return
 	}
