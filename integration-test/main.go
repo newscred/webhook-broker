@@ -42,6 +42,7 @@ const (
 	consumerCount                  = 5
 	payload                        = `{"test":"hello world"}`
 	contentType                    = "application/json"
+	concurrentPushWorkers          = 50
 )
 
 func findPort() int {
@@ -66,6 +67,7 @@ func checkPort(port int) (err error) {
 func consumerController(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 	consumerID := params.ByName("consumerId")
 	log.Println("Received message!", consumerID)
+	defer r.Body.Close()
 	if customController, ok := consumerHandler[consumerID]; ok {
 		customController(consumerID, w, r)
 	} else {
@@ -77,10 +79,14 @@ func createProducer() (err error) {
 	formValues := url.Values{}
 	formValues.Add(tokenFormParamKey, token)
 	req, _ := http.NewRequest(http.MethodPut, brokerBaseURL+"/producer/"+producerID, strings.NewReader(formValues.Encode()))
+	defer req.Body.Close()
 	req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
 	var resp *http.Response
 	resp, err = client.Do(req)
-	if resp.StatusCode != 200 {
+	if err == nil {
+		defer resp.Body.Close()
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusBadRequest {
 		err = errDuringCreation
 	}
 	return err
@@ -89,10 +95,14 @@ func createChannel() (err error) {
 	formValues := url.Values{}
 	formValues.Add(tokenFormParamKey, token)
 	req, _ := http.NewRequest(http.MethodPut, brokerBaseURL+"/channel/"+channelID, strings.NewReader(formValues.Encode()))
+	defer req.Body.Close()
 	req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
 	var resp *http.Response
 	resp, err = client.Do(req)
-	if resp.StatusCode != 200 {
+	if err == nil {
+		defer resp.Body.Close()
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusBadRequest {
 		err = errDuringCreation
 	}
 	return err
@@ -106,6 +116,7 @@ func createConsumers(baseURI string) int {
 		log.Println("callback url", url)
 		formValues.Add(callbackURLFormParamKey, url)
 		req, _ := http.NewRequest(http.MethodPut, brokerBaseURL+"/channel/"+channelID+"/consumer/"+consumerIDPrefix+indexString, strings.NewReader(formValues.Encode()))
+		defer req.Body.Close()
 		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
 		var resp *http.Response
 		var err error
@@ -115,7 +126,7 @@ func createConsumers(baseURI string) int {
 			return 0
 		}
 		defer resp.Body.Close()
-		if resp.StatusCode != 200 {
+		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusBadRequest {
 			respBody, _ := ioutil.ReadAll(resp.Body)
 			log.Println("response", resp.Status, string(respBody))
 			return 0
@@ -126,6 +137,7 @@ func createConsumers(baseURI string) int {
 func broadcastMessage(sendCount int) (err error) {
 	sendFn := func() {
 		req, _ := http.NewRequest(http.MethodPost, brokerBaseURL+"/channel/"+channelID+"/broadcast", strings.NewReader(payload))
+		defer req.Body.Close()
 		req.Header.Add(headerContentType, contentType)
 		req.Header.Add(headerChannelToken, token)
 		req.Header.Add(headerProducerID, producerID)
@@ -133,11 +145,14 @@ func broadcastMessage(sendCount int) (err error) {
 		var resp *http.Response
 		resp, err = client.Do(req)
 		if err != nil {
-			log.Println("error creating consumer", err)
-		} else if resp.StatusCode != http.StatusAccepted {
-			respBody, _ := ioutil.ReadAll(resp.Body)
-			log.Println("error broadcasting message", resp.StatusCode, string(respBody))
-			err = errDuringCreation
+			log.Println("error broadcasting to consumers", err)
+		} else {
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusAccepted {
+				respBody, _ := ioutil.ReadAll(resp.Body)
+				log.Println("error broadcasting message", resp.StatusCode, string(respBody))
+				err = errDuringCreation
+			}
 		}
 	}
 	switch {
@@ -157,7 +172,7 @@ func broadcastMessage(sendCount int) (err error) {
 				}
 			}
 		}
-		for index := 0; index < 50; index++ {
+		for index := 0; index < concurrentPushWorkers; index++ {
 			go asyncSend()
 		}
 		for index := 0; index < sendCount; index++ {
@@ -173,7 +188,6 @@ func addConsumerVerified(expectedEventCount int, assert bool, simulateFailures i
 	for index := 0; index < consumerCount; index++ {
 		consumerHandler[consumerIDPrefix+strconv.Itoa(index)] = func(s string, rw http.ResponseWriter, r *http.Request) {
 			if assert {
-				defer r.Body.Close()
 				body, _ := ioutil.ReadAll(r.Body)
 				if string(body) != payload {
 					consumerAssertionFailed = true
@@ -188,6 +202,11 @@ func addConsumerVerified(expectedEventCount int, assert bool, simulateFailures i
 			} else {
 				rw.WriteHeader(http.StatusNoContent)
 			}
+			defer func() {
+				if r := recover(); r != nil {
+					log.Println("Recovered", r)
+				}
+			}()
 			wg.Done()
 		}
 	}
@@ -211,6 +230,7 @@ func waitTimeout(wg *sync.WaitGroup, timeout time.Duration) bool {
 func main() {
 	consumerHandler = make(map[string]func(string, http.ResponseWriter, *http.Request))
 	client = &http.Client{Timeout: 2 * time.Second}
+	http.DefaultTransport.(*http.Transport).MaxIdleConnsPerHost = concurrentPushWorkers
 	port := findPort()
 	if port == 0 {
 		log.Fatalln("could not find port to start test consumer service")
@@ -247,13 +267,14 @@ func main() {
 		return
 	}
 	log.Println("Starting message broadcast", time.Now())
-	defaultMax := 1
+	defaultMax := 10000
 	steps := []int{1, 10, 100, 500, 1000, 2500, 5000, 10000, 100000, 1000000}
 	failures := 2
 	for _, step := range steps {
 		if step > defaultMax {
 			continue
 		}
+		start := time.Now()
 		wg := addConsumerVerified(step*count+failures, true, failures)
 		err := broadcastMessage(step)
 		if err != nil {
@@ -265,7 +286,9 @@ func main() {
 			log.Println("Timed out waiting for wait group after", timeoutDuration)
 			os.Exit(2)
 		} else {
-			log.Println("Wait group finished", step, time.Now())
+			end := time.Now()
+			log.Println("Wait group finished", step, end)
+			log.Println("Batch Duration", step, end.Sub(start))
 			if consumerAssertionFailed {
 				log.Println("Consumer assertion failed")
 				os.Exit(3)

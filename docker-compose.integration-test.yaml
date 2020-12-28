@@ -13,10 +13,10 @@ services:
       - "45060:3306"
     healthcheck:
       test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
-      interval: 1m30s
+      interval: 30s
       timeout: 20s
       retries: 10
-      start_period: 40s
+      start_period: 20s
     networks:
       brokeritest:
         aliases:
@@ -36,10 +36,10 @@ services:
       - mysql8:mysql
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/_status"]
-      interval: 1m30s
+      interval: 3s
       timeout: 10s
       retries: 3
-      start_period: 5s
+      start_period: 2s
     networks:
       brokeritest:
         aliases:
