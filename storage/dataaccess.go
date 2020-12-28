@@ -57,6 +57,7 @@ type MessageRepository interface {
 	GetByID(id string) (*data.Message, error)
 	SetDispatched(txContext context.Context, message *data.Message) error
 	GetMessagesNotDispatchedForCertainPeriod(delta time.Duration) []*data.Message
+	GetMessagesForChannel(channelID string, page *data.Pagination) ([]*data.Message, *data.Pagination, error)
 }
 
 // DeliveryJobRepository allows storage operations over DeliveryJob
@@ -66,7 +67,9 @@ type DeliveryJobRepository interface {
 	MarkJobDelivered(deliveryJob *data.DeliveryJob) error
 	MarkJobDead(deliveryJob *data.DeliveryJob) error
 	MarkJobRetry(deliveryJob *data.DeliveryJob, earliestDelta time.Duration) error
+	RequeueDeadJobsForConsumer(consumer *data.Consumer) error
 	GetJobsForMessage(message *data.Message, page *data.Pagination) ([]*data.DeliveryJob, *data.Pagination, error)
+	GetJobsForConsumer(consumer *data.Consumer, jobStatus data.JobStatus, page *data.Pagination) ([]*data.DeliveryJob, *data.Pagination, error)
 	GetByID(id string) (*data.DeliveryJob, error)
 	GetJobsInflightSince(delta time.Duration) []*data.DeliveryJob
 	GetJobsReadyForInflightSince(delta time.Duration) []*data.DeliveryJob

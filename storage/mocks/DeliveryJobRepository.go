@@ -58,6 +58,38 @@ func (_m *DeliveryJobRepository) GetByID(id string) (*data.DeliveryJob, error) {
 	return r0, r1
 }
 
+// GetJobsForConsumer provides a mock function with given fields: consumer, jobStatus, page
+func (_m *DeliveryJobRepository) GetJobsForConsumer(consumer *data.Consumer, jobStatus data.JobStatus, page *data.Pagination) ([]*data.DeliveryJob, *data.Pagination, error) {
+	ret := _m.Called(consumer, jobStatus, page)
+
+	var r0 []*data.DeliveryJob
+	if rf, ok := ret.Get(0).(func(*data.Consumer, data.JobStatus, *data.Pagination) []*data.DeliveryJob); ok {
+		r0 = rf(consumer, jobStatus, page)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*data.DeliveryJob)
+		}
+	}
+
+	var r1 *data.Pagination
+	if rf, ok := ret.Get(1).(func(*data.Consumer, data.JobStatus, *data.Pagination) *data.Pagination); ok {
+		r1 = rf(consumer, jobStatus, page)
+	} else {
+		if ret.Get(1) != nil {
+			r1 = ret.Get(1).(*data.Pagination)
+		}
+	}
+
+	var r2 error
+	if rf, ok := ret.Get(2).(func(*data.Consumer, data.JobStatus, *data.Pagination) error); ok {
+		r2 = rf(consumer, jobStatus, page)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
+}
+
 // GetJobsForMessage provides a mock function with given fields: message, page
 func (_m *DeliveryJobRepository) GetJobsForMessage(message *data.Message, page *data.Pagination) ([]*data.DeliveryJob, *data.Pagination, error) {
 	ret := _m.Called(message, page)
@@ -171,6 +203,20 @@ func (_m *DeliveryJobRepository) MarkJobRetry(deliveryJob *data.DeliveryJob, ear
 	var r0 error
 	if rf, ok := ret.Get(0).(func(*data.DeliveryJob, time.Duration) error); ok {
 		r0 = rf(deliveryJob, earliestDelta)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// RequeueDeadJobsForConsumer provides a mock function with given fields: consumer
+func (_m *DeliveryJobRepository) RequeueDeadJobsForConsumer(consumer *data.Consumer) error {
+	ret := _m.Called(consumer)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*data.Consumer) error); ok {
+		r0 = rf(consumer)
 	} else {
 		r0 = ret.Error(0)
 	}

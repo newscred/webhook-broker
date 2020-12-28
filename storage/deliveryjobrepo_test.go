@@ -284,3 +284,100 @@ func TestStatusBasedJobsListing(t *testing.T) {
 		}
 	})
 }
+
+func TestGetJobsForConsumer(t *testing.T) {
+	djRepo := getDeliverJobRepository()
+	msgRepo := getMessageRepository()
+
+	message2 := getMessageForJob()
+	msgRepo.Create(message2)
+	jobs2 := getDeliveryJobsInFixture(message2)
+	err := djRepo.DispatchMessage(message2, jobs2...)
+	assert.Nil(t, err)
+
+	message := getMessageForJob()
+	msgRepo.Create(message)
+	jobs := getDeliveryJobsInFixture(message)
+	err = djRepo.DispatchMessage(message, jobs...)
+	testJob := jobs[5]
+	djRepo.MarkJobInflight(testJob)
+	assert.Nil(t, err)
+	t.Run("PaginationDeadlock", func(t *testing.T) {
+		t.Parallel()
+		_, _, err := djRepo.GetJobsForConsumer(testJob.Listener, data.JobInflight, data.NewPagination(testJob, testJob))
+		assert.Equal(t, ErrPaginationDeadlock, err)
+	})
+	t.Run("Success", func(t *testing.T) {
+		t.Parallel()
+		rJobs, page, err := djRepo.GetJobsForConsumer(testJob.Listener, data.JobInflight, data.NewPagination(nil, nil))
+		assert.Nil(t, err)
+		assert.LessOrEqual(t, 1, len(rJobs))
+		assert.NotNil(t, page.Next)
+		assert.NotNil(t, page.Previous)
+		found := false
+		for _, job := range rJobs {
+			if job.ID == testJob.ID {
+				found = true
+			}
+			assert.Equal(t, job.Listener.ID, testJob.Listener.ID)
+			assert.Equal(t, data.JobInflight, job.Status)
+		}
+		assert.True(t, found)
+		rJobs, page2, err := djRepo.GetJobsForConsumer(testJob.Listener, data.JobInflight, &data.Pagination{Previous: page.Previous})
+		assert.Equal(t, 0, len(rJobs))
+		assert.Nil(t, page2.Next)
+		assert.Nil(t, page2.Previous)
+		rJobs, page3, err := djRepo.GetJobsForConsumer(testJob.Listener, data.JobInflight, &data.Pagination{Next: page.Next})
+		assert.Equal(t, 0, len(rJobs))
+		assert.Nil(t, page3.Next)
+		assert.Nil(t, page3.Previous)
+	})
+}
+
+func TestRequeueDeadJobsForConsumer(t *testing.T) {
+	djRepo := getDeliverJobRepository()
+	msgRepo := getMessageRepository()
+
+	message2 := getMessageForJob()
+	msgRepo.Create(message2)
+	jobs2 := getDeliveryJobsInFixture(message2)
+	err := djRepo.DispatchMessage(message2, jobs2...)
+	assert.Nil(t, err)
+
+	message := getMessageForJob()
+	msgRepo.Create(message)
+	jobs := getDeliveryJobsInFixture(message)
+	err = djRepo.DispatchMessage(message, jobs...)
+	testJobs := []*data.DeliveryJob{jobs[5], jobs2[5]}
+	for _, testJob := range testJobs {
+		err := djRepo.MarkJobInflight(testJob)
+		assert.Nil(t, err)
+		err = djRepo.MarkJobDead(testJob)
+		assert.Nil(t, err)
+	}
+	rJobs, _, err := djRepo.GetJobsForConsumer(testJobs[0].Listener, data.JobDead, data.NewPagination(nil, nil))
+	assert.Nil(t, err)
+	assert.LessOrEqual(t, 2, len(rJobs))
+	for _, job := range rJobs {
+		found := false
+		for _, testJob := range testJobs {
+			if job.ID == testJob.ID {
+				found = true
+			}
+
+			assert.Equal(t, job.Listener.ID, testJob.Listener.ID)
+			assert.Equal(t, data.JobDead, job.Status)
+		}
+		assert.True(t, found)
+	}
+	err = djRepo.RequeueDeadJobsForConsumer(testJobs[0].Listener)
+	assert.Nil(t, err)
+	rJobs, _, err = djRepo.GetJobsForConsumer(testJobs[0].Listener, data.JobDead, data.NewPagination(nil, nil))
+	assert.Nil(t, err)
+	assert.LessOrEqual(t, 0, len(rJobs))
+	for _, testJob := range testJobs {
+		job, err := djRepo.GetByID(testJob.ID.String())
+		assert.Nil(t, err)
+		assert.Equal(t, data.JobQueued, job.Status)
+	}
+}

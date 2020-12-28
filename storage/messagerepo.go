@@ -106,45 +106,67 @@ func (msgRepo *MessageDBRepository) SetDispatched(txContext context.Context, mes
 	return ErrNoTxInContext
 }
 
+func (msgRepo *MessageDBRepository) getMessages(baseQuery string, args ...interface{}) ([]*data.Message, *data.Pagination, error) {
+	pageMessages := make([]*data.Message, 0, 100)
+	newPage := &data.Pagination{}
+	scanArgs := func() []interface{} {
+		msg := &data.Message{}
+		msg.ProducedBy = &data.Producer{}
+		msg.BroadcastedTo = &data.Channel{}
+		pageMessages = append(pageMessages, msg)
+		return []interface{}{&msg.ID, &msg.MessageID, &msg.ProducedBy.ProducerID, &msg.BroadcastedTo.ChannelID, &msg.Payload, &msg.ContentType, &msg.Priority, &msg.Status, &msg.ReceivedAt, &msg.OutboxedAt, &msg.CreatedAt, &msg.UpdatedAt}
+	}
+	err := queryRows(msgRepo.db, baseQuery, args2SliceFnWrapper(args...), scanArgs)
+	if err == nil {
+		for _, msg := range pageMessages {
+			msg.BroadcastedTo, _ = msgRepo.channelRepository.Get(msg.BroadcastedTo.ChannelID)
+			msg.ProducedBy, _ = msgRepo.producerRepository.Get(msg.ProducedBy.ProducerID)
+		}
+		msgCount := len(pageMessages)
+		if msgCount > 0 {
+			newPage = data.NewPagination(pageMessages[msgCount-1], pageMessages[0])
+		}
+	} else {
+		log.Error().Err(err).Msg("error - could get list messages needing to be dispatched")
+	}
+	return pageMessages, newPage, err
+}
+
 // GetMessagesNotDispatchedForCertainPeriod retrieves messages in acknowledged state despite `delta` being passed.
 func (msgRepo *MessageDBRepository) GetMessagesNotDispatchedForCertainPeriod(delta time.Duration) []*data.Message {
-	messages := make([]*data.Message, 0)
+	messages := make([]*data.Message, 0, 100)
 	if delta > 0 {
 		delta = -1 * delta
 	}
+	earliestReceivedAt := time.Now().Add(delta)
 	page := data.NewPagination(nil, nil)
 	more := true
 	for more {
-		pageMessages := make([]*data.Message, 0, 100)
 		baseQuery := messageSelectRowCommonQuery + " status like ? AND receivedAt <= ?" + getPaginationQueryFragmentWithConfigurablePageSize(page, true, largePageSizeWithOrder)
-		scanArgs := func() []interface{} {
-			msg := &data.Message{}
-			msg.ProducedBy = &data.Producer{}
-			msg.BroadcastedTo = &data.Channel{}
-			pageMessages = append(pageMessages, msg)
-			return []interface{}{&msg.ID, &msg.MessageID, &msg.ProducedBy.ProducerID, &msg.BroadcastedTo.ChannelID, &msg.Payload, &msg.ContentType, &msg.Priority, &msg.Status, &msg.ReceivedAt, &msg.OutboxedAt, &msg.CreatedAt, &msg.UpdatedAt}
-		}
-		args := []interface{}{data.MsgStatusAcknowledged, time.Now().Add(delta)}
-		args = append(args, getPaginationTimestampQueryArgs(page)...)
-		err := queryRows(msgRepo.db, baseQuery, args2SliceFnWrapper(args...), scanArgs)
+		pageMessages, pagination, err := msgRepo.getMessages(baseQuery, appendWithPaginationArgs(page, data.MsgStatusAcknowledged, earliestReceivedAt)...)
 		if err == nil {
-			for _, msg := range pageMessages {
-				msg.BroadcastedTo, _ = msgRepo.channelRepository.Get(msg.BroadcastedTo.ChannelID)
-				msg.ProducedBy, _ = msgRepo.producerRepository.Get(msg.ProducedBy.ProducerID)
-			}
 			msgCount := len(pageMessages)
-			if msgCount > 0 {
-				page = data.NewPagination(pageMessages[msgCount-1], nil)
-			} else {
+			if msgCount <= 0 {
 				more = false
+			} else {
+				messages = append(messages, pageMessages...)
+				page.Next = pagination.Next
 			}
-			messages = append(messages, pageMessages...)
 		} else {
 			log.Error().Err(err).Msg("error - could get list messages needing to be dispatched")
 			more = false
 		}
 	}
 	return messages
+}
+
+// GetMessagesForChannel retrieves messages broadcasted to a specific channel
+func (msgRepo *MessageDBRepository) GetMessagesForChannel(channelID string, page *data.Pagination) ([]*data.Message, *data.Pagination, error) {
+	if page == nil || (page.Next != nil && page.Previous != nil) {
+		return make([]*data.Message, 0), &data.Pagination{}, ErrPaginationDeadlock
+	}
+	baseQuery := messageSelectRowCommonQuery + " channelId like ?" + getPaginationQueryFragmentWithConfigurablePageSize(page, true, largePageSizeWithOrder)
+	return msgRepo.getMessages(baseQuery, appendWithPaginationArgs(page, channelID)...)
 }
 
 // NewMessageRepository creates a new instance of MessageRepository

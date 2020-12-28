@@ -53,7 +53,7 @@ func (djRepo *DeliveryJobDBRepository) DispatchMessage(message *data.Message, de
 
 func (djRepo *DeliveryJobDBRepository) updateJobStatus(deliveryJob *data.DeliveryJob, from data.JobStatus, to data.JobStatus) (err error) {
 	currentTime := time.Now()
-	err = transactionalSingleRowWriteExec(djRepo.db, emptyOps, "UPDATE job SET status = ?, statusChangedAt = ?, updatedAt = ? WHERE id like ? and status like ?", args2SliceFnWrapper(to, currentTime, currentTime, deliveryJob.ID, from))
+	err = transactionalSingleRowWriteExec(djRepo.db, emptyOps, "UPDATE job SET status = ?, statusChangedAt = ?, updatedAt = ? WHERE id like ? and status = ?", args2SliceFnWrapper(to, currentTime, currentTime, deliveryJob.ID, from))
 	if err == nil {
 		deliveryJob.Status = to
 		deliveryJob.StatusChangedAt = currentTime
@@ -81,7 +81,7 @@ func (djRepo *DeliveryJobDBRepository) MarkJobDead(deliveryJob *data.DeliveryJob
 func (djRepo *DeliveryJobDBRepository) MarkJobRetry(deliveryJob *data.DeliveryJob, earliestDelta time.Duration) (err error) {
 	currentTime := time.Now()
 	nextTime := currentTime.Add(earliestDelta)
-	err = transactionalSingleRowWriteExec(djRepo.db, emptyOps, "UPDATE job SET status = ?, statusChangedAt = ?, updatedAt = ?, earliestNextAttemptAt = ?, retryAttemptCount = ? WHERE id like ? and status like ?", args2SliceFnWrapper(data.JobQueued, currentTime, currentTime, nextTime, deliveryJob.RetryAttemptCount+1, deliveryJob.ID, data.JobInflight))
+	err = transactionalSingleRowWriteExec(djRepo.db, emptyOps, "UPDATE job SET status = ?, statusChangedAt = ?, updatedAt = ?, earliestNextAttemptAt = ?, retryAttemptCount = ? WHERE id like ? and status = ?", args2SliceFnWrapper(data.JobQueued, currentTime, currentTime, nextTime, deliveryJob.RetryAttemptCount+1, deliveryJob.ID, data.JobInflight))
 	if err == nil {
 		deliveryJob.Status = data.JobQueued
 		deliveryJob.StatusChangedAt = currentTime
@@ -92,8 +92,9 @@ func (djRepo *DeliveryJobDBRepository) MarkJobRetry(deliveryJob *data.DeliveryJo
 	return err
 }
 
-func (djRepo *DeliveryJobDBRepository) getJobs(baseQuery string, message *data.Message, args []interface{}) (jobs []*data.DeliveryJob, err error) {
+func (djRepo *DeliveryJobDBRepository) getJobs(baseQuery string, message *data.Message, consumer *data.Consumer, args []interface{}) (jobs []*data.DeliveryJob, pagination *data.Pagination, err error) {
 	jobs = make([]*data.DeliveryJob, 0)
+	pagination = &data.Pagination{}
 	scanArgs := func() []interface{} {
 		job := &data.DeliveryJob{}
 		job.Message = &data.Message{}
@@ -104,7 +105,11 @@ func (djRepo *DeliveryJobDBRepository) getJobs(baseQuery string, message *data.M
 	err = queryRows(djRepo.db, baseQuery, args2SliceFnWrapper(args...), scanArgs)
 	if err == nil {
 		for _, job := range jobs {
-			job.Listener, _ = djRepo.consumerRepository.GetByID(job.Listener.ID.String())
+			if consumer == nil {
+				job.Listener, _ = djRepo.consumerRepository.GetByID(job.Listener.ID.String())
+			} else {
+				job.Listener = consumer
+			}
 			if message == nil {
 				job.Message, _ = djRepo.mesageRepository.GetByID(job.Message.ID.String())
 			} else {
@@ -112,7 +117,13 @@ func (djRepo *DeliveryJobDBRepository) getJobs(baseQuery string, message *data.M
 			}
 		}
 	}
-	return jobs, err
+	if err == nil {
+		jobCount := len(jobs)
+		if jobCount > 0 {
+			pagination = data.NewPagination(jobs[jobCount-1], jobs[0])
+		}
+	}
+	return jobs, pagination, err
 }
 
 func (djRepo *DeliveryJobDBRepository) getJobsForStatusAndDelta(status data.JobStatus, delta time.Duration, useStatusChangedAt bool) []*data.DeliveryJob {
@@ -128,14 +139,12 @@ func (djRepo *DeliveryJobDBRepository) getJobsForStatusAndDelta(status data.JobS
 	}
 	for more {
 		baseQuery := jobCommonSelectQuery + " status like ? AND " + dateCol + " <= ?" + getPaginationQueryFragmentWithConfigurablePageSize(page, true, largePageSizeWithOrder)
-		args := []interface{}{status, time.Now().Add(delta)}
-		args = append(args, getPaginationTimestampQueryArgs(page)...)
-		pageJobs, err := djRepo.getJobs(baseQuery, nil, args)
+		pageJobs, pagination, err := djRepo.getJobs(baseQuery, nil, nil, appendWithPaginationArgs(page, status, time.Now().Add(delta)))
 		if err == nil {
 			jobs = append(jobs, pageJobs...)
 			jobCount := len(pageJobs)
 			if jobCount > 0 {
-				page = data.NewPagination(pageJobs[jobCount-1], nil)
+				page.Next = pagination.Next
 			} else {
 				more = false
 			}
@@ -147,25 +156,35 @@ func (djRepo *DeliveryJobDBRepository) getJobsForStatusAndDelta(status data.JobS
 	return jobs
 }
 
+func getDefaultErrorResponseForJobs() ([]*data.DeliveryJob, *data.Pagination, error) {
+	return make([]*data.DeliveryJob, 0), &data.Pagination{}, ErrPaginationDeadlock
+}
+
 // GetJobsForMessage retrieves jobs created for a specific message
 func (djRepo *DeliveryJobDBRepository) GetJobsForMessage(message *data.Message, page *data.Pagination) ([]*data.DeliveryJob, *data.Pagination, error) {
-	jobs := make([]*data.DeliveryJob, 0, 100)
-	pagination := &data.Pagination{}
 	if page == nil || (page.Next != nil && page.Previous != nil) {
-		return jobs, pagination, ErrPaginationDeadlock
+		return getDefaultErrorResponseForJobs()
 	}
-	var err error
 	baseQuery := jobCommonSelectQuery + " messageId like ?" + getPaginationQueryFragmentWithConfigurablePageSize(page, true, largePageSizeWithOrder)
-	args := []interface{}{message.ID.String()}
-	args = append(args, getPaginationTimestampQueryArgs(page)...)
-	jobs, err = djRepo.getJobs(baseQuery, message, args)
-	if err == nil {
-		jobCount := len(jobs)
-		if jobCount > 0 {
-			pagination = data.NewPagination(jobs[jobCount-1], jobs[0])
-		}
+	return djRepo.getJobs(baseQuery, message, nil, appendWithPaginationArgs(page, message.ID.String()))
+}
+
+// RequeueDeadJobsForConsumer queues up dead jobs for a specific consumer
+func (djRepo *DeliveryJobDBRepository) RequeueDeadJobsForConsumer(consumer *data.Consumer) (err error) {
+	currentTime := time.Now()
+	err = transactionalWrites(djRepo.db, func(tx *sql.Tx) error {
+		return inTransactionExec(tx, emptyOps, "UPDATE job SET status = ?, statusChangedAt = ?, updatedAt = ? WHERE consumerId like ? and status = ?", args2SliceFnWrapper(data.JobQueued, currentTime, currentTime, consumer.ID, data.JobDead), 0)
+	})
+	return err
+}
+
+// GetJobsForConsumer retrieves DeliveryJob created for delivery to a customer and it has to be filtered by a specific status
+func (djRepo *DeliveryJobDBRepository) GetJobsForConsumer(consumer *data.Consumer, jobStatus data.JobStatus, page *data.Pagination) ([]*data.DeliveryJob, *data.Pagination, error) {
+	if page == nil || (page.Next != nil && page.Previous != nil) {
+		return getDefaultErrorResponseForJobs()
 	}
-	return jobs, pagination, err
+	baseQuery := jobCommonSelectQuery + " consumerId like ? AND status = ?" + getPaginationQueryFragmentWithConfigurablePageSize(page, true, pageSizeWithOrder)
+	return djRepo.getJobs(baseQuery, nil, consumer, appendWithPaginationArgs(page, consumer.ID.String(), jobStatus))
 }
 
 // GetJobsInflightSince retrieves jobs in inflight status since the delta duration

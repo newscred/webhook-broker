@@ -76,6 +76,38 @@ func (_m *MessageRepository) GetByID(id string) (*data.Message, error) {
 	return r0, r1
 }
 
+// GetMessagesForChannel provides a mock function with given fields: channelID, page
+func (_m *MessageRepository) GetMessagesForChannel(channelID string, page *data.Pagination) ([]*data.Message, *data.Pagination, error) {
+	ret := _m.Called(channelID, page)
+
+	var r0 []*data.Message
+	if rf, ok := ret.Get(0).(func(string, *data.Pagination) []*data.Message); ok {
+		r0 = rf(channelID, page)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*data.Message)
+		}
+	}
+
+	var r1 *data.Pagination
+	if rf, ok := ret.Get(1).(func(string, *data.Pagination) *data.Pagination); ok {
+		r1 = rf(channelID, page)
+	} else {
+		if ret.Get(1) != nil {
+			r1 = ret.Get(1).(*data.Pagination)
+		}
+	}
+
+	var r2 error
+	if rf, ok := ret.Get(2).(func(string, *data.Pagination) error); ok {
+		r2 = rf(channelID, page)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
+}
+
 // GetMessagesNotDispatchedForCertainPeriod provides a mock function with given fields: delta
 func (_m *MessageRepository) GetMessagesNotDispatchedForCertainPeriod(delta time.Duration) []*data.Message {
 	ret := _m.Called(delta)

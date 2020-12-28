@@ -400,6 +400,10 @@ var (
 		return err
 	}
 
+	appendWithPaginationArgs = func(page *data.Pagination, args ...interface{}) []interface{} {
+		return append(args, getPaginationTimestampQueryArgs(page)...)
+	}
+
 	nilArgs             = func() []interface{} { return nil }
 	emptyOps            = func() {}
 	args2SliceFnWrapper = func(args ...interface{}) func() []interface{} {
