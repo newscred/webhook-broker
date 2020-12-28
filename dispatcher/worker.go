@@ -2,6 +2,7 @@ package dispatcher
 
 import (
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strconv"
@@ -59,7 +60,7 @@ var deliverJob = func(w *Worker, job *Job) {
 	// Put to Inflight
 	err := w.djRepo.MarkJobInflight(job.Data)
 	if err != nil {
-		log.Print("err - could not put job in flight", err, job.Data.ID)
+		log.Error().Err(err).Msg("err - could not put job in flight" + job.Data.ID.String())
 		return
 	}
 	// Attempt to deliver
@@ -105,7 +106,7 @@ func (w *Worker) executeJob(job *Job) (err error) {
 	// Do not let the worker crash due to any panic
 	defer func() {
 		if r := recover(); r != nil {
-			log.Print("error - panic in executing job -", job.Data.ID, r)
+			log.Error().Msg(fmt.Sprint("error - panic in executing job -", job.Data.ID, r))
 		}
 	}()
 	var req *http.Request
@@ -126,13 +127,13 @@ func (w *Worker) executeJob(job *Job) (err error) {
 				if rErr == nil {
 					errString = string(errBody)
 				}
-				log.Print("error - consumer connection error", resp.Status, errString, job.Data.ID)
+				log.Error().Msg(fmt.Sprint("error - consumer connection error ", resp.Status, " ", errString, " ", job.Data.ID))
 				err = errConsumer
 			}
 		}
 	}
 	if err != nil {
-		log.Print("error - worker failed to deliver", err, job.Data.ID)
+		log.Error().Err(err).Msg("error - worker failed to deliver" + job.Data.ID.String())
 	}
 	return err
 }

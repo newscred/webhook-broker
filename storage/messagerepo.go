@@ -140,7 +140,7 @@ func (msgRepo *MessageDBRepository) GetMessagesNotDispatchedForCertainPeriod(del
 			}
 			messages = append(messages, pageMessages...)
 		} else {
-			log.Print("error - could get list messages needing to be dispatched", err)
+			log.Error().Err(err).Msg("error - could get list messages needing to be dispatched")
 			more = false
 		}
 	}

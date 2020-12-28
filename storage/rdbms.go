@@ -3,6 +3,7 @@ package storage
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/rs/zerolog/log"
@@ -277,7 +278,7 @@ var (
 	rollback = func(tx *sql.Tx) {
 		txErr := tx.Rollback()
 		if txErr != nil {
-			log.Print("tx rollback error", txErr)
+			log.Error().Err(txErr).Msg("tx rollback error")
 		}
 	}
 
@@ -286,7 +287,7 @@ var (
 		tx, err = db.Begin()
 		defer func() {
 			if r := recover(); r != nil {
-				log.Print("recovered from in-tx panic", r)
+				log.Error().Msg(fmt.Sprint("recovered from in-tx panic", r))
 				rollback(tx)
 			}
 		}()
@@ -295,7 +296,7 @@ var (
 			if err == nil {
 				txErr := tx.Commit()
 				if txErr != nil {
-					log.Print("tx commit error", txErr)
+					log.Error().Err(txErr).Msg("tx commit error")
 					err = txErr
 				}
 			} else {

@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -139,7 +140,7 @@ func (djRepo *DeliveryJobDBRepository) getJobsForStatusAndDelta(status data.JobS
 				more = false
 			}
 		} else {
-			log.Print("error - could get list jobs (status, use status changed at date field, err)", status, useStatusChangedAt, err)
+			log.Error().Err(err).Msg(fmt.Sprint("error - could get list jobs (status, use status changed at date field) ", status, " ", useStatusChangedAt))
 			more = false
 		}
 	}

@@ -124,7 +124,8 @@ var (
 						switch initErr {
 						case nil:
 							createSeedData(httpServiceContainer.DataAccessor, httpServiceContainer.Configuration)
-							log.Print(httpServiceContainer.DataAccessor.GetAppRepository().CompleteAppInit())
+							completeErr := httpServiceContainer.DataAccessor.GetAppRepository().CompleteAppInit()
+							log.Error().Err(completeErr)
 							run = false
 						case storage.ErrAppInitializing:
 							run = false
@@ -197,14 +198,14 @@ func main() {
 	// Setup HTTP Server and listen (implicitly init DB and run migration if arg passed)
 	httpServiceContainer, err := GetHTTPServer(inConfig)
 	if err != nil {
-		log.Print(err)
+		log.Error().Err(err)
 		exit(3)
 	}
 	_, err = getApp(httpServiceContainer)
 	if err == nil {
 		initApp(httpServiceContainer)
 	} else {
-		log.Print(err)
+		log.Error().Err(err)
 		exit(4)
 	}
 	var buf bytes.Buffer

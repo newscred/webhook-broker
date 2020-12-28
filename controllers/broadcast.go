@@ -77,7 +77,7 @@ func (broadcastController *BroadcastController) Post(w http.ResponseWriter, r *h
 	}
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		log.Print("error reading body", err)
+		log.Error().Err(err).Msg("error reading body")
 		writeErr(w, errBodyCouldNotBeRead)
 		return
 	}

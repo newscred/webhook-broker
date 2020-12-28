@@ -58,7 +58,7 @@ func (msgDispatcher *MessageDispatcherImpl) Dispatch(message *data.Message) {
 		}
 	}
 	if err != nil {
-		log.Print("error dispatching -", err)
+		log.Error().Err(err).Msg("error dispatching")
 	}
 }
 
@@ -102,7 +102,12 @@ var (
 
 	genericPanicRecoveryFunc = func() {
 		if r := recover(); r != nil {
-			log.Print("error - had to recover from panic", r)
+			errorLogger := log.Error()
+			extension := "none"
+			if rStr, ok := r.(string); ok {
+				extension = rStr
+			}
+			errorLogger.Msg("Had to recover from panic: " + extension)
 		}
 	}
 
@@ -120,7 +125,7 @@ var (
 				return attemptMessageDispatch(msgDispatcher, message)
 			})
 			if err != nil {
-				log.Print("error - could ensure dispatch from recover worker", err, message.MessageID)
+				log.Error().Err(err).Msg("error - could ensure dispatch from recover worker " + message.MessageID)
 			}
 		}
 	}
@@ -142,7 +147,7 @@ var (
 				return nil
 			})
 			if err != nil {
-				log.Print("error - could not retry job", err, job.ID)
+				log.Error().Err(err).Msg("error - could not retry job" + job.ID.String())
 			}
 		}
 	}
@@ -157,7 +162,7 @@ var (
 				return nil
 			})
 			if err != nil {
-				log.Print("error - could not requeue job", err, job.ID)
+				log.Error().Err(err).Msg("error - could not requeue job" + job.ID.String())
 			}
 		}
 	}
@@ -230,7 +235,7 @@ func (msgDispatcher *MessageDispatcherImpl) Stop() {
 	defer cancelFunc()
 	select {
 	case <-timeoutContext.Done():
-		log.Print("warn - dispatcher stop timedout")
+		log.Error().Msg("warn - dispatcher stop timedout")
 		return
 	default:
 		wg := sync.WaitGroup{}
