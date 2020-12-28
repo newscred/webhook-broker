@@ -66,7 +66,6 @@ func checkPort(port int) (err error) {
 
 func consumerController(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 	consumerID := params.ByName("consumerId")
-	log.Println("Received message!", consumerID)
 	defer r.Body.Close()
 	if customController, ok := consumerHandler[consumerID]; ok {
 		customController(consumerID, w, r)
@@ -196,9 +195,11 @@ func addConsumerVerified(expectedEventCount int, assert bool, simulateFailures i
 				body, _ := ioutil.ReadAll(r.Body)
 				if string(body) != payload {
 					consumerAssertionFailed = true
+					log.Println("error - assertion failed for", s)
 				}
 				if r.Header.Get(headerContentType) != contentType {
 					consumerAssertionFailed = true
+					log.Println("error - assertion failed for", s)
 				}
 			}
 			if failuresLeft > 0 {
