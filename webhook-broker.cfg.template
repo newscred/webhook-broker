@@ -29,6 +29,8 @@ max-file-size-in-mb=200
 max-backups=3
 max-age-in-days=28
 compress-backups=true
+# Allowed values are debug, info, error, fatal
+log-level=debug
 
 # Generic Webhook Broker config such as - Max message queue size, max workers, priority dispatcher on, retrigger base-endpoint
 [broker]

@@ -33,6 +33,7 @@ const (
 	max-backups=asd3
 	max-age-in-days=dasd28
 	compress-backups=asdtrue
+	log-level=random
 	# Generic Webhook Broker config such as - Max message queue size, max workers, priority dispatcher on, retrigger base-endpoint
 	[broker]
 	max-message-queue-size=asd10000
@@ -76,6 +77,13 @@ const (
 	`
 )
 
+var (
+	loadTestConfiguration = func(testConfiguration string) *ini.File {
+		cfg, _ := ini.LooseLoad([]byte(DefaultConfiguration), DefaultSystemConfigFilePath, getUserHomeDirBasedDefaultConfigFileLocation(), DefaultCurrentDirConfigFilePath, []byte(testConfiguration))
+		return cfg
+	}
+)
+
 func toSecond(second uint) time.Duration {
 	return time.Duration(second) * time.Second
 }
@@ -96,6 +104,7 @@ func TestGetAutoConfiguration_Default(t *testing.T) {
 	assert.Equal(t, toSecond(uint(240)), config.GetHTTPReadTimeout())
 	assert.Equal(t, toSecond(uint(240)), config.GetHTTPWriteTimeout())
 	assert.Equal(t, "", config.GetLogFilename())
+	assert.Equal(t, Debug, config.GetLogLevel())
 	assert.Equal(t, uint(200), config.GetMaxLogFileSize())
 	assert.Equal(t, uint(28), config.GetMaxAgeForALogFile())
 	assert.Equal(t, uint(3), config.GetMaxLogBackups())
@@ -150,6 +159,7 @@ func TestGetAutoConfiguration_WrongValues(t *testing.T) {
 	assert.Equal(t, toSecond(uint(180)), config.GetHTTPReadTimeout())
 	assert.Equal(t, toSecond(uint(180)), config.GetHTTPWriteTimeout())
 	assert.Equal(t, "/var/log/webhook-broker.log", config.GetLogFilename())
+	assert.Equal(t, Debug, config.GetLogLevel())
 	assert.Equal(t, uint(50), config.GetMaxLogFileSize())
 	assert.Equal(t, uint(30), config.GetMaxAgeForALogFile())
 	assert.Equal(t, uint(1), config.GetMaxLogBackups())
@@ -216,6 +226,7 @@ func TestGetConfiguration(t *testing.T) {
 	assert.Equal(t, toSecond(uint(2401)), config.GetHTTPReadTimeout())
 	assert.Equal(t, toSecond(uint(2401)), config.GetHTTPWriteTimeout())
 	assert.Equal(t, "/var/log/webhook-broker.log", config.GetLogFilename())
+	assert.Equal(t, Error, config.GetLogLevel())
 	assert.Equal(t, uint(20), config.GetMaxLogFileSize())
 	assert.Equal(t, uint(280), config.GetMaxAgeForALogFile())
 	assert.Equal(t, uint(30), config.GetMaxLogBackups())
@@ -276,13 +287,21 @@ func TestGetConfiguration(t *testing.T) {
 	assert.Equal(t, toSecond(30), config.GetRationalDelay())
 	assert.Equal(t, []time.Duration{toSecond(15), toSecond(30), toSecond(60), toSecond(120)}, config.GetRetryBackoffDelays())
 	assert.False(t, config.IsRecoveryWorkersEnabled())
+	testConfig := `[log]
+	log-level=info
+	`
+	config, err := GetConfigurationFromParseConfig(loadTestConfiguration(testConfig))
+	assert.Equal(t, Info, config.GetLogLevel())
+	assert.Nil(t, err)
+	testConfig = `[log]
+	log-level=fatal
+	`
+	config, err = GetConfigurationFromParseConfig(loadTestConfiguration(testConfig))
+	assert.Equal(t, Fatal, config.GetLogLevel())
+	assert.Nil(t, err)
 }
 
 func TestGetConfigurationFromParseConfig_ValueError(t *testing.T) {
-	loadTestConfiguration := func(testConfiguration string) *ini.File {
-		cfg, _ := ini.LooseLoad([]byte(DefaultConfiguration), DefaultSystemConfigFilePath, getUserHomeDirBasedDefaultConfigFileLocation(), DefaultCurrentDirConfigFilePath, []byte(testConfiguration))
-		return cfg
-	}
 	// Do not make it parallel
 	t.Run("ConfigErrorDueToSQLlite3", func(t *testing.T) {
 		oldPingSqlite3 := pingSqlite3

@@ -29,6 +29,7 @@ type HTTPConfig interface {
 
 // LogConfig represents the interface for log related configuration
 type LogConfig interface {
+	GetLogLevel() LogLevel
 	IsLoggerConfigAvailable() bool
 	GetLogFilename() string
 	GetMaxLogFileSize() uint

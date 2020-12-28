@@ -301,6 +301,7 @@ const testLogFile = "./log-setup-test-output.log"
 type MockLogConfig struct {
 }
 
+func (m MockLogConfig) GetLogLevel() config.LogLevel           { return config.Debug }
 func (m MockLogConfig) GetLogFilename() string                 { return testLogFile }
 func (m MockLogConfig) GetMaxLogFileSize() uint                { return 10 }
 func (m MockLogConfig) GetMaxLogBackups() uint                 { return 1 }

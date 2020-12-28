@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
 	"github.com/google/wire"
@@ -130,7 +131,7 @@ var (
 						case storage.ErrOptimisticAppInit:
 							run = false
 						default:
-							log.Print(initErr)
+							log.Error().Err(initErr)
 							time.Sleep(waitDuration)
 						}
 					}
@@ -149,7 +150,7 @@ var (
 				_, err = dataAccessor.GetProducerRepository().Store(producer)
 			}
 			if err != nil {
-				log.Print("Error creating producer", seedProducer.ID, err)
+				log.Error().Err(err).Msg("Error creating producer: " + seedProducer.ID)
 			}
 		}
 		for _, seedChannel := range seedDataConfig.GetSeedData().Channels {
@@ -159,13 +160,13 @@ var (
 				_, err = dataAccessor.GetChannelRepository().Store(channel)
 			}
 			if err != nil {
-				log.Print("Error creating channel", seedChannel.ID, err)
+				log.Error().Err(err).Msg("Error creating channel" + seedChannel.ID)
 			}
 		}
 		for _, seedConsumer := range seedDataConfig.GetSeedData().Consumers {
 			channel, err := dataAccessor.GetChannelRepository().Get(seedConsumer.Channel)
 			if err != nil {
-				log.Print(err)
+				log.Error().Err(err)
 				continue
 			}
 			consumer, err := data.NewConsumer(channel, seedConsumer.ID, seedConsumer.Token, seedConsumer.CallbackURL)
@@ -176,7 +177,7 @@ var (
 				_, err = dataAccessor.GetConsumerRepository().Store(consumer)
 			}
 			if err != nil {
-				log.Print("Error creating consumer", seedConsumer.ID, err)
+				log.Error().Err(err).Msg("Error creating consumer" + seedConsumer.ID)
 			}
 		}
 	}
@@ -188,7 +189,7 @@ func main() {
 	if cliCfgErr != nil {
 		consolePrintln(output)
 		if cliCfgErr != flag.ErrHelp {
-			log.Print(cliCfgErr)
+			log.Error().Err(cliCfgErr)
 		}
 		exit(1)
 	}
@@ -215,14 +216,24 @@ func main() {
 	httpServiceContainer.Dispatcher.Stop()
 }
 
-func setupLogger(config config.LogConfig) {
-	if config.IsLoggerConfigAvailable() {
+func setupLogger(logConfig config.LogConfig) {
+	switch logConfig.GetLogLevel() {
+	case config.Debug:
+		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	case config.Info:
+		zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	case config.Error:
+		zerolog.SetGlobalLevel(zerolog.ErrorLevel)
+	case config.Fatal:
+		zerolog.SetGlobalLevel(zerolog.FatalLevel)
+	}
+	if logConfig.IsLoggerConfigAvailable() {
 		log.Logger = log.Output(&lumberjack.Logger{
-			Filename:   config.GetLogFilename(),
-			MaxSize:    int(config.GetMaxLogFileSize()), // megabytes
-			MaxBackups: int(config.GetMaxLogBackups()),
-			MaxAge:     int(config.GetMaxAgeForALogFile()),        //days
-			Compress:   config.IsCompressionEnabledOnLogBackups(), // disabled by default
+			Filename:   logConfig.GetLogFilename(),
+			MaxSize:    int(logConfig.GetMaxLogFileSize()), // megabytes
+			MaxBackups: int(logConfig.GetMaxLogBackups()),
+			MaxAge:     int(logConfig.GetMaxAgeForALogFile()),        //days
+			Compress:   logConfig.IsCompressionEnabledOnLogBackups(), // disabled by default
 		})
 	}
 }

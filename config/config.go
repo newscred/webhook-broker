@@ -29,6 +29,9 @@ type AppVersion string
 // DBDialect allows us to define constants for supported DB drivers
 type DBDialect string
 
+// LogLevel represents the log level logger should use
+type LogLevel uint8
+
 // GetVersion provides the current version of the project
 func GetVersion() AppVersion {
 	return "0.1-dev"
@@ -45,6 +48,14 @@ const (
 	DefaultSystemConfigFilePath = "/etc/webhook-broker/" + ConfigFilename
 	// DefaultCurrentDirConfigFilePath is the config file path based on current working dir
 	DefaultCurrentDirConfigFilePath = ConfigFilename
+	// Debug is the lowest LogLevel, will expose all logs
+	Debug LogLevel = 20 + iota
+	// Info is the second lowest LogLevel
+	Info
+	// Error is the second highest LogLevel
+	Error
+	// Fatal is the highest LogLevel with lowest logs
+	Fatal
 )
 
 var (
@@ -102,6 +113,12 @@ type Config struct {
 	MaxRetry                  uint8
 	RationalDelay             time.Duration
 	RetryBackoffDelays        []time.Duration
+	LogLevel                  LogLevel
+}
+
+// GetLogLevel returns the log level as per the configuration
+func (config *Config) GetLogLevel() LogLevel {
+	return config.LogLevel
 }
 
 // GetDBDialect returns the DB dialect of the configuration
@@ -400,6 +417,19 @@ func setupLogConfiguration(cfg *ini.File, configuration *Config) {
 	configuration.MaxBackups = maxBackupsKey.MustUint(1)
 	configuration.MaxAge = maxAgeKey.MustUint(30)
 	configuration.CompressBackupsEnabled = compressEnabledKey.MustBool(false)
+	logLevelKey, _ := logSection.GetKey("log-level")
+	var logLevel LogLevel
+	switch logLevelKey.MustString("debug") {
+	case "fatal":
+		logLevel = Fatal
+	case "error":
+		logLevel = Error
+	case "info":
+		logLevel = Info
+	default:
+		logLevel = Debug
+	}
+	configuration.LogLevel = logLevel
 }
 
 func setupSeedDataConfiguration(cfg *ini.File, configuration *Config) {
