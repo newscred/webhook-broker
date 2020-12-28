@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rs/zerolog/hlog"
 	"github.com/rs/zerolog/log"
 
 	"net/http/pprof"
@@ -93,15 +94,6 @@ type Delete interface {
 	Delete(w http.ResponseWriter, r *http.Request, ps httprouter.Params)
 }
 
-// RequestLogger is a simple io.Writer that allows requests to be logged
-type RequestLogger struct {
-}
-
-func (rLogger RequestLogger) Write(p []byte) (n int, err error) {
-	log.Print(string(p))
-	return len(p), nil
-}
-
 // NotifyOnInterrupt registers channel to get notified when interrupt is captured
 var NotifyOnInterrupt = func(stop *chan os.Signal) {
 	signal.Notify(*stop, os.Interrupt)
@@ -110,8 +102,17 @@ var NotifyOnInterrupt = func(stop *chan os.Signal) {
 // ConfigureAPI configures API Server with interrupt handling
 func ConfigureAPI(httpConfig config.HTTPConfig, iListener ServerLifecycleListener, apiRouter *httprouter.Router) *http.Server {
 	listener = iListener
+	handler := hlog.NewHandler(log.Logger)(hlog.AccessHandler(func(r *http.Request, status, size int, duration time.Duration) {
+		hlog.FromRequest(r).Info().
+			Str("method", r.Method).
+			Str("url", r.URL.String()).
+			Int("status", status).
+			Int("size", size).
+			Dur("duration", duration).
+			Msg("")
+	})(apiRouter))
 	server = &http.Server{
-		Handler:      apiRouter,
+		Handler:      handler,
 		Addr:         httpConfig.GetHTTPListeningAddr(),
 		ReadTimeout:  httpConfig.GetHTTPReadTimeout(),
 		WriteTimeout: httpConfig.GetHTTPWriteTimeout(),
