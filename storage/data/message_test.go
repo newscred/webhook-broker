@@ -186,3 +186,10 @@ func TestMessageGetNewLockID(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, messageLockPrefix+msg.ID.String(), lock.LockID)
 }
+
+func TestMessageString(t *testing.T) {
+	assert.Equal(t, MsgStatusAcknowledgedStr, MsgStatusAcknowledged.String())
+	assert.Equal(t, MsgStatusDispatchedStr, MsgStatusDispatched.String())
+	var status MsgStatus
+	assert.Equal(t, "0", status.String())
+}

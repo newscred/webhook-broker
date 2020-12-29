@@ -150,3 +150,11 @@ func TestDJGetNewLockID(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, deliverJobLockPrefix+job.ID.String(), lock.LockID)
 }
+
+func TestDJString(t *testing.T) {
+	assert.Equal(t, JobDeadStr, JobDead.String())
+	assert.Equal(t, JobDeliveredStr, JobDelivered.String())
+	assert.Equal(t, JobInflightStr, JobInflight.String())
+	assert.Equal(t, JobQueuedStr, JobQueued.String())
+	assert.Equal(t, "1", JobStatus(1).String())
+}

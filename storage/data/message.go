@@ -1,6 +1,7 @@
 package data
 
 import (
+	"strconv"
 	"time"
 
 	"github.com/rs/xid"
@@ -9,12 +10,27 @@ import (
 // MsgStatus represents the state of a Msg.
 type MsgStatus int
 
+func (status MsgStatus) String() string {
+	switch status {
+	case MsgStatusAcknowledged:
+		return MsgStatusAcknowledgedStr
+	case MsgStatusDispatched:
+		return MsgStatusDispatchedStr
+	default:
+		return strconv.Itoa(int(status))
+	}
+}
+
 const (
 	messageLockPrefix = "msg-"
 	// MsgStatusAcknowledged represents the state after receiving the message but before it is dispatched
 	MsgStatusAcknowledged MsgStatus = iota + 100
 	// MsgStatusDispatched represents the fact that the dispatch jobs have been created for the message
 	MsgStatusDispatched
+	// MsgStatusAcknowledgedStr is the string representation of message's acknowledged status
+	MsgStatusAcknowledgedStr = "ACKNOWLEDGED"
+	// MsgStatusDispatchedStr is the string representation of message's dispatched status
+	MsgStatusDispatchedStr = "DISPATCHED"
 )
 
 // Message represents the main payload of the application to be delivered

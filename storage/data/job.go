@@ -1,11 +1,27 @@
 package data
 
 import (
+	"strconv"
 	"time"
 )
 
 // JobStatus represents the delivery job status
 type JobStatus int
+
+func (status JobStatus) String() string {
+	switch status {
+	case JobQueued:
+		return JobQueuedStr
+	case JobInflight:
+		return JobInflightStr
+	case JobDelivered:
+		return JobDeliveredStr
+	case JobDead:
+		return JobDeadStr
+	default:
+		return strconv.Itoa(int(status))
+	}
+}
 
 const (
 	deliverJobLockPrefix = "dj-"
@@ -17,6 +33,14 @@ const (
 	JobDelivered
 	// JobDead signifies that retry has taken its toll and max retried happened
 	JobDead
+	// JobQueuedStr is the string rep of JobQueued
+	JobQueuedStr = "QUEUED"
+	// JobInflightStr is the string rep of JobInflight
+	JobInflightStr = "INFLIGHT"
+	// JobDeliveredStr is the string rep of JobDelivered
+	JobDeliveredStr = "DELIVERED"
+	// JobDeadStr is the string rep of JobDead
+	JobDeadStr = "DEAD"
 )
 
 // DeliveryJob represents the DTO object for deliverying a Message to a consumer
