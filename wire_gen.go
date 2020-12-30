@@ -37,11 +37,13 @@ func GetHTTPServer(cliConfig *config.CLIConfig) (*HTTPServiceContainer, error) {
 	producersController := controllers.NewProducersController(producerRepository, producerController)
 	channelRepository := newChannelRepository(dataAccessor)
 	consumerRepository := newConsumerRepository(dataAccessor)
-	consumerController := controllers.NewConsumerController(channelRepository, consumerRepository)
-	consumersController := controllers.NewConsumersController(consumerController, consumerRepository)
-	channelController := controllers.NewChannelController(consumersController, channelRepository)
 	messageRepository := newMessageRepository(dataAccessor)
 	deliveryJobRepository := newDeliveryJobRepository(dataAccessor)
+	messageController := controllers.NewMessageController(messageRepository, deliveryJobRepository)
+	dlqController := controllers.NewDLQController(messageController, deliveryJobRepository, consumerRepository)
+	consumerController := controllers.NewConsumerController(channelRepository, consumerRepository, dlqController)
+	consumersController := controllers.NewConsumersController(consumerController, consumerRepository)
+	messagesController := controllers.NewMessagesController(messageController, messageRepository)
 	lockRepository := newLockRepository(dataAccessor)
 	configuration := &dispatcher.Configuration{
 		DeliveryJobRepo:          deliveryJobRepository,
@@ -53,6 +55,7 @@ func GetHTTPServer(cliConfig *config.CLIConfig) (*HTTPServiceContainer, error) {
 	}
 	messageDispatcher := dispatcher.NewMessageDispatcher(configuration)
 	broadcastController := controllers.NewBroadcastController(channelRepository, messageRepository, producerRepository, messageDispatcher)
+	channelController := controllers.NewChannelController(consumersController, messagesController, broadcastController, channelRepository)
 	controllersControllers := &controllers.Controllers{
 		StatusController:    statusController,
 		ProducersController: producersController,
@@ -61,6 +64,9 @@ func GetHTTPServer(cliConfig *config.CLIConfig) (*HTTPServiceContainer, error) {
 		ConsumerController:  consumerController,
 		ConsumersController: consumersController,
 		BroadcastController: broadcastController,
+		MessageController:   messageController,
+		MessagesController:  messagesController,
+		DLQController:       dlqController,
 	}
 	router := controllers.NewRouter(controllersControllers)
 	server := controllers.ConfigureAPI(configConfig, serverLifecycleListenerImpl, router)

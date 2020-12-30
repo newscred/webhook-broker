@@ -133,6 +133,8 @@ func TestChannelGet(t *testing.T) {
 		assert.Contains(t, bodyChannel.Name, listTestChannelIDPrefix)
 		assert.Contains(t, bodyChannel.Token, successfulGetTestToken)
 		assert.Equal(t, "/channel/"+listTestChannelIDPrefix+"0/consumers", bodyChannel.ConsumersURL)
+		assert.Equal(t, "/channel/"+listTestChannelIDPrefix+"0/messages", bodyChannel.MessagesURL)
+		assert.Equal(t, "/channel/"+listTestChannelIDPrefix+"0/broadcast", bodyChannel.BroadcastURL)
 		assert.NotNil(t, bodyChannel.ChangedAt)
 		assert.Equal(t, bodyChannel.ChangedAt.Format(http.TimeFormat), rr.HeaderMap.Get(headerLastModified))
 	})
@@ -147,7 +149,8 @@ func TestChannelGet(t *testing.T) {
 }
 
 func getNewChannelController(channelRepo storage.ChannelRepository) *ChannelController {
-	return NewChannelController(NewConsumersController(NewConsumerController(nil, nil), nil), channelRepo)
+	bc, _ := getNewBroadcastController(messageRepo)
+	return NewChannelController(NewConsumersController(NewConsumerController(nil, nil, getDLQControllerWithMockedRepo()), nil), getMessagesController(), bc, channelRepo)
 }
 
 func TestChannelPut(t *testing.T) {
