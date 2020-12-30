@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/rs/xid"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
 	"github.com/imyousuf/webhook-broker/dispatcher"
@@ -71,20 +72,9 @@ func (broadcastController *BroadcastController) Post(w http.ResponseWriter, r *h
 	if !valid {
 		return
 	}
-	requestID := r.Header.Get(headerRequestID)
-	if len(requestID) < 1 {
-		requestID = xid.New().String()
-	}
-	w.Header().Set(headerRequestID, requestID)
-	logger := log.With().Str(requestIDLogFieldKey, requestID).Logger()
-	contentType := r.Header.Get(headerContentType)
-	if len(contentType) < 1 {
-		contentType = defaultMessageContentType
-	}
-	priority, err := strconv.Atoi(r.Header.Get(headerPriority))
-	if err != nil {
-		priority = 0
-	}
+	logger := setRequestIDAndSetupLogger(r, w)
+	contentType := getContentType(r)
+	priority := getPriority(r)
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		logger.Error().Err(err).Msg("error reading body")
@@ -107,6 +97,32 @@ func (broadcastController *BroadcastController) Post(w http.ResponseWriter, r *h
 		writeErr(w, err)
 	}
 
+}
+
+func getPriority(r *http.Request) int {
+	priority, err := strconv.Atoi(r.Header.Get(headerPriority))
+	if err != nil {
+		priority = 0
+	}
+	return priority
+}
+
+func getContentType(r *http.Request) string {
+	contentType := r.Header.Get(headerContentType)
+	if len(contentType) < 1 {
+		contentType = defaultMessageContentType
+	}
+	return contentType
+}
+
+func setRequestIDAndSetupLogger(r *http.Request, w http.ResponseWriter) zerolog.Logger {
+	requestID := r.Header.Get(headerRequestID)
+	if len(requestID) < 1 {
+		requestID = xid.New().String()
+	}
+	w.Header().Set(headerRequestID, requestID)
+	logger := log.With().Str(requestIDLogFieldKey, requestID).Logger()
+	return logger
 }
 
 // GetPath returns the endpoint's path

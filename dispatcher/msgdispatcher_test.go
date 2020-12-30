@@ -145,7 +145,7 @@ func getMockedBrokerConfig(workerEnabled ...interface{}) *configmocks.BrokerConf
 		mockedConfig.On("IsRecoveryWorkersEnabled").Return(workerEnabled[0])
 	}
 	mockedConfig.On("GetRationalDelay").Return(100 * time.Millisecond)
-	mockedConfig.On("GetMaxRetry").Return(uint8(41))
+	mockedConfig.On("GetMaxRetry").Return(uint8(5))
 	if len(workerEnabled) <= 1 {
 		mockedConfig.On("GetRetryBackoffDelays").Return([]time.Duration{5 * time.Second})
 	} else {

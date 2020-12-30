@@ -46,7 +46,7 @@ func (controller *ConsumerController) getConsumerModel(consumer *data.Consumer) 
 	channelIDParam := httprouter.Param{Key: channelIDPathParamKey, Value: consumer.ConsumingFrom.ChannelID}
 	consumerIDParam := httprouter.Param{Key: consumerIDPathParamKey, Value: consumer.ConsumerID}
 	consumerModel := &ConsumerModel{
-		MsgStakeholder: *getMessageStakeholder(consumer.ConsumerID, &consumer.MessageStakeholder),
+		MsgStakeholder:     *getMessageStakeholder(consumer.ConsumerID, &consumer.MessageStakeholder),
 		CallbackURL:        consumer.CallbackURL,
 		DeadLetterQueueURL: controller.DLQEndpoint.FormatAsRelativeLink(channelIDParam, consumerIDParam)}
 	return consumerModel

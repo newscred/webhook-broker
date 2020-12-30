@@ -74,13 +74,17 @@ var deliverJob = func(w *Worker, job *Job) {
 	err = w.executeJob(reqID, logger, job)
 	// If err == nil, then delivered, else if at max try dead else queued with retry attempt increased
 	if err == nil {
-		logger.Debug().Msg("delivered job ")
-		w.djRepo.MarkJobDelivered(job.Data)
+		logger.Debug().Msg("delivered job")
+		err = w.djRepo.MarkJobDelivered(job.Data)
 	} else if job.Data.RetryAttemptCount >= uint(w.brokerConfig.GetMaxRetry()) {
-		w.djRepo.MarkJobDead(job.Data)
+		logger.Debug().Err(err).Msg("job marked dead")
+		err = w.djRepo.MarkJobDead(job.Data)
 	} else {
-		logger.Debug().Msg("schedule for retry job ")
-		w.djRepo.MarkJobRetry(job.Data, w.earliestDelta(job.Data.RetryAttemptCount+1))
+		logger.Debug().Err(err).Msg("schedule for retry job ")
+		err = w.djRepo.MarkJobRetry(job.Data, w.earliestDelta(job.Data.RetryAttemptCount+1))
+	}
+	if err != nil {
+		logger.Error().Err(err).Msg("Could not update job status")
 	}
 }
 
@@ -109,13 +113,7 @@ func (w *Worker) earliestDelta(retryAttempt uint) time.Duration {
 	return computeEarliestDelta(retryAttempt, w.brokerConfig)
 }
 
-func (w *Worker) executeJob(requestID string, logger zerolog.Logger, job *Job) (err error) {
-	// Do not let the worker crash due to any panic
-	defer func() {
-		if r := recover(); r != nil {
-			logger.Error().Msg(fmt.Sprint("error - panic in executing job - ", r))
-		}
-	}()
+var callConsumer = func(httpClient *http.Client, requestID string, logger zerolog.Logger, job *Job) (err error) {
 	var req *http.Request
 	req, err = http.NewRequest(http.MethodPost, job.Data.Listener.CallbackURL, strings.NewReader(job.Data.Message.Payload))
 	if err == nil {
@@ -125,7 +123,7 @@ func (w *Worker) executeJob(requestID string, logger zerolog.Logger, job *Job) (
 		req.Header.Set(headerConsumerToken, job.Data.Listener.Token)
 		req.Header.Set(headerRequestID, requestID)
 		var resp *http.Response
-		resp, err = w.httpClient.Do(req)
+		resp, err = httpClient.Do(req)
 		if err == nil {
 			defer resp.Body.Close()
 			code := resp.StatusCode
@@ -144,6 +142,17 @@ func (w *Worker) executeJob(requestID string, logger zerolog.Logger, job *Job) (
 		logger.Error().Err(err).Msg("error - worker failed to deliver")
 	}
 	return err
+}
+
+func (w *Worker) executeJob(requestID string, logger zerolog.Logger, job *Job) (err error) {
+	// Do not let the worker crash due to any panic
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Error().Msg(fmt.Sprint("error - panic in executing job - ", r))
+			err = errors.New("panic in executeJob")
+		}
+	}()
+	return callConsumer(w.httpClient, requestID, logger, job)
 }
 
 // IsWorking retrieves whether the work is active

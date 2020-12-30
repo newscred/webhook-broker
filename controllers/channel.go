@@ -59,8 +59,8 @@ func (channelController *ChannelController) getChannelModel(channel *data.Channe
 	channelIDParam := httprouter.Param{Key: channelIDPathParamKey, Value: channel.ChannelID}
 	return &ChannelModel{MsgStakeholder: *getMessageStakeholder(channel.ChannelID, &channel.MessageStakeholder),
 		ConsumersURL: channelController.ConsumersEndpoint.FormatAsRelativeLink(channelIDParam),
-		MessagesURL: channelController.MessagesEndpoint.FormatAsRelativeLink(channelIDParam),
-		BroadcastURL: channelController.BroadcastEndpoint.FormatAsRelativeLink(channelIDParam),}
+		MessagesURL:  channelController.MessagesEndpoint.FormatAsRelativeLink(channelIDParam),
+		BroadcastURL: channelController.BroadcastEndpoint.FormatAsRelativeLink(channelIDParam)}
 }
 
 // GetPath returns the endpoint's path
