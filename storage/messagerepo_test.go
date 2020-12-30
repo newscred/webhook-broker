@@ -251,4 +251,10 @@ func TestGetMessagesByChannel(t *testing.T) {
 		assert.Nil(t, page2.Previous)
 		assert.Equal(t, 0, len(msgs))
 	})
+	t.Run("NonExistingChannel", func(t *testing.T) {
+		t.Parallel()
+		msgRepo := getMessageRepository()
+		_, _, err := msgRepo.GetMessagesForChannel(channel2.ChannelID+"NONE", data.NewPagination(nil, nil))
+		assert.Equal(t, sql.ErrNoRows, err)
+	})
 }

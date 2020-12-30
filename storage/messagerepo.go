@@ -58,6 +58,9 @@ func (msgRepo *MessageDBRepository) Create(message *data.Message) (err error) {
 // Get retrieves a message for a channel if it exists
 func (msgRepo *MessageDBRepository) Get(channelID string, messageID string) (*data.Message, error) {
 	channel, err := msgRepo.channelRepository.Get(channelID)
+	if err != nil {
+		return &data.Message{}, err
+	}
 	message, err := msgRepo.getSingleMessage(messageSelectRowCommonQuery+" channelId like ? and messageId like ?", args2SliceFnWrapper(channelID, messageID), false)
 	if err == nil {
 		message.BroadcastedTo = channel
@@ -162,10 +165,16 @@ func (msgRepo *MessageDBRepository) GetMessagesNotDispatchedForCertainPeriod(del
 
 // GetMessagesForChannel retrieves messages broadcasted to a specific channel
 func (msgRepo *MessageDBRepository) GetMessagesForChannel(channelID string, page *data.Pagination) ([]*data.Message, *data.Pagination, error) {
+	nilMessages := make([]*data.Message, 0)
+	defaultEmptyPagination := &data.Pagination{}
 	if page == nil || (page.Next != nil && page.Previous != nil) {
-		return make([]*data.Message, 0), &data.Pagination{}, ErrPaginationDeadlock
+		return nilMessages, defaultEmptyPagination, ErrPaginationDeadlock
 	}
-	baseQuery := messageSelectRowCommonQuery + " channelId like ?" + getPaginationQueryFragmentWithConfigurablePageSize(page, true, largePageSizeWithOrder)
+	_, err := msgRepo.channelRepository.Get(channelID)
+	if err != nil {
+		return nilMessages, defaultEmptyPagination, err
+	}
+	baseQuery := messageSelectRowCommonQuery + " channelId like ?" + getPaginationQueryFragmentWithConfigurablePageSize(page, true, pageSizeWithOrder)
 	return msgRepo.getMessages(baseQuery, appendWithPaginationArgs(page, channelID)...)
 }
 
