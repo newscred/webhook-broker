@@ -5,7 +5,7 @@
 | *Version* | 1 |
 | *By* | Imran M Yousuf |
 | *Date* | November 10, 2020 |
-| *Last Update* | December 22, 2020 |
+| *Last Update* | December 30, 2020 |
 
 ## Problem Statement / Goal
 
@@ -248,7 +248,9 @@ There are 3 primary recovery/fail-safe scenario -
 ### Libraries
 
 * Schema Migration Management - [GoLang Migrate](https://github.com/golang-migrate/migrate)
-* Web Controller Router - [HttpRouter](https://github.com/julienschmidt/httprouter) and [Gorilla Handlers](https://github.com/gorilla/handlers)
+* Web Controller Router - [HttpRouter](https://github.com/julienschmidt/httprouter)
+* Log Framework - [Zerolog](https://github.com/rs/zerolog)
+* GUID Generator - [Xid](https://github.com/rs/xid)
 * Log Management & Rotation - [Lumberjack.V2](https://github.com/natefinch/lumberjack)
 * Build Time IoC - [Google Wire](https://github.com/google/wire)
 * Configuration parsing - [Go INI](https://github.com/go-ini/ini)
