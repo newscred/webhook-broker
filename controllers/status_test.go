@@ -44,6 +44,7 @@ func TestMain(m *testing.M) {
 			ChannelTestSetup()
 			ConsumerTestSetup()
 			BroadcastTestSetup()
+			MessageTestSetup()
 			m.Run()
 			db.Close()
 		}

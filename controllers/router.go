@@ -49,6 +49,8 @@ var (
 	ErrNotFound = errors.New("Request resource not found")
 	// ErrBadRequest is returned when protocol for a PUT/POST/DELETE request is not met
 	ErrBadRequest = errors.New("Bad Request: Update is missing `If-Unmodified-Since` header ")
+	// ErrBadRequestForRequeue is returned when requeue form param does not match consumer token
+	ErrBadRequestForRequeue = errors.New("`requeue` form param must match consumer token")
 )
 
 const (
