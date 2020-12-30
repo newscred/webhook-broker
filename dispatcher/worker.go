@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rs/xid"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
 	"github.com/imyousuf/webhook-broker/config"
@@ -19,6 +21,9 @@ const (
 	headerContentType    = "Content-Type"
 	headerBrokerPriority = "X-Broker-Message-Priority"
 	headerConsumerToken  = "X-Broker-Consumer-Token"
+	headerRequestID      = "X-Request-ID"
+	requestIDLogFieldKey = "requestId"
+	jobIDLogFieldKey     = "jobId"
 )
 
 var (
@@ -55,24 +60,26 @@ func createHTTPClient(consumerConfig config.ConsumerConnectionConfig) *http.Clie
 }
 
 var deliverJob = func(w *Worker, job *Job) {
+	reqID := xid.New().String()
+	logger := log.With().Str(requestIDLogFieldKey, reqID).Str(jobIDLogFieldKey, job.Data.ID.String()).Logger()
 	// we have received a work request.
-	log.Debug().Msg("processing job in worker " + job.Data.ID.String())
+	logger.Debug().Msg("processing job in worker ")
 	// Put to Inflight
 	err := w.djRepo.MarkJobInflight(job.Data)
 	if err != nil {
-		log.Error().Err(err).Msg("err - could not put job in flight" + job.Data.ID.String())
+		logger.Error().Err(err).Msg("err - could not put job in flight")
 		return
 	}
 	// Attempt to deliver
-	err = w.executeJob(job)
+	err = w.executeJob(reqID, logger, job)
 	// If err == nil, then delivered, else if at max try dead else queued with retry attempt increased
 	if err == nil {
-		log.Debug().Msg("delivered job " + job.Data.ID.String())
+		logger.Debug().Msg("delivered job ")
 		w.djRepo.MarkJobDelivered(job.Data)
 	} else if job.Data.RetryAttemptCount >= uint(w.brokerConfig.GetMaxRetry()) {
 		w.djRepo.MarkJobDead(job.Data)
 	} else {
-		log.Debug().Msg("schedule for retry job " + job.Data.ID.String())
+		logger.Debug().Msg("schedule for retry job ")
 		w.djRepo.MarkJobRetry(job.Data, w.earliestDelta(job.Data.RetryAttemptCount+1))
 	}
 }
@@ -102,11 +109,11 @@ func (w *Worker) earliestDelta(retryAttempt uint) time.Duration {
 	return computeEarliestDelta(retryAttempt, w.brokerConfig)
 }
 
-func (w *Worker) executeJob(job *Job) (err error) {
+func (w *Worker) executeJob(requestID string, logger zerolog.Logger, job *Job) (err error) {
 	// Do not let the worker crash due to any panic
 	defer func() {
 		if r := recover(); r != nil {
-			log.Error().Msg(fmt.Sprint("error - panic in executing job -", job.Data.ID, r))
+			logger.Error().Msg(fmt.Sprint("error - panic in executing job - ", r))
 		}
 	}()
 	var req *http.Request
@@ -116,6 +123,7 @@ func (w *Worker) executeJob(job *Job) (err error) {
 		req.Header.Set(headerContentType, job.Data.Message.ContentType)
 		req.Header.Set(headerBrokerPriority, strconv.Itoa(int(job.Priority)))
 		req.Header.Set(headerConsumerToken, job.Data.Listener.Token)
+		req.Header.Set(headerRequestID, requestID)
 		var resp *http.Response
 		resp, err = w.httpClient.Do(req)
 		if err == nil {
@@ -127,13 +135,13 @@ func (w *Worker) executeJob(job *Job) (err error) {
 				if rErr == nil {
 					errString = string(errBody)
 				}
-				log.Error().Msg(fmt.Sprint("error - consumer connection error ", resp.Status, " ", errString, " ", job.Data.ID))
+				logger.Error().Msg(fmt.Sprint("error - consumer connection error ", resp.Status, " ", errString))
 				err = errConsumer
 			}
 		}
 	}
 	if err != nil {
-		log.Error().Err(err).Msg("error - worker failed to deliver" + job.Data.ID.String())
+		logger.Error().Err(err).Msg("error - worker failed to deliver")
 	}
 	return err
 }

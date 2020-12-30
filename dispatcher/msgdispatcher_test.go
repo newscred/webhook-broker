@@ -313,6 +313,7 @@ func TestMessageDispatcherImplDispatch(t *testing.T) {
 				// check content body and type
 				assert.Equal(t, contentType, r.Header.Get(headerContentType))
 				assert.Equal(t, consumerToken, r.Header.Get(headerConsumerToken))
+				assert.Greater(t, len(r.Header.Get(headerRequestID)), 12)
 				body, err := ioutil.ReadAll(r.Body)
 				assert.Nil(t, err)
 				assert.Equal(t, messagePayload, string(body))
