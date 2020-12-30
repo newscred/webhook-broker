@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"bytes"
 	"database/sql"
 	"io/ioutil"
 	"net/http"
@@ -15,6 +16,8 @@ import (
 	"github.com/imyousuf/webhook-broker/storage/data"
 	storagemocks "github.com/imyousuf/webhook-broker/storage/mocks"
 	"github.com/julienschmidt/httprouter"
+	"github.com/rs/xid"
+	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -190,6 +193,12 @@ func TestBroadcastControllerPost(t *testing.T) {
 	})
 	t.Run("Success:202-Accepted", func(t *testing.T) {
 		t.Parallel()
+		var buf bytes.Buffer
+		oldLogger := log.Logger
+		log.Logger = log.Output(&buf)
+		defer func() {
+			log.Logger = oldLogger
+		}()
 		msgRepo := new(storagemocks.MessageRepository)
 		controller, mockDispatcher := getNewBroadcastController(msgRepo)
 		testRouter := createTestRouter(controller)
@@ -216,6 +225,10 @@ func TestBroadcastControllerPost(t *testing.T) {
 		testRouter.ServeHTTP(rr, req)
 		wg.Wait()
 		assert.Equal(t, http.StatusAccepted, rr.Code)
+		responseReqID := rr.Header().Get(headerRequestID)
+		assert.GreaterOrEqual(t, len(responseReqID), 12)
+		assert.Contains(t, buf.String(), responseReqID)
+		assert.Contains(t, buf.String(), messageIDLogFieldKey)
 		msgRepo.AssertExpectations(t)
 		mockDispatcher.AssertExpectations(t)
 	})
@@ -307,7 +320,7 @@ func TestBroadcastControllerPost(t *testing.T) {
 		msgRepo.AssertExpectations(t)
 		mockDispatcher.AssertExpectations(t)
 	})
-	t.Run("WithMessageID", func(t *testing.T) {
+	t.Run("WithMessageIDAndRequestID", func(t *testing.T) {
 		t.Parallel()
 		msgRepo := new(storagemocks.MessageRepository)
 		controller, mockDispatcher := getNewBroadcastController(msgRepo)
@@ -324,6 +337,8 @@ func TestBroadcastControllerPost(t *testing.T) {
 		req.Header.Add(headerProducerID, producerID)
 		req.Header.Add(headerProducerToken, successfulGetTestToken+" - "+indexString)
 		req.Header.Add(headerMessageID, messageID)
+		reqID := xid.New().String()
+		req.Header.Add(headerRequestID, reqID)
 		matcher := func(msg *data.Message) bool {
 			return msg.Priority == uint(0) && msg.ContentType == formDataContentTypeHeaderValue && msg.Payload == bodyString &&
 				msg.Status == data.MsgStatusAcknowledged && msg.BroadcastedTo.ChannelID == consumerTestChannel.ChannelID && msg.ProducedBy.ProducerID == producerID &&
@@ -335,6 +350,8 @@ func TestBroadcastControllerPost(t *testing.T) {
 		testRouter.ServeHTTP(rr, req)
 		wg.Wait()
 		assert.Equal(t, http.StatusAccepted, rr.Code)
+		responseReqID := rr.Header().Get(headerRequestID)
+		assert.Equal(t, reqID, responseReqID)
 		msgRepo.AssertExpectations(t)
 		mockDispatcher.AssertExpectations(t)
 	})

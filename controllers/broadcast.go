@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/rs/xid"
 	"github.com/rs/zerolog/log"
 
 	"github.com/imyousuf/webhook-broker/dispatcher"
@@ -22,7 +23,10 @@ const (
 	headerProducerToken       = "X-Broker-Producer-Token"
 	headerProducerID          = "X-Broker-Producer-ID"
 	headerMessageID           = "X-Broker-Message-ID"
+	headerRequestID           = "X-Request-ID"
 	defaultMessageContentType = "application/octet-stream"
+	requestIDLogFieldKey      = "requestId"
+	messageIDLogFieldKey      = "messageId"
 )
 
 var (
@@ -67,6 +71,12 @@ func (broadcastController *BroadcastController) Post(w http.ResponseWriter, r *h
 	if !valid {
 		return
 	}
+	requestID := r.Header.Get(headerRequestID)
+	if len(requestID) < 1 {
+		requestID = xid.New().String()
+	}
+	w.Header().Set(headerRequestID, requestID)
+	logger := log.With().Str(requestIDLogFieldKey, requestID).Logger()
 	contentType := r.Header.Get(headerContentType)
 	if len(contentType) < 1 {
 		contentType = defaultMessageContentType
@@ -77,7 +87,7 @@ func (broadcastController *BroadcastController) Post(w http.ResponseWriter, r *h
 	}
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		log.Error().Err(err).Msg("error reading body")
+		logger.Error().Err(err).Msg("error reading body")
 		writeErr(w, errBodyCouldNotBeRead)
 		return
 	}
@@ -88,6 +98,7 @@ func (broadcastController *BroadcastController) Post(w http.ResponseWriter, r *h
 	}
 	message.Priority = uint(math.Abs(float64(priority)))
 	if err = broadcastController.MessageRepository.Create(message); err == nil {
+		logger.Info().Str(messageIDLogFieldKey, message.ID.String()).Msg("Message accepted for broadcast")
 		go broadcastController.Dispatcher.Dispatch(message)
 		writeStatus(w, http.StatusAccepted, nil)
 	} else if err == storage.ErrDuplicateMessageIDForChannel {
