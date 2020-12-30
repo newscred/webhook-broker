@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io/ioutil"
 	"log"
@@ -16,6 +18,20 @@ import (
 
 	"github.com/julienschmidt/httprouter"
 )
+
+type deadDeliveryJobModel struct {
+	ListenerEndpoint string
+	ListenerName     string
+	Status           string
+	StatusChangedAt  time.Time
+	MessageURL       string
+}
+
+// DLQList represents the list of jobs that are dead
+type dlqList struct {
+	DeadJobs []*deadDeliveryJobModel
+	Pages    map[string]string
+}
 
 var (
 	consumerHandler         map[string]func(string, http.ResponseWriter, *http.Request)
@@ -229,8 +245,11 @@ func waitTimeout(wg *sync.WaitGroup, timeout time.Duration) bool {
 	}
 }
 
-func main() {
+func resetHandlers() {
 	consumerHandler = make(map[string]func(string, http.ResponseWriter, *http.Request))
+}
+
+func main() {
 	client = &http.Client{Timeout: 2 * time.Second}
 	http.DefaultTransport.(*http.Transport).MaxIdleConnsPerHost = concurrentPushWorkers
 	port := findPort()
@@ -249,6 +268,19 @@ func main() {
 			log.Println(serverListenErr)
 		}
 	}()
+	defer func() {
+		serverShutdownContext, shutdownTimeoutCancelFunc := context.WithTimeout(context.Background(), 15*time.Second)
+		defer shutdownTimeoutCancelFunc()
+		server.Shutdown(serverShutdownContext)
+	}()
+	testBasicObjectCreation(portString)
+	resetHandlers()
+	testMessageTransmission()
+	resetHandlers()
+	testDLQFlow()
+}
+
+func testBasicObjectCreation(portString string) {
 	var count = consumerCount
 	var err error
 	err = createProducer()
@@ -266,8 +298,11 @@ func main() {
 	log.Println("number of consumers created", count)
 	if count == 0 {
 		log.Println("error creating consumers")
-		return
+		os.Exit(4)
 	}
+}
+
+func testMessageTransmission() {
 	log.Println("Starting message broadcast", time.Now())
 	defaultMax := 10000
 	steps := []int{1, 10, 100, 500, 1000, 2500, 5000, 10000, 100000, 1000000}
@@ -277,11 +312,11 @@ func main() {
 			continue
 		}
 		start := time.Now()
-		wg := addConsumerVerified(step*count+failures, true, failures)
+		wg := addConsumerVerified(step*consumerCount+failures, true, failures)
 		err := broadcastMessage(step)
 		if err != nil {
 			log.Println("error broadcasting message", err)
-			return
+			os.Exit(1)
 		}
 		timeoutDuration := time.Duration(2*step)*time.Second + time.Duration(failures)*time.Second*4
 		if waitTimeout(wg, timeoutDuration) {
@@ -297,10 +332,112 @@ func main() {
 			}
 		}
 	}
+}
 
-	defer func() {
-		serverShutdownContext, shutdownTimeoutCancelFunc := context.WithTimeout(context.Background(), 15*time.Second)
-		defer shutdownTimeoutCancelFunc()
-		server.Shutdown(serverShutdownContext)
-	}()
+func testDLQFlow() {
+	start := time.Now()
+	wg := &sync.WaitGroup{}
+	wg.Add(6)
+	indexString := "0"
+	consumerHandler[consumerIDPrefix+indexString] = func(s string, rw http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Println("Recovered in DLQ Flow", r)
+			}
+		}()
+		body, _ := ioutil.ReadAll(r.Body)
+		if string(body) != payload {
+			consumerAssertionFailed = true
+			log.Println("error - assertion failed for", s)
+		}
+		if r.Header.Get(headerContentType) != contentType {
+			consumerAssertionFailed = true
+			log.Println("error - assertion failed for", s)
+		}
+		rw.WriteHeader(http.StatusNotFound)
+		wg.Done()
+	}
+	err := broadcastMessage(1)
+	if err != nil {
+		log.Println("error broadcasting message", err)
+		os.Exit(7)
+	}
+	timeoutDuration := (1 + 2 + 3 + 4 + 5 + 10) * time.Second
+	if waitTimeout(wg, timeoutDuration) {
+		log.Println("Timed out waiting for wait group after", timeoutDuration)
+		os.Exit(5)
+	} else {
+		end := time.Now()
+		log.Println("Wait group finished dead messages", end)
+		log.Println("Dead Duration", end.Sub(start))
+		if consumerAssertionFailed {
+			log.Println("Consumer assertion failed")
+			os.Exit(6)
+		}
+	}
+	time.Sleep(500 * time.Millisecond)
+	// Ensure DLQ has this message
+	dlqURL := brokerBaseURL + "/channel/" + channelID + "/consumer/" + consumerIDPrefix + indexString + "/dlq"
+	req, _ := http.NewRequest(http.MethodGet, dlqURL, nil)
+	var resp *http.Response
+	resp, err = client.Do(req)
+	if err != nil {
+		log.Println(err)
+		os.Exit(8)
+	}
+	body, _ := ioutil.ReadAll(resp.Body)
+	log.Println("BODY", string(body))
+	decoder := json.NewDecoder(bytes.NewBuffer(body))
+	dlq := &dlqList{}
+	err = decoder.Decode(dlq)
+	if err != nil {
+		log.Println(err)
+		os.Exit(9)
+	}
+	if len(dlq.DeadJobs) != 1 {
+		log.Println("DLQ List mismatch", dlq)
+		os.Exit(10)
+	}
+	// POST to requeue DLQ
+	start = time.Now()
+	formValues := url.Values{}
+	formValues.Add("requeue", token)
+	req, _ = http.NewRequest(http.MethodPost, dlqURL, strings.NewReader(formValues.Encode()))
+	req.Header.Set(headerContentType, formDataContentTypeHeaderValue)
+	wg.Add(1)
+	consumerHandler[consumerIDPrefix+indexString] = func(s string, rw http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Println("Recovered", r)
+			}
+		}()
+		body, _ := ioutil.ReadAll(r.Body)
+		if string(body) != payload {
+			consumerAssertionFailed = true
+			log.Println("error - assertion failed for", s)
+		}
+		if r.Header.Get(headerContentType) != contentType {
+			consumerAssertionFailed = true
+			log.Println("error - assertion failed for", s)
+		}
+		rw.WriteHeader(http.StatusOK)
+		wg.Done()
+	}
+	resp, err = client.Do(req)
+	if err != nil {
+		log.Println(err)
+		os.Exit(11)
+	}
+	if waitTimeout(wg, timeoutDuration) {
+		log.Println("Timed out waiting for wait group after", timeoutDuration)
+		os.Exit(12)
+	} else {
+		end := time.Now()
+		log.Println("Wait group finished dead recovery", end)
+		log.Println("Dead Recovery Duration", end.Sub(start))
+		if consumerAssertionFailed {
+			log.Println("Consumer assertion failed")
+			os.Exit(13)
+		}
+	}
 }
