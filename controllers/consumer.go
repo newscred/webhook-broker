@@ -19,29 +19,36 @@ const (
 // ConsumerModel represents the data communicated to HTTP clients
 type ConsumerModel struct {
 	MsgStakeholder
-	CallbackURL string
+	CallbackURL        string
+	DeadLetterQueueURL string
 }
 
 // ConsumerController represents all endpoints related to a single consumer for a channel
 type ConsumerController struct {
 	ConsumerRepo storage.ConsumerRepository
 	ChannelRepo  storage.ChannelRepository
+	DLQEndpoint  EndpointController
 }
 
 // NewConsumerController creates and returns a new instance of ConsumerController
-func NewConsumerController(channelRepo storage.ChannelRepository, consumerRepo storage.ConsumerRepository) *ConsumerController {
-	return &ConsumerController{ConsumerRepo: consumerRepo, ChannelRepo: channelRepo}
+func NewConsumerController(channelRepo storage.ChannelRepository, consumerRepo storage.ConsumerRepository, DLQController *DLQController) *ConsumerController {
+	return &ConsumerController{ConsumerRepo: consumerRepo, ChannelRepo: channelRepo, DLQEndpoint: DLQController}
 }
 
 // Get implements the GET /channel/:channelId/consumer/:consumerId endpoint
 func (controller *ConsumerController) Get(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 	consumer, err := controller.ConsumerRepo.Get(findParam(params, channelIDPathParamKey), findParam(params, consumerIDPathParamKey))
-	consumerModel := getConsumerModel(consumer)
+	consumerModel := controller.getConsumerModel(consumer)
 	writeGetResult(err, writeNotFound, w, consumerModel)
 }
 
-func getConsumerModel(consumer *data.Consumer) *ConsumerModel {
-	consumerModel := &ConsumerModel{MsgStakeholder: *getMessageStakeholder(consumer.ConsumerID, &consumer.MessageStakeholder), CallbackURL: consumer.CallbackURL}
+func (controller *ConsumerController) getConsumerModel(consumer *data.Consumer) *ConsumerModel {
+	channelIDParam := httprouter.Param{Key: channelIDPathParamKey, Value: consumer.ConsumingFrom.ChannelID}
+	consumerIDParam := httprouter.Param{Key: consumerIDPathParamKey, Value: consumer.ConsumerID}
+	consumerModel := &ConsumerModel{
+		MsgStakeholder: *getMessageStakeholder(consumer.ConsumerID, &consumer.MessageStakeholder),
+		CallbackURL:        consumer.CallbackURL,
+		DeadLetterQueueURL: controller.DLQEndpoint.FormatAsRelativeLink(channelIDParam, consumerIDParam)}
 	return consumerModel
 }
 
@@ -78,7 +85,7 @@ func (controller *ConsumerController) Put(w http.ResponseWriter, r *http.Request
 	inComingConsumer, _ := data.NewConsumer(channel, consumerID, token, callbackURL)
 	inComingConsumer.Name = name
 	consumer, updateErr := controller.ConsumerRepo.Store(inComingConsumer)
-	writeGetResult(updateErr, func(w http.ResponseWriter) { writeErr(w, updateErr) }, w, getConsumerModel(consumer))
+	writeGetResult(updateErr, func(w http.ResponseWriter) { writeErr(w, updateErr) }, w, controller.getConsumerModel(consumer))
 }
 
 // Delete implements the DELETE /channel/:channelId/consumer/:consumerId endpoint

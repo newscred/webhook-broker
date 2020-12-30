@@ -80,7 +80,7 @@ func ConsumerTestSetup() {
 }
 
 func getNewConsumerController(consumerRepo storage.ConsumerRepository) *ConsumerController {
-	return NewConsumerController(channelRepo, consumerRepo)
+	return NewConsumerController(channelRepo, consumerRepo, getDLQControllerWithMockedRepo())
 }
 
 func TestConsumerFormatAsRelativeLink(t *testing.T) {
@@ -203,6 +203,7 @@ func TestConsumerGet(t *testing.T) {
 		assert.Contains(t, bodyChannel.Name, listTestConsumerIDPrefix)
 		assert.Contains(t, bodyChannel.Token, successfulGetTestToken)
 		assert.Equal(t, callbackURL.String(), bodyChannel.CallbackURL)
+		assert.Equal(t, testURI+"/dlq", bodyChannel.DeadLetterQueueURL)
 		assert.NotNil(t, bodyChannel.ChangedAt)
 		assert.Equal(t, bodyChannel.ChangedAt.Format(http.TimeFormat), rr.HeaderMap.Get(headerLastModified))
 	})
@@ -464,7 +465,7 @@ func TestConsumerPut(t *testing.T) {
 		mockChannelRepo := new(storagemocks.ConsumerRepository)
 		expectedErr := errors.New("error")
 		mockChannelRepo.On("Get", mock.Anything, mock.Anything).Return(deleteFailedConsumer, nil)
-		mockChannelRepo.On("Store", mock.Anything).Return(&data.Consumer{}, expectedErr)
+		mockChannelRepo.On("Store", mock.Anything).Return(&data.Consumer{ConsumingFrom: &data.Channel{}}, expectedErr)
 		putController := getNewConsumerController(mockChannelRepo)
 		testRouter := createTestRouter(putController)
 		req, _ := http.NewRequest("PUT", "/channel/"+consumerTestChannel.ChannelID+"/consumer/"+time.Now().String(), nil)

@@ -89,8 +89,10 @@ func TestConsumerGet(t *testing.T) {
 	t.Run("GetMissing", func(t *testing.T) {
 		t.Parallel()
 		repo := getConsumerRepo()
-		_, err := repo.Get(channel1.ChannelID, nonExistingGetTestConsumerID)
+		consumer, err := repo.Get(channel1.ChannelID, nonExistingGetTestConsumerID)
 		assert.NotNil(t, err)
+		assert.NotNil(t, consumer)
+		assert.NotNil(t, consumer.ConsumingFrom)
 	})
 }
 

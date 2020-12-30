@@ -78,11 +78,11 @@ func (consumerRepo *ConsumerDBRepository) Get(channelID string, consumerID strin
 
 func (consumerRepo *ConsumerDBRepository) getSingleConsumer(query string, queryArgs func() []interface{}, loadChannel bool) (consumer *data.Consumer, err error) {
 	consumer = &data.Consumer{}
-	var channelID string
+	consumer.ConsumingFrom = &data.Channel{}
 	err = querySingleRow(consumerRepo.db, query, queryArgs,
-		args2SliceFnWrapper(&consumer.ID, &consumer.ConsumerID, &channelID, &consumer.Name, &consumer.Token, &consumer.CallbackURL, &consumer.CreatedAt, &consumer.UpdatedAt))
+		args2SliceFnWrapper(&consumer.ID, &consumer.ConsumerID, &consumer.ConsumingFrom.ChannelID, &consumer.Name, &consumer.Token, &consumer.CallbackURL, &consumer.CreatedAt, &consumer.UpdatedAt))
 	if loadChannel && err == nil {
-		consumer.ConsumingFrom, err = consumerRepo.channelRepository.Get(channelID)
+		consumer.ConsumingFrom, err = consumerRepo.channelRepository.Get(consumer.ConsumingFrom.ChannelID)
 	}
 	return consumer, err
 }
