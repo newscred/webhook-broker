@@ -3,6 +3,8 @@ package controllers
 import (
 	"net/http"
 	"os"
+	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -57,4 +59,35 @@ func TestConfigureAPI(t *testing.T) {
 	mListener.AssertExpectations(t)
 	mAppRepo.AssertExpectations(t)
 	defer func() { NotifyOnInterrupt = oldNotify }()
+}
+
+func waitTimeout(wg *sync.WaitGroup, timeout time.Duration) bool {
+	c := make(chan struct{})
+	go func() {
+		defer close(c)
+		wg.Wait()
+	}()
+	select {
+	case <-c:
+		return false // completed normally
+	case <-time.After(timeout):
+		return true // timed out
+	}
+}
+
+
+func TestNotifyOnInterrupt(t *testing.T) {
+	stop := make(chan os.Signal, 1)
+	defer close(stop)
+	NotifyOnInterrupt(&stop)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		<-stop
+		wg.Done()
+	}()
+	syscall.Kill(syscall.Getpid(), syscall.SIGTERM)
+	if waitTimeout(&wg, 100*time.Millisecond) {
+		t.Fail()
+	}
 }
