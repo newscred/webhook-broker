@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
 	"github.com/imyousuf/webhook-broker/config"
@@ -299,9 +300,10 @@ func TestInitAppTime(t *testing.T) {
 const testLogFile = "./log-setup-test-output.log"
 
 type MockLogConfig struct {
+	logLevel config.LogLevel
 }
 
-func (m MockLogConfig) GetLogLevel() config.LogLevel           { return config.Debug }
+func (m MockLogConfig) GetLogLevel() config.LogLevel           { return m.logLevel }
 func (m MockLogConfig) GetLogFilename() string                 { return testLogFile }
 func (m MockLogConfig) GetMaxLogFileSize() uint                { return 10 }
 func (m MockLogConfig) GetMaxLogBackups() uint                 { return 1 }
@@ -310,15 +312,53 @@ func (m MockLogConfig) IsCompressionEnabledOnLogBackups() bool { return true }
 func (m MockLogConfig) IsLoggerConfigAvailable() bool          { return true }
 
 func TestSetupLog(t *testing.T) {
-	_, err := os.Stat("./log-setup-test-output.log")
-	if err == nil {
-		os.Remove(testLogFile)
+	defer func() {
+		if r := recover(); r != nil {
+			t.Log(r)
+		}
+	}()
+	configs := make(map[config.LogLevel]func(), 4)
+	configs[config.Debug] = func() {
+		log.Print("unit test debug")
+		log.Info().Msg("unit test info")
+		log.Error().Msg("unit test error")
+		dat, err := ioutil.ReadFile(testLogFile)
+		assert.Nil(t, err)
+		assert.Contains(t, string(dat), "unit test debug")
+		assert.Contains(t, string(dat), "unit test info")
+		assert.Contains(t, string(dat), "unit test error")
 	}
-	setupLogger(&MockLogConfig{})
-	log.Print("unit test")
-	dat, err := ioutil.ReadFile(testLogFile)
-	assert.Nil(t, err)
-	assert.Contains(t, string(dat), "unit test")
+	configs[config.Info] = func() {
+		log.Print("unit test debug")
+		log.Info().Msg("unit test info")
+		log.Error().Msg("unit test error")
+		dat, err := ioutil.ReadFile(testLogFile)
+		assert.Nil(t, err)
+		assert.NotContains(t, string(dat), "unit test debug")
+		assert.Contains(t, string(dat), "unit test info")
+		assert.Contains(t, string(dat), "unit test error")
+	}
+	configs[config.Error] = func() {
+		log.Print("unit test debug")
+		log.Info().Msg("unit test info")
+		log.Error().Msg("unit test error")
+		dat, err := ioutil.ReadFile(testLogFile)
+		assert.Nil(t, err)
+		assert.NotContains(t, string(dat), "unit test debug")
+		assert.NotContains(t, string(dat), "unit test info")
+		assert.Contains(t, string(dat), "unit test error")
+	}
+	configs[config.Fatal] = func() {
+		assert.Equal(t, zerolog.FatalLevel, zerolog.GlobalLevel())
+	}
+	for logLevel, testFunc := range configs {
+		_, err := os.Stat(testLogFile)
+		if err == nil {
+			os.Remove(testLogFile)
+		}
+		setupLogger(&MockLogConfig{logLevel: logLevel})
+		testFunc()
+	}
 }
 
 func TestCreateSeedData_ErrorFlows(t *testing.T) {
