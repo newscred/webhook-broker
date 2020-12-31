@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/rs/zerolog/hlog"
@@ -101,7 +102,7 @@ type Delete interface {
 
 // NotifyOnInterrupt registers channel to get notified when interrupt is captured
 var NotifyOnInterrupt = func(stop *chan os.Signal) {
-	signal.Notify(*stop, os.Interrupt)
+	signal.Notify(*stop, os.Interrupt, os.Kill, syscall.SIGTERM)
 }
 
 // ConfigureAPI configures API Server with interrupt handling
