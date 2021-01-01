@@ -32,3 +32,10 @@ curl -v localhost:18181/channel/sample-channel/broadcast -X POST -H "X-Broker-Ch
 ```
 
 Also note that for testing in docker, you will need the code to be built every time you change code.
+
+## Configuration management
+
+If you are intending to work with deployment of Webhook Broker, we recommend you also install the following:
+
+- Terraform [v0.14+](https://www.terraform.io/downloads.html)
+- [Helm](https://helm.sh/) - `sudo snap install helm --classic`
