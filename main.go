@@ -128,14 +128,14 @@ var (
 						case nil:
 							createSeedData(httpServiceContainer.DataAccessor, httpServiceContainer.Configuration)
 							completeErr := httpServiceContainer.DataAccessor.GetAppRepository().CompleteAppInit()
-							log.Error().Err(completeErr)
+							log.Error().Err(completeErr).Msg("init error in setting complete flag")
 							run = false
 						case storage.ErrAppInitializing:
 							run = false
 						case storage.ErrOptimisticAppInit:
 							run = false
 						default:
-							log.Error().Err(initErr)
+							log.Error().Err(initErr).Msg("unexpected init error")
 							time.Sleep(waitDuration)
 						}
 					}
@@ -170,7 +170,7 @@ var (
 		for _, seedConsumer := range seedDataConfig.GetSeedData().Consumers {
 			channel, err := dataAccessor.GetChannelRepository().Get(seedConsumer.Channel)
 			if err != nil {
-				log.Error().Err(err)
+				log.Error().Err(err).Msg("no channel for the consumer as per spec")
 				continue
 			}
 			consumer, err := data.NewConsumer(channel, seedConsumer.ID, seedConsumer.Token, seedConsumer.CallbackURL)
@@ -193,7 +193,7 @@ func main() {
 	if cliCfgErr != nil {
 		consolePrintln(output)
 		if cliCfgErr != flag.ErrHelp {
-			log.Error().Err(cliCfgErr)
+			log.Error().Err(cliCfgErr).Msg("CLI config error")
 		}
 		exit(1)
 	}
@@ -220,14 +220,14 @@ func main() {
 		// Setup HTTP Server and listen (implicitly init DB and run migration if arg passed)
 		httpServiceContainer, err := GetHTTPServer(inConfig)
 		if err != nil {
-			log.Error().Err(err)
+			log.Error().Err(err).Msg("could not start http service")
 			exit(3)
 		}
 		_, err = getApp(httpServiceContainer)
 		if err == nil {
 			initApp(httpServiceContainer)
 		} else {
-			log.Error().Err(err)
+			log.Error().Err(err).Msg("could not retrieve app to initialize")
 			exit(4)
 		}
 		var buf bytes.Buffer
