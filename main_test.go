@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -25,26 +26,50 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
+const (
+	configFilePath             = "./testdatadir/webhook-broker.main.cfg"
+	notificationInitialContent = `[http]
+	listener=:12345	
+	`
+	notificationDifferentContent = `[http]
+	listener=:8080
+	`
+)
+
 func TestGetAppVersion(t *testing.T) {
 	assert.Equal(t, string(GetAppVersion()), "0.1-dev")
 }
 
 var mainFunctionBreaker = func(stop *chan os.Signal) {
 	go func() {
-		var client = &http.Client{Timeout: time.Second * 10}
-		defer func() {
-			client.CloseIdleConnections()
-		}()
-		for {
-			response, err := client.Get("http://localhost:8080/_status")
-			if err == nil {
-				if response.StatusCode == 200 {
-					break
-				}
-			}
-		}
+		waitForStatusEndpoint(":8080")
 		fmt.Println("Interrupt sent")
 		*stop <- os.Interrupt
+	}()
+}
+
+var waitForStatusEndpoint = func(portString string) {
+	var client = &http.Client{Timeout: time.Second * 10}
+	defer func() {
+		client.CloseIdleConnections()
+	}()
+	for {
+		response, err := client.Get("http://localhost" + portString + "/_status")
+		if err == nil {
+			if response.StatusCode == 200 {
+				break
+			}
+		}
+	}
+}
+
+var configChangeRestartMainFnBreaker = func(stop *chan os.Signal) {
+	go func() {
+		waitForStatusEndpoint(":12345")
+		ioutil.WriteFile(configFilePath, []byte(notificationDifferentContent), 0644)
+		time.Sleep(1 * time.Millisecond)
+		fmt.Println("called mainFnBreaker")
+		mainFunctionBreaker(stop)
 	}()
 }
 
@@ -121,14 +146,15 @@ func TestMainFunc(t *testing.T) {
 			controllers.NotifyOnInterrupt = oldNotify
 		}()
 	})
-	t.Run("SuccessRun", func(t *testing.T) {
+	t.Run("SuccessRunWithAutoRestartOnConfigChange", func(t *testing.T) {
 		var buf bytes.Buffer
 		oldLogger := log.Logger
 		log.Logger = log.Output(&buf)
 		oldArgs := os.Args
-		os.Args = []string{"webhook-broker", "-migrate", "./migration/sqls/"}
+		ioutil.WriteFile(configFilePath, []byte(notificationInitialContent), 0644)
+		os.Args = []string{"webhook-broker", "-migrate", "./migration/sqls/", "-config", configFilePath}
 		oldNotify := controllers.NotifyOnInterrupt
-		controllers.NotifyOnInterrupt = mainFunctionBreaker
+		controllers.NotifyOnInterrupt = configChangeRestartMainFnBreaker
 		defer func() {
 			log.Logger = oldLogger
 			os.Args = oldArgs
@@ -156,6 +182,26 @@ func TestMainFunc(t *testing.T) {
 		consumer, err := dataAccessor.GetConsumerRepository().Get("sample-channel", "sample-consumer")
 		assert.Nil(t, err)
 		assert.NotNil(t, consumer)
+	})
+	t.Run("SuccessRunWithExitOnConfigChange", func(t *testing.T) {
+		ioutil.WriteFile(configFilePath, []byte(notificationInitialContent), 0644)
+		oldArgs := os.Args
+		os.Args = []string{"webhook-broker", "-migrate", "./migration/sqls/", "-config", configFilePath, "-stop-on-conf-change"}
+		defer func() {
+			os.Args = oldArgs
+		}()
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			main()
+			wg.Done()
+		}()
+		go func() {
+			waitForStatusEndpoint(":12345")
+			ioutil.WriteFile(configFilePath, []byte(notificationDifferentContent), 0644)
+			wg.Done()
+		}()
+		wg.Wait()
 	})
 	t.Run("HelpError", func(t *testing.T) {
 		oldExit := exit

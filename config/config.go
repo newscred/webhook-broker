@@ -264,17 +264,6 @@ func GetAutoConfiguration() (*Config, error) {
 	return GetConfiguration("")
 }
 
-// CLIConfig represents the Command Line Args config
-type CLIConfig struct {
-	ConfigPath      string
-	MigrationSource string
-}
-
-// IsMigrationEnabled returns whether migration is enabled
-func (conf *CLIConfig) IsMigrationEnabled() bool {
-	return len(conf.MigrationSource) > 0
-}
-
 // GetConfigurationFromCLIConfig from CLIConfig.
 func GetConfigurationFromCLIConfig(cliConfig *CLIConfig) (*Config, error) {
 	if len(cliConfig.ConfigPath) > 0 {

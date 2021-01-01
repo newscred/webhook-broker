@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -69,6 +71,7 @@ var (
 		var conf config.CLIConfig
 		flags.StringVar(&conf.ConfigPath, "config", "", "Config file location")
 		flags.StringVar(&conf.MigrationSource, "migrate", "", "Migration source folder")
+		flags.BoolVar(&conf.StopOnConfigChange, "stop-on-conf-change", false, "Restart internally on -config change if false")
 
 		err = flags.Parse(args)
 		if err != nil {
@@ -195,26 +198,47 @@ func main() {
 		exit(1)
 	}
 	log.Print("Configuration File (optional): " + inConfig.ConfigPath)
-	// Setup HTTP Server and listen (implicitly init DB and run migration if arg passed)
-	httpServiceContainer, err := GetHTTPServer(inConfig)
-	if err != nil {
-		log.Error().Err(err)
-		exit(3)
+	hasConfigChange := true
+	var mutex sync.Mutex
+	var setHasConfigChange = func(newVal bool) {
+		mutex.Lock()
+		defer mutex.Unlock()
+		hasConfigChange = newVal
 	}
-	_, err = getApp(httpServiceContainer)
-	if err == nil {
-		initApp(httpServiceContainer)
-	} else {
-		log.Error().Err(err)
-		exit(4)
+	log.Print("On config change will stop? - ", inConfig.StopOnConfigChange)
+	pid := syscall.Getpid()
+	inConfig.NotifyOnConfigFileChange(func() {
+		log.Print("Config file changed")
+		if !inConfig.StopOnConfigChange {
+			log.Print("Restarting")
+			setHasConfigChange(true)
+		}
+		syscall.Kill(pid, syscall.SIGINT)
+	})
+	for hasConfigChange {
+		setHasConfigChange(false)
+		// Setup HTTP Server and listen (implicitly init DB and run migration if arg passed)
+		httpServiceContainer, err := GetHTTPServer(inConfig)
+		if err != nil {
+			log.Error().Err(err)
+			exit(3)
+		}
+		_, err = getApp(httpServiceContainer)
+		if err == nil {
+			initApp(httpServiceContainer)
+		} else {
+			log.Error().Err(err)
+			exit(4)
+		}
+		var buf bytes.Buffer
+		json.NewEncoder(&buf).Encode(httpServiceContainer.Configuration)
+		log.Print("Configuration in Use : " + buf.String())
+		// Setup Log Output
+		setupLogger(httpServiceContainer.Configuration)
+		<-httpServiceContainer.Listener.shutdownListener
+		httpServiceContainer.Dispatcher.Stop()
 	}
-	var buf bytes.Buffer
-	json.NewEncoder(&buf).Encode(httpServiceContainer.Configuration)
-	log.Print("Configuration in Use : " + buf.String())
-	// Setup Log Output
-	setupLogger(httpServiceContainer.Configuration)
-	<-httpServiceContainer.Listener.shutdownListener
-	httpServiceContainer.Dispatcher.Stop()
+	inConfig.StopWatcher()
 }
 
 func setupLogger(logConfig config.LogConfig) {

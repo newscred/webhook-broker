@@ -23,6 +23,9 @@
 
 # Dependency directories (remove the comment below to include it)
 vendor/
+
+# Other project files/dir to ignore
+testdatadir/
 webhook-broker
 dist/
 docs/tech-specs/basic-spec-spikes/basic-spec-spikes

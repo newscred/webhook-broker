@@ -17,6 +17,7 @@ ADD main.go .
 ADD main_test.go .
 ADD wire.go .
 ADD wire_gen.go .
+ADD testdatadir ./testdatadir
 ADD config ./config
 ADD controllers ./controllers
 ADD migration ./migration
