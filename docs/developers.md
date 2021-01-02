@@ -39,3 +39,10 @@ If you are intending to work with deployment of Webhook Broker, we recommend you
 
 - Terraform [v0.14+](https://www.terraform.io/downloads.html)
 - [Helm](https://helm.sh/) - `sudo snap install helm --classic`
+- `kubectl` - `sudo snap install kubectl --classic`
+- AWS IAM Authenticator
+
+```bash
+sudo curl -o /usr/local/bin/aws-iam-authenticator "https://amazon-eks.s3.us-west-2.amazonaws.com/1.18.9/2020-11-02/bin/linux/amd64/aws-iam-authenticator"
+sudo chmod +x /usr/local/bin/aws-iam-authenticator
+```

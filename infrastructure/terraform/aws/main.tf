@@ -252,3 +252,29 @@ data "aws_iam_policy_document" "cluster_autoscaler" {
     }
   }
 }
+
+provider "helm" {
+  kubernetes {
+    config_path = module.eks.kubeconfig_filename
+  }
+}
+
+resource "helm_release" "aws-spot-termination-handler" {
+  name       = "aws-node-termination-handler"
+  namespace = local.k8s_service_account_namespace
+
+  repository = "https://aws.github.io/eks-charts"
+  chart      = "aws-node-termination-handler"
+}
+
+resource "helm_release" "cluster-autoscaler" {
+  name       = "cluster-autoscaler"
+  namespace = local.k8s_service_account_namespace
+
+  repository = "https://kubernetes.github.io/autoscaler"
+  chart      = "cluster-autoscaler-chart"
+
+  values = [
+    "${file("cluster-autoscaler-chart-values.yml")}"
+  ]
+}
