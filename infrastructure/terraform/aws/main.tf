@@ -35,6 +35,7 @@ module "vpc" {
   enable_vpn_gateway = true
 
   enable_dhcp_options            = true
+  dhcp_options_domain_name       = "ec2.internal"
 
   # Default security group - ingress/egress rules cleared to deny all
   manage_default_security_group  = true
@@ -136,7 +137,10 @@ data "aws_availability_zones" "available" {
 locals {
   cluster_name = "test-eks-w7b6"
   k8s_service_account_namespace = "kube-system"
+  k8s_service_account_username  = "service-controller"
   k8s_service_account_name      = "cluster-autoscaler-aws-cluster-autoscaler-chart"
+  k8s_dashboard_namespace       = "kubernetes-dashboard"
+  k8s_metrics_namespace         = "metrics"
 }
 
 module "eks" {
@@ -253,6 +257,43 @@ data "aws_iam_policy_document" "cluster_autoscaler" {
   }
 }
 
+resource "kubernetes_namespace" "k8s-dashboard-namespace" {
+  metadata {
+    name = local.k8s_dashboard_namespace
+  }
+}
+
+resource "kubernetes_namespace" "metrics-namespace" {
+  metadata {
+    name = local.k8s_metrics_namespace
+  }
+}
+
+
+# The following configuration are to represent - https://raw.githubusercontent.com/hashicorp/learn-terraform-provision-eks-cluster/master/kubernetes-dashboard-admin.rbac.yaml
+# From - https://learn.hashicorp.com/tutorials/terraform/eks
+resource "kubernetes_cluster_role_binding" "dashboard-cluster-admin-binding" {
+  metadata {
+    name = local.k8s_service_account_username
+  }
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "ClusterRole"
+    name      = "cluster-admin"
+  }
+  subject {
+    kind      = "ServiceAccount"
+    name      = local.k8s_service_account_username
+    namespace = "kube-system"
+  }
+  # This is needed for metrics-server to publish collected metrics
+  subject {
+    kind      = "ServiceAccount"
+    name      = "metrics-server"
+    namespace = "kube-system"
+  }
+}
+
 provider "helm" {
   kubernetes {
     config_path = module.eks.kubeconfig_filename
@@ -261,7 +302,7 @@ provider "helm" {
 
 resource "helm_release" "aws-spot-termination-handler" {
   name       = "aws-node-termination-handler"
-  namespace = local.k8s_service_account_namespace
+  namespace  = local.k8s_service_account_namespace
 
   repository = "https://aws.github.io/eks-charts"
   chart      = "aws-node-termination-handler"
@@ -269,7 +310,7 @@ resource "helm_release" "aws-spot-termination-handler" {
 
 resource "helm_release" "cluster-autoscaler" {
   name       = "cluster-autoscaler"
-  namespace = local.k8s_service_account_namespace
+  namespace  = local.k8s_service_account_namespace
 
   repository = "https://kubernetes.github.io/autoscaler"
   chart      = "cluster-autoscaler-chart"
@@ -277,4 +318,37 @@ resource "helm_release" "cluster-autoscaler" {
   values = [
     "${file("cluster-autoscaler-chart-values.yml")}"
   ]
+}
+
+resource "helm_release" "kubernetes-dashboard" {
+  name       = "kubernetes-dashboard"
+  namespace  = local.k8s_dashboard_namespace
+
+  repository = "https://kubernetes.github.io/dashboard/"
+  chart      = "kubernetes-dashboard"
+}
+
+# TODO: This chart has been deprecated, we will need to move to the new chart once official
+# https://github.com/kubernetes-sigs/metrics-server/issues/572
+resource "helm_release" "metrics-server" {
+  name       = "metrics-server"
+  namespace  = local.k8s_metrics_namespace
+
+  repository = "https://charts.helm.sh/stable"
+  chart      = "metrics-server"
+
+  set {
+      name = "image.repository"
+      value = "k8s.gcr.io/metrics-server/metrics-server"
+  }
+
+  set {
+      name = "image.tag"
+      value = "v0.3.7"
+  }
+
+  set {
+      name = "hostNetwork.enabled"
+      value = "true"
+  }
 }
