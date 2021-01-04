@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"math"
 	"net/http"
@@ -48,23 +49,7 @@ func NewBroadcastController(channelRepo storage.ChannelRepository, msgRepo stora
 
 // Post Receives message to be broadcasted to a channel
 func (broadcastController *BroadcastController) Post(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
-	valid := true
-	var producer *data.Producer
-	channelID := params.ByName(channelIDPathParamKey)
-	channel, err := broadcastController.ChannelRepository.Get(channelID)
-	if err != nil {
-		writeNotFound(w)
-		valid = false
-	} else if channel.Token != r.Header.Get(headerChannelToken) {
-		writeStatus(w, http.StatusForbidden, errChannelTokenNotMatching)
-		valid = false
-	} else if producer, err = broadcastController.ProducerRepository.Get(r.Header.Get(headerProducerID)); err != nil {
-		writeStatus(w, http.StatusUnauthorized, errProducerDoesNotExist)
-		valid = false
-	} else if producer.Token != r.Header.Get(headerProducerToken) {
-		writeStatus(w, http.StatusForbidden, errProducerTokenNotMatching)
-		valid = false
-	}
+	channel, producer, valid := broadcastController.getChannelAndProducerWithValidation(w, r, params)
 	if !valid {
 		return
 	}
@@ -88,11 +73,42 @@ func (broadcastController *BroadcastController) Post(w http.ResponseWriter, r *h
 		go broadcastController.Dispatcher.Dispatch(message)
 		writeStatus(w, http.StatusAccepted, nil)
 	} else if err == storage.ErrDuplicateMessageIDForChannel {
+		logger.Error().Err(err).Str(messageIDLogFieldKey, message.ID.String()).Msg("message rejected because its duplicate id in channel")
 		writeStatus(w, http.StatusConflict, err)
 	} else {
+		logger.Error().Err(err).Msg("error creating message")
 		writeErr(w, err)
 	}
 
+}
+
+func (broadcastController *BroadcastController) getChannelAndProducerWithValidation(w http.ResponseWriter, r *http.Request, params httprouter.Params) (channel *data.Channel, producer *data.Producer, valid bool) {
+	var err error
+	valid = true
+	logger := hlog.FromRequest(r)
+	channelID := params.ByName(channelIDPathParamKey)
+	channelToken := r.Header.Get(headerChannelToken)
+	producerID := r.Header.Get(headerProducerID)
+	producerToken := r.Header.Get(headerProducerToken)
+	channel, err = broadcastController.ChannelRepository.Get(channelID)
+	if err != nil {
+		logger.Error().Err(err).Msg("no channel found: " + channelID)
+		writeNotFound(w)
+		valid = false
+	} else if channel.Token != channelToken {
+		logger.Error().Msg(fmt.Sprintf("channel token did not match: %s vs %s", channel.Token, channelToken))
+		writeStatus(w, http.StatusForbidden, errChannelTokenNotMatching)
+		valid = false
+	} else if producer, err = broadcastController.ProducerRepository.Get(producerID); err != nil {
+		logger.Error().Err(err).Msg("no producer found: " + producerID)
+		writeStatus(w, http.StatusUnauthorized, errProducerDoesNotExist)
+		valid = false
+	} else if producer.Token != producerToken {
+		logger.Error().Msg(fmt.Sprintf("producer token did not match: %s vs %s", producer.Token, producerToken))
+		writeStatus(w, http.StatusForbidden, errProducerTokenNotMatching)
+		valid = false
+	}
+	return channel, producer, valid
 }
 
 func getPriority(r *http.Request) int {
