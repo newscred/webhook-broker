@@ -33,7 +33,6 @@ func writeToFile(filePath, content string) error {
 }
 
 func TestCLIConfigPathChangeNotification(t *testing.T) {
-	t.Parallel()
 	t.Run("NotifiedOnFileChange", func(t *testing.T) {
 		err := writeToFile(notificationFilePath, notificationInitialContent)
 		if err != nil {
@@ -132,6 +131,7 @@ func TestCLIConfigPathChangeNotification(t *testing.T) {
 		errHashFn := func(filePath string) (string, error) {
 			return "", expectedErr
 		}
+		defer func() { getFileHash = oldGetHash }()
 		getFileHash = errHashFn
 		err := writeToFile(hashTestPath, notificationInitialContent)
 		if err != nil {
@@ -158,14 +158,12 @@ func TestCLIConfigPathChangeNotification(t *testing.T) {
 		time.Sleep(1 * time.Millisecond)
 		assert.Contains(t, buf.String(), expectedErr.Error())
 		assert.Contains(t, buf.String(), "could not generate file hash on change")
-		defer func() { getFileHash = oldGetHash }()
 	})
 	t.Run("OpenFileErrorInGetHash", func(t *testing.T) {
-		t.Parallel()
 		_, err := getFileHash(wdTestPath + ConfigFilename)
 		assert.NotNil(t, err)
 	})
-	t.Run("OpenFileErrorInGetHash", func(t *testing.T) {
+	t.Run("OpenFileErrorInGetHashInline", func(t *testing.T) {
 		oldCreateWatcher := createNewWatcher
 		var buf bytes.Buffer
 		oldLogger := log.Logger
@@ -203,7 +201,7 @@ func TestCLIConfigPathChangeNotification(t *testing.T) {
 			log.Logger = oldLogger
 		}()
 		expectedErr := errors.New("manual watch error from test")
-		watcher, _ := fsnotify.NewWatcher()		
+		watcher, _ := fsnotify.NewWatcher()
 		createNewWatcher = func() (*fsnotify.Watcher, error) {
 			return watcher, nil
 		}

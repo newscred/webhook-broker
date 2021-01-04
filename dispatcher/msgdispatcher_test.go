@@ -521,19 +521,27 @@ func TestJobWorkers(t *testing.T) {
 		impl.stopTimeout = 4 * time.Millisecond
 		impl.rationalDelay = 5 * time.Millisecond
 		retryQueuedJobs(impl)
-		time.Sleep(200 * time.Millisecond)
-		count := 0
-		nJobs, _, err := dataAccessor.GetDeliveryJobRepository().GetJobsForMessage(msg, data.NewPagination(nil, nil))
-		for _, job := range nJobs {
-			if job.ID == inflightJob.ID {
-				continue
+		// Try to check for count 20 time to ensure it works in a slower CPU and we are not waiting unnecessarily
+		for iter := 0; iter < 20; iter++ {
+			time.Sleep(200 * time.Millisecond)
+			count := 0
+			nJobs, _, err := dataAccessor.GetDeliveryJobRepository().GetJobsForMessage(msg, data.NewPagination(nil, nil))
+			assert.Nil(t, err)
+			for _, job := range nJobs {
+				if job.ID == inflightJob.ID {
+					continue
+				}
+				if job.Status != data.JobQueued {
+					count++
+				}
 			}
-			if job.Status != data.JobQueued {
-				count++
+			if count < 20 {
+				continue
+			} else {
+				// This assertion is done to avoid the impact of time on test assertion
+				assert.GreaterOrEqual(t, count, 20)
+				break
 			}
 		}
-		// This assertion is done to avoid the impact of time on test assertion
-		assert.GreaterOrEqual(t, count, 20)
-		assert.Nil(t, err)
 	})
 }
