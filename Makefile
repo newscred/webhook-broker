@@ -52,7 +52,7 @@ ifneq ($(OS),Alpine Linux)
 	go get github.com/vektra/mockery/v2/.../
 endif
 
-build-docker-iamge:
+build-docker-image:
 	docker build . --tag=imyousuf/webhook-broker:latest
 
 build:
