@@ -7,9 +7,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/rs/xid"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog/hlog"
 
 	"github.com/imyousuf/webhook-broker/dispatcher"
 	"github.com/imyousuf/webhook-broker/storage"
@@ -24,9 +22,7 @@ const (
 	headerProducerToken       = "X-Broker-Producer-Token"
 	headerProducerID          = "X-Broker-Producer-ID"
 	headerMessageID           = "X-Broker-Message-ID"
-	headerRequestID           = "X-Request-ID"
 	defaultMessageContentType = "application/octet-stream"
-	requestIDLogFieldKey      = "requestId"
 	messageIDLogFieldKey      = "messageId"
 )
 
@@ -72,7 +68,7 @@ func (broadcastController *BroadcastController) Post(w http.ResponseWriter, r *h
 	if !valid {
 		return
 	}
-	logger := setRequestIDAndSetupLogger(r, w)
+	logger := hlog.FromRequest(r)
 	contentType := getContentType(r)
 	priority := getPriority(r)
 	body, err := ioutil.ReadAll(r.Body)
@@ -113,16 +109,6 @@ func getContentType(r *http.Request) string {
 		contentType = defaultMessageContentType
 	}
 	return contentType
-}
-
-func setRequestIDAndSetupLogger(r *http.Request, w http.ResponseWriter) zerolog.Logger {
-	requestID := r.Header.Get(headerRequestID)
-	if len(requestID) < 1 {
-		requestID = xid.New().String()
-	}
-	w.Header().Set(headerRequestID, requestID)
-	logger := log.With().Str(requestIDLogFieldKey, requestID).Logger()
-	return logger
 }
 
 // GetPath returns the endpoint's path

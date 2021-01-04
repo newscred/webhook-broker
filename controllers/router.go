@@ -14,6 +14,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/rs/xid"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/hlog"
 	"github.com/rs/zerolog/log"
 
@@ -24,21 +26,6 @@ import (
 	"github.com/imyousuf/webhook-broker/storage/data"
 	"github.com/julienschmidt/httprouter"
 )
-
-// Controllers represents factory object containing all the controllers
-type Controllers struct {
-	StatusController    *StatusController
-	ProducersController *ProducersController
-	ProducerController  *ProducerController
-	ChannelController   *ChannelController
-	ChannelsController  *ChannelsController
-	ConsumerController  *ConsumerController
-	ConsumersController *ConsumersController
-	BroadcastController *BroadcastController
-	MessageController   *MessageController
-	MessagesController  *MessagesController
-	DLQController       *DLQController
-}
 
 var (
 	listener          ServerLifecycleListener
@@ -65,59 +52,121 @@ const (
 	headerContentType               = "Content-Type"
 	headerUnmodifiedSince           = "If-Unmodified-Since"
 	headerLastModified              = "Last-Modified"
+	headerRequestID                 = "X-Request-ID"
+	requestIDLogFieldKey            = "requestId"
 	charset                         = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 )
 
-// ServerLifecycleListener listens to key server lifecycle error
-type ServerLifecycleListener interface {
-	StartingServer()
-	ServerStartFailed(err error)
-	ServerShutdownCompleted()
-}
+type (
+	// Controllers represents factory object containing all the controllers
+	Controllers struct {
+		StatusController    *StatusController
+		ProducersController *ProducersController
+		ProducerController  *ProducerController
+		ChannelController   *ChannelController
+		ChannelsController  *ChannelsController
+		ConsumerController  *ConsumerController
+		ConsumersController *ConsumersController
+		BroadcastController *BroadcastController
+		MessageController   *MessageController
+		MessagesController  *MessagesController
+		DLQController       *DLQController
+	}
 
-// EndpointController represents very basic functionality of an endpoint
-type EndpointController interface {
-	GetPath() string
-	FormatAsRelativeLink(params ...httprouter.Param) string
-}
+	// ServerLifecycleListener listens to key server lifecycle error
+	ServerLifecycleListener interface {
+		StartingServer()
+		ServerStartFailed(err error)
+		ServerShutdownCompleted()
+	}
 
-// Get represents GET Method Call to a resource
-type Get interface {
-	Get(w http.ResponseWriter, r *http.Request, ps httprouter.Params)
-}
+	// EndpointController represents very basic functionality of an endpoint
+	EndpointController interface {
+		GetPath() string
+		FormatAsRelativeLink(params ...httprouter.Param) string
+	}
 
-// Put represents PUT Method Call to a resource
-type Put interface {
-	Put(w http.ResponseWriter, r *http.Request, ps httprouter.Params)
-}
+	// Get represents GET Method Call to a resource
+	Get interface {
+		Get(w http.ResponseWriter, r *http.Request, ps httprouter.Params)
+	}
 
-// Post represents POST Method Call to a resource
-type Post interface {
-	Post(w http.ResponseWriter, r *http.Request, ps httprouter.Params)
-}
+	// Put represents PUT Method Call to a resource
+	Put interface {
+		Put(w http.ResponseWriter, r *http.Request, ps httprouter.Params)
+	}
 
-// Delete represents DELETE Method Call to a resource
-type Delete interface {
-	Delete(w http.ResponseWriter, r *http.Request, ps httprouter.Params)
-}
+	// Post represents POST Method Call to a resource
+	Post interface {
+		Post(w http.ResponseWriter, r *http.Request, ps httprouter.Params)
+	}
+
+	// Delete represents DELETE Method Call to a resource
+	Delete interface {
+		Delete(w http.ResponseWriter, r *http.Request, ps httprouter.Params)
+	}
+
+	idKey struct{}
+)
 
 // NotifyOnInterrupt registers channel to get notified when interrupt is captured
 var NotifyOnInterrupt = func(stop *chan os.Signal) {
 	signal.Notify(*stop, os.Interrupt, os.Kill, syscall.SIGTERM)
 }
 
+func getRequestID(r *http.Request) (requestID string) {
+	ctx := r.Context()
+	requestID, ok := ctx.Value(idKey{}).(string)
+	if !ok {
+		requestID = r.Header.Get(headerRequestID)
+		if len(requestID) < 1 {
+			requestID = xid.New().String()
+		}
+		ctx = context.WithValue(ctx, idKey{}, requestID)
+		r = r.WithContext(ctx)
+	}
+	return requestID
+}
+
+// getRequestIDHandler is similar to hlog.RequestIDHandler just the twist is it expects string as request id and not xid.ID
+func getRequestIDHandler(fieldKey, headerName string) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			requestID := getRequestID(r)
+			ctx := r.Context()
+			log := zerolog.Ctx(ctx)
+			if len(fieldKey) > 0 {
+				log.UpdateContext(func(c zerolog.Context) zerolog.Context {
+					return c.Str(fieldKey, requestID)
+				})
+			}
+			if len(headerName) > 0 {
+				w.Header().Set(headerName, requestID)
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func logAccess(r *http.Request, status, size int, duration time.Duration) {
+	hlog.FromRequest(r).Info().
+		Str("method", r.Method).
+		Str("url", r.URL.String()).
+		Int("status", status).
+		Int("size", size).
+		Dur("duration", duration).
+		Msg("")
+}
+
+func getHandler(apiRouter *httprouter.Router) http.Handler {
+	// Chain handlers - new handler to attach logger to request context, request id handler and lastly access log handler all ending with the our routes
+	return hlog.NewHandler(log.Logger)(getRequestIDHandler(requestIDLogFieldKey, headerRequestID)(hlog.AccessHandler(logAccess)(apiRouter)))
+}
+
 // ConfigureAPI configures API Server with interrupt handling
 func ConfigureAPI(httpConfig config.HTTPConfig, iListener ServerLifecycleListener, apiRouter *httprouter.Router) *http.Server {
 	listener = iListener
-	handler := hlog.NewHandler(log.Logger)(hlog.AccessHandler(func(r *http.Request, status, size int, duration time.Duration) {
-		hlog.FromRequest(r).Info().
-			Str("method", r.Method).
-			Str("url", r.URL.String()).
-			Int("status", status).
-			Int("size", size).
-			Dur("duration", duration).
-			Msg("")
-	})(apiRouter))
+	handler := getHandler(apiRouter)
 	server = &http.Server{
 		Handler:      handler,
 		Addr:         httpConfig.GetHTTPListeningAddr(),

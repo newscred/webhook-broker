@@ -54,10 +54,10 @@ func TestMain(m *testing.M) {
 	}
 }
 
-func createTestRouter(endpoints ...EndpointController) *httprouter.Router {
+func createTestRouter(endpoints ...EndpointController) http.Handler {
 	testRouter := httprouter.New()
 	setupAPIRoutes(testRouter, endpoints...)
-	return testRouter
+	return getHandler(testRouter)
 }
 
 func TestStatus(t *testing.T) {
