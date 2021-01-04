@@ -31,6 +31,7 @@ type Controllers struct {
 	ProducersController *ProducersController
 	ProducerController  *ProducerController
 	ChannelController   *ChannelController
+	ChannelsController  *ChannelsController
 	ConsumerController  *ConsumerController
 	ConsumersController *ConsumersController
 	BroadcastController *BroadcastController
@@ -44,7 +45,7 @@ var (
 	routerInitializer sync.Once
 	server            *http.Server
 	// ControllerInjector for binding controllers
-	ControllerInjector = wire.NewSet(ConfigureAPI, NewRouter, NewStatusController, NewProducersController, NewProducerController, NewChannelController, NewConsumerController, NewConsumersController, NewBroadcastController, NewMessageController, NewMessagesController, NewDLQController, wire.Struct(new(Controllers), "StatusController", "ProducersController", "ProducerController", "ChannelController", "ConsumerController", "ConsumersController", "BroadcastController", "MessageController", "MessagesController", "DLQController"))
+	ControllerInjector = wire.NewSet(ConfigureAPI, NewRouter, NewStatusController, NewProducersController, NewProducerController, NewChannelController, NewChannelsController, NewConsumerController, NewConsumersController, NewBroadcastController, NewMessageController, NewMessagesController, NewDLQController, wire.Struct(new(Controllers), "StatusController", "ProducersController", "ProducerController", "ChannelController", "ConsumerController", "ConsumersController", "BroadcastController", "MessageController", "MessagesController", "DLQController", "ChannelsController"))
 	// ErrUnsupportedMediaType is returned when client does not provide appropriate `Content-Type` header
 	ErrUnsupportedMediaType = errors.New("Media type not supported")
 	// ErrConditionalFailed is returned when update is missing `If-Unmodified-Since` header
@@ -164,7 +165,7 @@ func NewRouter(controllers *Controllers) *httprouter.Router {
 	apiRouter.Handler(http.MethodGet, "/debug/pprof/block", pprof.Handler("block"))
 	setupAPIRoutes(apiRouter, controllers.StatusController, controllers.ProducersController, controllers.ProducerController, controllers.ChannelController,
 		controllers.ConsumerController, controllers.ConsumersController, controllers.BroadcastController, controllers.MessageController,
-		controllers.MessagesController, controllers.DLQController)
+		controllers.MessagesController, controllers.DLQController, controllers.ChannelsController)
 	return apiRouter
 }
 
