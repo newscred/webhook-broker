@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net"
@@ -16,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/influxdata/tdigest"
 	"github.com/julienschmidt/httprouter"
 )
 
@@ -59,6 +61,7 @@ const (
 	payload                        = `{"test":"hello world"}`
 	contentType                    = "application/json"
 	concurrentPushWorkers          = 50
+	maxMessages                    = 1000000
 )
 
 func findPort() int {
@@ -150,7 +153,12 @@ func createConsumers(baseURI string) int {
 	return consumerCount
 }
 func broadcastMessage(sendCount int) (err error) {
+	td := tdigest.NewWithCompression(maxMessages)
+	batchStart := time.Now()
+	var wg sync.WaitGroup
+	wg.Add(sendCount)
 	sendFn := func() {
+		start := time.Now()
 		req, _ := http.NewRequest(http.MethodPost, brokerBaseURL+"/channel/"+channelID+"/broadcast", strings.NewReader(payload))
 		defer req.Body.Close()
 		req.Header.Add(headerContentType, contentType)
@@ -169,6 +177,8 @@ func broadcastMessage(sendCount int) (err error) {
 				err = errDuringCreation
 			}
 		}
+		td.Add(float64(time.Since(start).Milliseconds()), 1)
+		wg.Done()
 	}
 	switch {
 	case sendCount == 1:
@@ -194,6 +204,8 @@ func broadcastMessage(sendCount int) (err error) {
 			sendChan <- index
 		}
 	}
+	wg.Wait()
+	log.Println(fmt.Sprintf("Dispatched %d messages in %s; per message - average: %f, 75th percentile: %f, 95th percentile: %f, 99th percentile: %f", sendCount, time.Since(batchStart), td.Quantile(0.5), td.Quantile(0.75), td.Quantile(0.95), td.Quantile(0.99)))
 	return err
 }
 func addConsumerVerified(expectedEventCount int, assert bool, simulateFailures int) *sync.WaitGroup {
@@ -305,7 +317,7 @@ func testBasicObjectCreation(portString string) {
 func testMessageTransmission() {
 	log.Println("Starting message broadcast", time.Now())
 	defaultMax := 10000
-	steps := []int{1, 10, 100, 500, 1000, 2500, 5000, 10000, 100000, 1000000}
+	steps := []int{1, 10, 100, 500, 1000, 2500, 5000, 10000, 100000, maxMessages}
 	failures := 2
 	for _, step := range steps {
 		if step > defaultMax {
