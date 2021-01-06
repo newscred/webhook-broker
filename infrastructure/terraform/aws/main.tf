@@ -8,6 +8,16 @@ data "aws_security_group" "default" {
 }
 
 
+locals {
+  cluster_name = "test-eks-w7b6"
+  k8s_service_account_namespace = "kube-system"
+  k8s_service_account_username  = "service-controller"
+  k8s_service_account_name      = "cluster-autoscaler-aws-cluster-autoscaler-chart"
+  k8s_dashboard_namespace       = "kubernetes-dashboard"
+  k8s_metrics_namespace         = "metrics"
+  es_domain                     = "test-w7b6"
+}
+
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "2.64.0"
@@ -52,6 +62,55 @@ module "vpc" {
     Project  = "Secret"
     Endpoint = "true"
   }
+}
+
+resource "aws_iam_service_linked_role" "es" {
+  aws_service_name = "es.amazonaws.com"
+}
+
+data "aws_caller_identity" "current" {}
+
+resource "aws_elasticsearch_domain" "test-w7b6" {
+  domain_name           = local.es_domain
+  elasticsearch_version = "7.9"
+  cluster_config {
+    instance_type = "t2.medium.elasticsearch"
+    instance_count = 3
+    zone_awareness_enabled = true
+    zone_awareness_config {
+      availability_zone_count = 3
+    }
+  }
+  ebs_options {
+    ebs_enabled = true
+    volume_size = 35
+  }
+  vpc_options {
+    subnet_ids = module.vpc.private_subnets
+  }
+  domain_endpoint_options {
+    enforce_https = false
+    tls_security_policy = "Policy-Min-TLS-1-2-2019-07"
+  }
+
+  access_policies = <<CONFIG
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Action": "es:*",
+            "Principal": "*",
+            "Effect": "Allow",
+            "Resource": "arn:aws:es:${var.region}:${data.aws_caller_identity.current.account_id}:domain/${local.es_domain}/*"
+        }
+    ]
+}
+CONFIG
+
+  tags = {
+    Domain = "test-w7b6"
+  }
+  depends_on = [aws_iam_service_linked_role.es]
 }
 
 module "rds" {
@@ -132,15 +191,6 @@ provider "kubernetes" {
 }
 
 data "aws_availability_zones" "available" {
-}
-
-locals {
-  cluster_name = "test-eks-w7b6"
-  k8s_service_account_namespace = "kube-system"
-  k8s_service_account_username  = "service-controller"
-  k8s_service_account_name      = "cluster-autoscaler-aws-cluster-autoscaler-chart"
-  k8s_dashboard_namespace       = "kubernetes-dashboard"
-  k8s_metrics_namespace         = "metrics"
 }
 
 module "eks" {
