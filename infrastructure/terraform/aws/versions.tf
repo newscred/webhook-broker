@@ -7,11 +7,11 @@ terraform {
       version = "3.22.0"
     }
 
-    random = {
-      version = "~> 3.0.0"
+    local = {
+      version = "~> 2.0.0"
     }
 
-    local = {
+    external = {
       version = "~> 2.0.0"
     }
 

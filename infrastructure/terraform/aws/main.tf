@@ -2,12 +2,6 @@ provider "aws" {
   region = var.region
 }
 
-data "aws_security_group" "default" {
-  name   = "default"
-  vpc_id = module.vpc.vpc_id
-}
-
-
 locals {
   cluster_name = "test-eks-w7b6"
   k8s_service_account_namespace = "kube-system"
@@ -16,6 +10,38 @@ locals {
   k8s_dashboard_namespace       = "kubernetes-dashboard"
   k8s_metrics_namespace         = "metrics"
   es_domain                     = "test-w7b6"
+  vpc_cidr_block                = "20.10.0.0/16"
+  vpn_cidr_block                = "17.10.0.0/16"
+}
+
+data "aws_security_group" "default" {
+  name   = "default"
+  vpc_id = module.vpc.vpc_id
+}
+
+resource "aws_security_group_rule" "default_egress" {
+  type              = "egress"
+  from_port         = 0
+  to_port           = 0
+  protocol          = "-1"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = data.aws_security_group.default.id
+}
+
+resource "aws_security_group" "es" {
+  name        = "elasticsearch-${local.es_domain}"
+  description = "Managed by Terraform"
+  vpc_id      = module.vpc.vpc_id
+
+  ingress {
+    from_port = 443
+    to_port   = 443
+    protocol  = "tcp"
+
+    cidr_blocks = [
+      local.vpc_cidr_block, local.vpn_cidr_block
+    ]
+  }
 }
 
 module "vpc" {
@@ -24,7 +50,7 @@ module "vpc" {
 
   name = "webhook-broker-vpc"
 
-  cidr = "20.10.0.0/16" # 10.0.0.0/8 is reserved for EC2-Classic
+  cidr = local.vpc_cidr_block # 10.0.0.0/8 is reserved for EC2-Classic
 
   azs                 = var.azs
   private_subnets     = ["20.10.1.0/24", "20.10.2.0/24", "20.10.3.0/24"]
@@ -64,36 +90,48 @@ module "vpc" {
   }
 }
 
+module "client_vpn" {
+  source = "./modules/client-vpn/"
+
+  vpc_id              = module.vpc.vpc_id
+  vpn_cidr            = local.vpn_cidr_block
+  private_subnets     = [module.vpc.private_subnets[0], module.vpc.private_subnets[1]]
+  vpn_server_cert_arn = var.vpn_server_cert_arn
+  vpn_client_cert_arn = var.vpn_client_cert_arn
+  region              = var.region
+}
+
 resource "aws_iam_service_linked_role" "es" {
   aws_service_name = "es.amazonaws.com"
 }
 
 data "aws_caller_identity" "current" {}
 
-resource "aws_elasticsearch_domain" "test-w7b6" {
+resource "aws_elasticsearch_domain" "test_w7b6" {
   domain_name           = local.es_domain
   elasticsearch_version = "7.9"
   cluster_config {
-    instance_type = "t2.medium.elasticsearch"
-    instance_count = 3
+    instance_type          = "t2.medium.elasticsearch"
+    instance_count         = 3
     zone_awareness_enabled = true
     zone_awareness_config {
       availability_zone_count = 3
     }
   }
   ebs_options {
-    ebs_enabled = true
-    volume_size = 35
+    ebs_enabled         = true
+    volume_size         = 35
   }
   vpc_options {
-    subnet_ids = module.vpc.private_subnets
+    subnet_ids          = module.vpc.private_subnets
+    security_group_ids  = [aws_security_group.es.id]
   }
   domain_endpoint_options {
-    enforce_https = false
+    enforce_https       = false
     tls_security_policy = "Policy-Min-TLS-1-2-2019-07"
   }
 
-  access_policies = <<CONFIG
+  access_policies       = <<CONFIG
 {
     "Version": "2012-10-17",
     "Statement": [

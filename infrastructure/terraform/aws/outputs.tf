@@ -26,6 +26,20 @@ output "database_subnets" {
   value       = module.vpc.database_subnets
 }
 
+# VPN
+output "vpn_id" {
+  value       = module.client_vpn.vpn_id
+}
+
+# Elasticsearch
+output "es_endpoint" {
+  value       = aws_elasticsearch_domain.test_w7b6.endpoint
+}
+
+output "es_kibana" {
+  value       = aws_elasticsearch_domain.test_w7b6.kibana_endpoint
+}
+
 # RDS
 output "this_db_instance_address" {
   description = "The address of the RDS instance"
