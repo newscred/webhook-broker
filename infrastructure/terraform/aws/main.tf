@@ -14,9 +14,12 @@ locals {
   vpn_cidr_block                = "17.10.0.0/16"
 }
 
+# VPC and Client VPN
+
 data "aws_security_group" "default" {
-  name   = "default"
-  vpc_id = module.vpc.vpc_id
+  name       = "default"
+  vpc_id     = module.vpc.vpc_id
+  depends_on = [module.vpc]
 }
 
 resource "aws_security_group_rule" "default_egress" {
@@ -26,22 +29,7 @@ resource "aws_security_group_rule" "default_egress" {
   protocol          = "-1"
   cidr_blocks       = ["0.0.0.0/0"]
   security_group_id = data.aws_security_group.default.id
-}
-
-resource "aws_security_group" "es" {
-  name        = "elasticsearch-${local.es_domain}"
-  description = "Managed by Terraform"
-  vpc_id      = module.vpc.vpc_id
-
-  ingress {
-    from_port = 443
-    to_port   = 443
-    protocol  = "tcp"
-
-    cidr_blocks = [
-      local.vpc_cidr_block, local.vpn_cidr_block
-    ]
-  }
+  depends_on        = [module.vpc]
 }
 
 module "vpc" {
@@ -101,13 +89,34 @@ module "client_vpn" {
   region              = var.region
 }
 
+# Elasticsearch for log ingestion
+
+resource "aws_security_group" "es" {
+  count       = var.create_es ? 1 : 0
+  name        = "elasticsearch-${local.es_domain}"
+  description = "Managed by Terraform"
+  vpc_id      = module.vpc.vpc_id
+
+  ingress {
+    from_port = 443
+    to_port   = 443
+    protocol  = "tcp"
+
+    cidr_blocks = [
+      local.vpc_cidr_block, local.vpn_cidr_block
+    ]
+  }
+}
+
 resource "aws_iam_service_linked_role" "es" {
+  count            = var.create_es ? 1 : 0
   aws_service_name = "es.amazonaws.com"
 }
 
 data "aws_caller_identity" "current" {}
 
 resource "aws_elasticsearch_domain" "test_w7b6" {
+  count                 = var.create_es ? 1 : 0
   domain_name           = local.es_domain
   elasticsearch_version = "7.9"
   cluster_config {
@@ -124,7 +133,7 @@ resource "aws_elasticsearch_domain" "test_w7b6" {
   }
   vpc_options {
     subnet_ids          = module.vpc.private_subnets
-    security_group_ids  = [aws_security_group.es.id]
+    security_group_ids  = [aws_security_group.es[0].id]
   }
   domain_endpoint_options {
     enforce_https       = false
@@ -151,12 +160,15 @@ CONFIG
   depends_on = [aws_iam_service_linked_role.es]
 }
 
+# RDS
+
 module "rds" {
-  source  = "terraform-aws-modules/rds/aws"
-  version = "2.20.0"
+  source               = "terraform-aws-modules/rds/aws"
+  version              = "2.20.0"
 
-  identifier = "w7b6"
+  create_db_instance   = var.create_rds
 
+  identifier        = "w7b6"
   engine            = "mysql"
   engine_version    = "8.0.21"
   instance_class    = "db.t2.large"
@@ -212,6 +224,8 @@ module "rds" {
   ]
 
 }
+
+# EKS
 
 data "aws_eks_cluster" "cluster" {
   name = module.eks.cluster_id
@@ -384,7 +398,9 @@ resource "kubernetes_cluster_role_binding" "dashboard-cluster-admin-binding" {
 
 provider "helm" {
   kubernetes {
-    config_path = module.eks.kubeconfig_filename
+    host                   = data.aws_eks_cluster.cluster.endpoint
+    cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority.0.data)
+    token                  = data.aws_eks_cluster_auth.cluster.token
   }
 }
 
@@ -404,7 +420,7 @@ resource "helm_release" "cluster-autoscaler" {
   chart      = "cluster-autoscaler-chart"
 
   values = [
-    "${file("cluster-autoscaler-chart-values.yml")}"
+    file("cluster-autoscaler-chart-values.yml")
   ]
 }
 
@@ -414,6 +430,7 @@ resource "helm_release" "kubernetes-dashboard" {
 
   repository = "https://kubernetes.github.io/dashboard/"
   chart      = "kubernetes-dashboard"
+  depends_on = [kubernetes_namespace.k8s-dashboard-namespace]
 }
 
 # TODO: This chart has been deprecated, we will need to move to the new chart once official
@@ -424,6 +441,8 @@ resource "helm_release" "metrics-server" {
 
   repository = "https://charts.helm.sh/stable"
   chart      = "metrics-server"
+
+  depends_on = [kubernetes_namespace.metrics-namespace]
 
   set {
       name = "image.repository"

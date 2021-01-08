@@ -2,5 +2,5 @@ terraform.tfstate*
 .terraform*
 kubeconfig*
 
-# terraform customization tf
-custom_variables.tf
+# terraform customization tfvars
+custom_vars.auto.tfvars

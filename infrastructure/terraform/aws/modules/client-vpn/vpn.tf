@@ -92,6 +92,7 @@ resource aws_ec2_client_vpn_route "internet_traffic_route" {
   client_vpn_endpoint_id = aws_ec2_client_vpn_endpoint.vpn.id
   destination_cidr_block = "0.0.0.0/0"
   target_vpc_subnet_id   = var.private_subnets[0]
+  depends_on             = [aws_ec2_client_vpn_network_association.private_sb_1, aws_ec2_client_vpn_network_association.private_sb_2]
 }
 
 
