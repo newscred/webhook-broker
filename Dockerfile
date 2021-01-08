@@ -32,3 +32,4 @@ RUN apk update && apk add curl
 WORKDIR /
 COPY --from=build-env /go/src/github.com/imyousuf/webhook-broker/webhook-broker /webhook-broker
 COPY --from=build-env /go/src/github.com/imyousuf/webhook-broker/migration /migration
+CMD [ "webhook-broker", "-migrate", "/migration/sqls/" ]

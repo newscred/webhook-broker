@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: w7b6-configmap
+data:
+  webhook-broker.cfg: |
+{{ tpl (.Files.Get "webhook-broker.tpl.cfg") . | indent 4 }}
