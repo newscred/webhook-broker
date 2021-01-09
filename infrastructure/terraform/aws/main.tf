@@ -472,3 +472,53 @@ resource "helm_release" "metrics-server" {
       value = "true"
   }
 }
+
+# AWS ALB Ingression Controller
+
+# This file is from - view-source:https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json
+# Following the documentation in https://github.com/aws/eks-charts/tree/master/stable/aws-load-balancer-controller
+resource "aws_iam_policy" "alb_ingress_controller" {
+  name_prefix = "alb-ingress"
+  description = "EKS ALB Ingress policy for cluster ${module.eks.cluster_id}"
+  policy      = file("aws-alb-ingress-policy.json")
+}
+
+module "iam_assumable_role_ingress" {
+  source                        = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
+  version                       = "3.6.0"
+  create_role                   = true
+  role_name                     = "alb-ingress"
+  provider_url                  = replace(module.eks.cluster_oidc_issuer_url, "https://", "")
+  role_policy_arns              = [aws_iam_policy.alb_ingress_controller.arn]
+  oidc_fully_qualified_subjects = ["system:serviceaccount:${local.k8s_service_account_namespace}:${local.k8s_alb_service_account_name}"]
+}
+
+resource "helm_release" "alb-ingress-controller" {
+  name       = "aws-load-balancer-controller"
+  namespace  = local.k8s_service_account_namespace
+
+  repository = "https://aws.github.io/eks-charts"
+  chart      = "aws-load-balancer-controller"
+
+  depends_on = [module.iam_assumable_role_ingress]
+
+  set {
+      name   = "serviceAccount.name"
+      value  = local.k8s_alb_service_account_name
+  }
+
+  set {
+      name   = "clusterName"
+      value  = local.cluster_name
+  }
+
+  set {
+      name   = "region"
+      value  = var.region
+  }
+
+  set {
+      name   = "vpcId"
+      value  = module.vpc.vpc_id
+  }
+}
