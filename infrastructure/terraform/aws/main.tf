@@ -3,15 +3,16 @@ provider "aws" {
 }
 
 locals {
-  cluster_name = "test-eks-w7b6"
-  k8s_service_account_namespace = "kube-system"
-  k8s_service_account_username  = "service-controller"
-  k8s_service_account_name      = "cluster-autoscaler-aws-cluster-autoscaler-chart"
-  k8s_dashboard_namespace       = "kubernetes-dashboard"
-  k8s_metrics_namespace         = "metrics"
-  es_domain                     = "test-w7b6"
-  vpc_cidr_block                = "20.10.0.0/16"
-  vpn_cidr_block                = "17.10.0.0/16"
+  cluster_name                        = "test-eks-w7b6"
+  k8s_service_account_namespace       = "kube-system"
+  k8s_dashboard_service_account_name  = "k8s-dashboard-svc-controller"
+  k8s_autoscaler_service_account_name = "cluster-autoscaler-aws-cluster-autoscaler-chart"
+  k8s_alb_service_account_name        = "aws-load-balancer-controller"
+  k8s_dashboard_namespace             = "kubernetes-dashboard"
+  k8s_metrics_namespace               = "metrics"
+  es_domain                           = "test-es-w7b6"
+  vpc_cidr_block                      = "20.10.0.0/16"
+  vpn_cidr_block                      = "17.10.0.0/16"
 }
 
 # VPC and Client VPN
@@ -227,21 +228,6 @@ module "rds" {
 
 # EKS
 
-data "aws_eks_cluster" "cluster" {
-  name = module.eks.cluster_id
-}
-
-data "aws_eks_cluster_auth" "cluster" {
-  name = module.eks.cluster_id
-}
-
-provider "kubernetes" {
-  host                   = data.aws_eks_cluster.cluster.endpoint
-  cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority.0.data)
-  token                  = data.aws_eks_cluster_auth.cluster.token
-  load_config_file       = false
-}
-
 data "aws_availability_zones" "available" {
 }
 
@@ -301,21 +287,32 @@ module "eks" {
   ]
 }
 
-module "iam_assumable_role_admin" {
-  source                        = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
-  version                       = "3.6.0"
-  create_role                   = true
-  role_name                     = "cluster-autoscaler"
-  provider_url                  = replace(module.eks.cluster_oidc_issuer_url, "https://", "")
-  role_policy_arns              = [aws_iam_policy.cluster_autoscaler.arn]
-  oidc_fully_qualified_subjects = ["system:serviceaccount:${local.k8s_service_account_namespace}:${local.k8s_service_account_name}"]
+# Kubernetes and Helm Setup
+
+data "aws_eks_cluster" "cluster" {
+  name = module.eks.cluster_id
 }
 
-resource "aws_iam_policy" "cluster_autoscaler" {
-  name_prefix = "cluster-autoscaler"
-  description = "EKS cluster-autoscaler policy for cluster ${module.eks.cluster_id}"
-  policy      = data.aws_iam_policy_document.cluster_autoscaler.json
+data "aws_eks_cluster_auth" "cluster" {
+  name = module.eks.cluster_id
 }
+
+provider "kubernetes" {
+  host                   = data.aws_eks_cluster.cluster.endpoint
+  cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority.0.data)
+  token                  = data.aws_eks_cluster_auth.cluster.token
+  load_config_file       = false
+}
+
+provider "helm" {
+  kubernetes {
+    host                   = data.aws_eks_cluster.cluster.endpoint
+    cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority.0.data)
+    token                  = data.aws_eks_cluster_auth.cluster.token
+  }
+}
+
+# Cluster Auto Scaler
 
 data "aws_iam_policy_document" "cluster_autoscaler" {
   statement {
@@ -359,24 +356,27 @@ data "aws_iam_policy_document" "cluster_autoscaler" {
   }
 }
 
-resource "kubernetes_namespace" "k8s-dashboard-namespace" {
-  metadata {
-    name = local.k8s_dashboard_namespace
-  }
+resource "aws_iam_policy" "cluster_autoscaler" {
+  name_prefix = "cluster-autoscaler"
+  description = "EKS cluster-autoscaler policy for cluster ${module.eks.cluster_id}"
+  policy      = data.aws_iam_policy_document.cluster_autoscaler.json
 }
 
-resource "kubernetes_namespace" "metrics-namespace" {
-  metadata {
-    name = local.k8s_metrics_namespace
-  }
+module "iam_assumable_role_admin" {
+  source                        = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
+  version                       = "3.6.0"
+  create_role                   = true
+  role_name                     = "cluster-autoscaler"
+  provider_url                  = replace(module.eks.cluster_oidc_issuer_url, "https://", "")
+  role_policy_arns              = [aws_iam_policy.cluster_autoscaler.arn]
+  oidc_fully_qualified_subjects = ["system:serviceaccount:${local.k8s_service_account_namespace}:${local.k8s_autoscaler_service_account_name}"]
 }
-
 
 # The following configuration are to represent - https://raw.githubusercontent.com/hashicorp/learn-terraform-provision-eks-cluster/master/kubernetes-dashboard-admin.rbac.yaml
 # From - https://learn.hashicorp.com/tutorials/terraform/eks
-resource "kubernetes_cluster_role_binding" "dashboard-cluster-admin-binding" {
+resource "kubernetes_cluster_role_binding" "cluster-admin-binding" {
   metadata {
-    name = local.k8s_service_account_username
+    name = "cluster-admin-bindings"
   }
   role_ref {
     api_group = "rbac.authorization.k8s.io"
@@ -385,22 +385,14 @@ resource "kubernetes_cluster_role_binding" "dashboard-cluster-admin-binding" {
   }
   subject {
     kind      = "ServiceAccount"
-    name      = local.k8s_service_account_username
-    namespace = "kube-system"
+    name      = local.k8s_dashboard_service_account_name
+    namespace = local.k8s_dashboard_namespace
   }
   # This is needed for metrics-server to publish collected metrics
   subject {
     kind      = "ServiceAccount"
     name      = "metrics-server"
-    namespace = "kube-system"
-  }
-}
-
-provider "helm" {
-  kubernetes {
-    host                   = data.aws_eks_cluster.cluster.endpoint
-    cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority.0.data)
-    token                  = data.aws_eks_cluster_auth.cluster.token
+    namespace = local.k8s_metrics_namespace
   }
 }
 
@@ -424,6 +416,14 @@ resource "helm_release" "cluster-autoscaler" {
   ]
 }
 
+# Kubernetes Dashboard
+
+resource "kubernetes_namespace" "k8s-dashboard-namespace" {
+  metadata {
+    name = local.k8s_dashboard_namespace
+  }
+}
+
 resource "helm_release" "kubernetes-dashboard" {
   name       = "kubernetes-dashboard"
   namespace  = local.k8s_dashboard_namespace
@@ -431,6 +431,19 @@ resource "helm_release" "kubernetes-dashboard" {
   repository = "https://kubernetes.github.io/dashboard/"
   chart      = "kubernetes-dashboard"
   depends_on = [kubernetes_namespace.k8s-dashboard-namespace]
+
+  set {
+      name = "serviceAccount.name"
+      value = local.k8s_dashboard_service_account_name
+  }
+}
+
+# Metrics Server required for HPA
+
+resource "kubernetes_namespace" "metrics-namespace" {
+  metadata {
+    name = local.k8s_metrics_namespace
+  }
 }
 
 # TODO: This chart has been deprecated, we will need to move to the new chart once official
