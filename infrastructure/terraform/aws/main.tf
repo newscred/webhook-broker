@@ -172,7 +172,7 @@ module "rds" {
   identifier        = "w7b6"
   engine            = "mysql"
   engine_version    = "8.0.21"
-  instance_class    = "db.t2.large"
+  instance_class    = "db.r5.large"
   allocated_storage = 5
   storage_encrypted = false
 

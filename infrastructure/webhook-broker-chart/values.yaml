@@ -8,7 +8,7 @@ image:
   repository: registry.hub.docker.com/imyousuf/webhook-broker
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: ""
+  tag: "latest"
 
 imagePullSecrets: []
 nameOverride: ""
@@ -19,10 +19,10 @@ broker:
   probeInitialDelay: 5
   probeInterval: 10
   mysqlConnection: "webhook_broker:zxc909zxc@tcp(mysql:3306)/webhook-broker?charset=utf8&parseTime=true&multiStatements=true"
-  dbIdleConnections: 15
-  dbMaxOpenConnections: 40
+  dbIdleConnections: 10
+  dbMaxOpenConnections: 20
   maxQueueSize: 1000000
-  maxWorkers: 35
+  maxWorkers: 15
   maxRetry: 7
   backoffs: "10,30,60,150"
   consumerConnectionTimeout: 30
@@ -110,8 +110,8 @@ resources:
 
 autoscaling:
   enabled: true
-  minReplicas: 1
-  maxReplicas: 100
+  minReplicas: 5
+  maxReplicas: 50
   targetCPUUtilizationPercentage: 80
   targetMemoryUtilizationPercentage: 70
 

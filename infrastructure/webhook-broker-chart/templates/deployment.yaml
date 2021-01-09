@@ -53,11 +53,11 @@ spec:
             periodSeconds: {{ .Values.broker.probeInterval }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-      {{- with .Values.nodeSelector }}
       volumes:
         - name: conf-vol
           configMap:
             name: webhook-broker.cfg
+      {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
