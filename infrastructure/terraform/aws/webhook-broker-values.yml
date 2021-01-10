@@ -11,7 +11,10 @@ ingress:
     alb.ingress.kubernetes.io/certificate-arn: ${https_cert_arn}
     alb.ingress.kubernetes.io/subnets: ${subnets}
     alb.ingress.kubernetes.io/tags: Environment=dev
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: /_status
+    external-dns.alpha.kubernetes.io/hostname: ${hostname}
   hosts:
     - host: ${hostname}
       paths:
-        - path: /
+        - path: /*

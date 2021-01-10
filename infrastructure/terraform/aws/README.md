@@ -13,6 +13,15 @@ vpn_client_cert_arn = "arn:aws:acm:<REGION>:<ACCOUNT_ID>:certificate/<CERT_ARN_F
 
 Once you apply the config, it will generate a `config.ovpn` file for connecting to VPN; make sure to edit it as per Client VPN [README](./modules/client-vpn/README.md).
 
+Also set the following variables -
+
+```terraform
+webhook_broker_https_cert_arn    = "arn:aws:acm:<REGION>:<ACCOUNT_ID>:certificate/<HTTPS_CERT_FOR_HOSTNAME>"
+webhook_broker_access_log_bucket = "logs-bucket"
+webhook_broker_access_log_path   = "path-prefix"
+webhook_broker_hostname          = "match-hostname-to-certificate"
+```
+
 The `kubernetes-dashboard` ingress controller is disabled by default as we are deploying the cluster in public subnet; please consider enabling it when deploying in a private subnet by passing [Helm Chart values](https://artifacthub.io/packages/helm/k8s-dashboard/kubernetes-dashboard).
 
 Get login token to access the dashboard using -

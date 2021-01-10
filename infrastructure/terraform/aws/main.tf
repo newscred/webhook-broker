@@ -8,6 +8,7 @@ locals {
   k8s_dashboard_service_account_name  = "k8s-dashboard-svc-controller"
   k8s_autoscaler_service_account_name = "cluster-autoscaler-aws-cluster-autoscaler-chart"
   k8s_alb_service_account_name        = "aws-load-balancer-controller"
+  k8s_external_dns_account_name       = "external-dns"
   k8s_dashboard_namespace             = "kubernetes-dashboard"
   k8s_w7b6_namespace                  = "webhook-broker"
   k8s_metrics_namespace               = "metrics"
@@ -17,22 +18,6 @@ locals {
 }
 
 # VPC and Client VPN
-
-data "aws_security_group" "default" {
-  name       = "default"
-  vpc_id     = module.vpc.vpc_id
-  depends_on = [module.vpc]
-}
-
-resource "aws_security_group_rule" "default_egress" {
-  type              = "egress"
-  from_port         = 0
-  to_port           = 0
-  protocol          = "-1"
-  cidr_blocks       = ["0.0.0.0/0"]
-  security_group_id = data.aws_security_group.default.id
-  depends_on        = [module.vpc]
-}
 
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
@@ -46,6 +31,9 @@ module "vpc" {
   private_subnets     = ["20.10.1.0/24", "20.10.2.0/24", "20.10.3.0/24"]
   public_subnets      = ["20.10.11.0/24", "20.10.12.0/24", "20.10.13.0/24"]
   database_subnets    = ["20.10.21.0/24", "20.10.22.0/24", "20.10.23.0/24"]
+
+  private_subnet_tags = {"kubernetes.io/role/internal-elb":"1"}
+  public_subnet_tags  = {"kubernetes.io/role/elb":"1"}
 
   create_database_subnet_group = true
 
@@ -66,7 +54,7 @@ module "vpc" {
   # Default security group - ingress/egress rules cleared to deny all
   manage_default_security_group  = true
   default_security_group_ingress = [{}]
-  default_security_group_egress  = [{}]
+  default_security_group_egress  = [{from_port = 0, to_port = 0, protocol = "-1", cidr_blocks = "0.0.0.0/0"}]
 
   tags = {
     Owner       = "user"
@@ -347,8 +335,10 @@ resource "helm_release" "cluster-autoscaler" {
   repository = "https://kubernetes.github.io/autoscaler"
   chart      = "cluster-autoscaler-chart"
 
+  depends_on = [module.iam_assumable_role_admin]
+
   values = [
-    file("cluster-autoscaler-chart-values.yml")
+    templatefile("cluster-autoscaler-chart-values.yml", {role_arn = module.iam_assumable_role_admin.this_iam_role_arn})
   ]
 }
 
@@ -438,26 +428,39 @@ resource "helm_release" "alb-ingress-controller" {
 
   depends_on = [module.iam_assumable_role_ingress]
 
-  set {
-      name   = "serviceAccount.name"
-      value  = local.k8s_alb_service_account_name
-  }
-
-  set {
-      name   = "clusterName"
-      value  = local.cluster_name
-  }
-
-  set {
-      name   = "region"
-      value  = var.region
-  }
-
-  set {
-      name   = "vpcId"
-      value  = module.vpc.vpc_id
-  }
+  values = [templatefile("alb-ingress-chart-values.yml", {role_arn = module.iam_assumable_role_ingress.this_iam_role_arn, svc_acc_name = local.k8s_alb_service_account_name, cluster_name = local.cluster_name, region = var.region, vpc_id = module.vpc.vpc_id})]
 }
+
+# External DNS
+
+resource "aws_iam_policy" "external_dns" {
+  name_prefix = "external-dns"
+  description = "External DNS policy for cluster ${module.eks.cluster_id}"
+  policy      = file("external-dns-policy.json")
+}
+
+module "iam_assumable_role_external_dns" {
+  source                        = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
+  version                       = "3.6.0"
+  create_role                   = true
+  role_name                     = "external-dns"
+  provider_url                  = replace(module.eks.cluster_oidc_issuer_url, "https://", "")
+  role_policy_arns              = [aws_iam_policy.external_dns.arn]
+  oidc_fully_qualified_subjects = ["system:serviceaccount:${local.k8s_service_account_namespace}:${local.k8s_external_dns_account_name}"]
+}
+
+resource "helm_release" "external_dns" {
+  name       = "external-dns"
+  namespace  = local.k8s_service_account_namespace
+
+  repository = "https://charts.bitnami.com/bitnami"
+  chart      = "external-dns"
+
+  depends_on = [module.iam_assumable_role_external_dns]
+
+  values = [templatefile("external-dns-chart-values.yml", {role_arn = module.iam_assumable_role_external_dns.this_iam_role_arn, svc_acc_name = local.k8s_external_dns_account_name, region = var.region})]
+}
+
 
 # Webhook Broker
 
@@ -494,7 +497,7 @@ module "rds" {
   password = var.db_password
   port     = "3306"
 
-  vpc_security_group_ids = [data.aws_security_group.default.id, module.sg_mysql.this_security_group_id]
+  vpc_security_group_ids = [module.vpc.default_security_group_id, module.sg_mysql.this_security_group_id]
 
   maintenance_window = "Sun:00:00-Sun:03:00"
   backup_window      = "04:00-07:00"
@@ -554,9 +557,9 @@ resource "helm_release" "webhook-broker" {
   chart      = "webhook-broker-chart"
   version    = "0.1.0-dev"
 
-  depends_on = [module.rds, kubernetes_namespace.webhook_broker_namespace]
+  depends_on = [module.rds, kubernetes_namespace.webhook_broker_namespace, helm_release.external_dns]
 
   values = [
-    templatefile("webhook-broker-values.yml", {https_cert_arn=var.webhook_broker_https_cert_arn, db_url="webhook_broker:${var.db_password}@tcp(${module.rds.this_db_instance_endpoint})/webhook-broker?charset=utf8&parseTime=true&multiStatements=true", access_log_s3_bucket=var.webhook_broker_access_log_bucket, access_log_s3_path_prefix=var.webhook_broker_access_log_path, subnets=join(", ", module.vpc.private_subnets), hostname=var.webhook_broker_hostname})
+    templatefile("webhook-broker-values.yml", {https_cert_arn=var.webhook_broker_https_cert_arn, db_url="${module.rds.this_db_instance_username}:${var.db_password}@tcp(${module.rds.this_db_instance_endpoint})/${module.rds.this_db_instance_name}?charset=utf8&parseTime=true&multiStatements=true", access_log_s3_bucket=var.webhook_broker_access_log_bucket, access_log_s3_path_prefix=var.webhook_broker_access_log_path, subnets=join(", ", module.vpc.private_subnets), hostname=var.webhook_broker_hostname})
   ]
 }
