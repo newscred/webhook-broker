@@ -33,13 +33,15 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/webhook-broker"]
+          args: ["-migrate", "/migration/sqls/", "-config", "/app-config/webhook-broker.cfg", "-stop-on-conf-change"]
           ports:
             - name: http
               containerPort: {{ .Values.broker.port }}
               protocol: TCP
           volumeMounts:
             - name: conf-vol
-              mountPath: /webhook-broker.cfg
+              mountPath: /app-config/
           livenessProbe:
             tcpSocket:
               port: {{ .Values.broker.port }}
@@ -56,7 +58,7 @@ spec:
       volumes:
         - name: conf-vol
           configMap:
-            name: webhook-broker.cfg
+            name: w7b6-configmap
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
