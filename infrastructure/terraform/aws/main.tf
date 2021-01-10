@@ -312,12 +312,6 @@ resource "kubernetes_cluster_role_binding" "cluster-admin-binding" {
     name      = local.k8s_dashboard_service_account_name
     namespace = local.k8s_dashboard_namespace
   }
-  # This is needed for metrics-server to publish collected metrics
-  subject {
-    kind      = "ServiceAccount"
-    name      = "metrics-server"
-    namespace = local.k8s_metrics_namespace
-  }
 }
 
 resource "helm_release" "aws-spot-termination-handler" {
@@ -366,22 +360,17 @@ resource "helm_release" "kubernetes-dashboard" {
 
 # Metrics Server required for HPA
 
-resource "kubernetes_namespace" "metrics-namespace" {
-  metadata {
-    name = local.k8s_metrics_namespace
-  }
-}
-
 # TODO: This chart has been deprecated, we will need to move to the new chart once official
 # https://github.com/kubernetes-sigs/metrics-server/issues/572
 resource "helm_release" "metrics-server" {
   name       = "metrics-server"
-  namespace  = local.k8s_metrics_namespace
+  namespace  = local.k8s_service_account_namespace
 
   repository = "https://charts.helm.sh/stable"
   chart      = "metrics-server"
+  version    = "2.11.4"
 
-  depends_on = [kubernetes_namespace.metrics-namespace]
+  depends_on = [module.eks]
 
   set {
       name = "image.repository"
@@ -390,12 +379,7 @@ resource "helm_release" "metrics-server" {
 
   set {
       name = "image.tag"
-      value = "v0.3.7"
-  }
-
-  set {
-      name = "hostNetwork.enabled"
-      value = "true"
+      value = "v0.4.1"
   }
 }
 

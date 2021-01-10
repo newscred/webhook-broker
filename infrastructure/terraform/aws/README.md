@@ -22,6 +22,8 @@ webhook_broker_access_log_path   = "path-prefix"
 webhook_broker_hostname          = "match-hostname-to-certificate"
 ```
 
+One thing to note is, when `terraform destroy` is called, it will not delete the ALB or the Route53 records; so please delete them manually for the time being.
+
 The `kubernetes-dashboard` ingress controller is disabled by default as we are deploying the cluster in public subnet; please consider enabling it when deploying in a private subnet by passing [Helm Chart values](https://artifacthub.io/packages/helm/k8s-dashboard/kubernetes-dashboard).
 
 Get login token to access the dashboard using -
