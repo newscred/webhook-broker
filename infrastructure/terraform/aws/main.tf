@@ -332,7 +332,7 @@ resource "helm_release" "cluster-autoscaler" {
   depends_on = [module.iam_assumable_role_admin]
 
   values = [
-    templatefile("cluster-autoscaler-chart-values.yml", {role_arn = module.iam_assumable_role_admin.this_iam_role_arn})
+    templatefile("conf/cluster-autoscaler-chart-values.yml", {role_arn = module.iam_assumable_role_admin.this_iam_role_arn})
   ]
 }
 
@@ -390,7 +390,7 @@ resource "helm_release" "metrics-server" {
 resource "aws_iam_policy" "alb_ingress_controller" {
   name_prefix = "alb-ingress"
   description = "EKS ALB Ingress policy for cluster ${module.eks.cluster_id}"
-  policy      = file("aws-alb-ingress-policy.json")
+  policy      = file("conf/aws-alb-ingress-policy.json")
 }
 
 module "iam_assumable_role_ingress" {
@@ -412,7 +412,7 @@ resource "helm_release" "alb-ingress-controller" {
 
   depends_on = [module.iam_assumable_role_ingress]
 
-  values = [templatefile("alb-ingress-chart-values.yml", {role_arn = module.iam_assumable_role_ingress.this_iam_role_arn, svc_acc_name = local.k8s_alb_service_account_name, cluster_name = local.cluster_name, region = var.region, vpc_id = module.vpc.vpc_id})]
+  values = [templatefile("conf/alb-ingress-chart-values.yml", {role_arn = module.iam_assumable_role_ingress.this_iam_role_arn, svc_acc_name = local.k8s_alb_service_account_name, cluster_name = local.cluster_name, region = var.region, vpc_id = module.vpc.vpc_id})]
 }
 
 # External DNS
@@ -420,7 +420,7 @@ resource "helm_release" "alb-ingress-controller" {
 resource "aws_iam_policy" "external_dns" {
   name_prefix = "external-dns"
   description = "External DNS policy for cluster ${module.eks.cluster_id}"
-  policy      = file("external-dns-policy.json")
+  policy      = file("conf/external-dns-policy.json")
 }
 
 module "iam_assumable_role_external_dns" {
@@ -442,7 +442,7 @@ resource "helm_release" "external_dns" {
 
   depends_on = [module.iam_assumable_role_external_dns]
 
-  values = [templatefile("external-dns-chart-values.yml", {role_arn = module.iam_assumable_role_external_dns.this_iam_role_arn, svc_acc_name = local.k8s_external_dns_account_name, region = var.region})]
+  values = [templatefile("conf/external-dns-chart-values.yml", {role_arn = module.iam_assumable_role_external_dns.this_iam_role_arn, svc_acc_name = local.k8s_external_dns_account_name, region = var.region})]
 }
 
 
@@ -544,6 +544,6 @@ resource "helm_release" "webhook-broker" {
   depends_on = [module.rds, kubernetes_namespace.webhook_broker_namespace, helm_release.external_dns]
 
   values = [
-    templatefile("webhook-broker-values.yml", {https_cert_arn=var.webhook_broker_https_cert_arn, db_url="${module.rds.this_db_instance_username}:${var.db_password}@tcp(${module.rds.this_db_instance_endpoint})/${module.rds.this_db_instance_name}?charset=utf8&parseTime=true&multiStatements=true", access_log_s3_bucket=var.webhook_broker_access_log_bucket, access_log_s3_path_prefix=var.webhook_broker_access_log_path, subnets=join(", ", module.vpc.private_subnets), hostname=var.webhook_broker_hostname})
+    templatefile("conf/webhook-broker-values.yml", {https_cert_arn=var.webhook_broker_https_cert_arn, db_url="${module.rds.this_db_instance_username}:${var.db_password}@tcp(${module.rds.this_db_instance_endpoint})/${module.rds.this_db_instance_name}?charset=utf8&parseTime=true&multiStatements=true", access_log_s3_bucket=var.webhook_broker_access_log_bucket, access_log_s3_path_prefix=var.webhook_broker_access_log_path, subnets=join(", ", module.vpc.private_subnets), hostname=var.webhook_broker_hostname})
   ]
 }
