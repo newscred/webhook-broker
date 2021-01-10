@@ -1,0 +1,31 @@
+image:
+  tag: 2.10.0
+
+serviceAccount:
+  name: ${svc_acc_name}
+  annotations:
+    eks.amazonaws.com/role-arn: ${role_arn}
+
+cloudWatch:
+  enabled: false
+
+firehose:
+  enabled: false
+
+kinesis:
+  enabled: false
+
+elasticsearch:
+  enabled: true
+  awsRegion: ${region}
+  host: ${es_url}
+
+extraOutputs: |
+  [OUTPUT]
+      Name                         s3
+      Match                        *
+      bucket                       ${log_s3_bucket}
+      region                       ${region}
+      total_file_size              2M
+      s3_key_format                /${log_s3_path_prefix}/$TAG[2]/$TAG[0]/%Y/%m/%d/%H/%M/%S
+      s3_key_format_tag_delimiters .-_

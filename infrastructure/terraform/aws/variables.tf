@@ -34,8 +34,16 @@ variable "webhook_broker_access_log_bucket" {
   default = "some-bucket"
 }
 
+variable "webhook_broker_log_bucket" {
+  default = "some-bucket"
+}
+
 variable "webhook_broker_access_log_path" {
-  default = "some-path-prefix"
+  default = "w7b6-access-log"
+}
+
+variable "webhook_broker_log_path" {
+  default = "w7b6-cluster-log"
 }
 
 variable "webhook_broker_hostname" {

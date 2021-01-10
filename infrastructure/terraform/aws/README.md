@@ -20,6 +20,8 @@ webhook_broker_https_cert_arn    = "arn:aws:acm:<REGION>:<ACCOUNT_ID>:certificat
 webhook_broker_access_log_bucket = "logs-bucket"
 webhook_broker_access_log_path   = "path-prefix"
 webhook_broker_hostname          = "match-hostname-to-certificate"
+webhook_broker_log_bucket        = "cluster-log-bucket"
+webhook_broker_log_path          = "cluster/path/prefix"
 ```
 
 One thing to note is, when `terraform destroy` is called, it will not delete the ALB or the Route53 records; so please delete them manually for the time being.

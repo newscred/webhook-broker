@@ -9,6 +9,7 @@ locals {
   k8s_autoscaler_service_account_name = "cluster-autoscaler-aws-cluster-autoscaler-chart"
   k8s_alb_service_account_name        = "aws-load-balancer-controller"
   k8s_external_dns_account_name       = "external-dns"
+  k8s_fluentbit_account_name          = "aws-fluent-bit"
   k8s_dashboard_namespace             = "kubernetes-dashboard"
   k8s_w7b6_namespace                  = "webhook-broker"
   k8s_metrics_namespace               = "metrics"
@@ -445,6 +446,36 @@ resource "helm_release" "external_dns" {
   values = [templatefile("conf/external-dns-chart-values.yml", {role_arn = module.iam_assumable_role_external_dns.this_iam_role_arn, svc_acc_name = local.k8s_external_dns_account_name, region = var.region})]
 }
 
+# Fluent bit
+
+resource "aws_iam_policy" "fluent_bit" {
+  name_prefix = "fluent-bit"
+  description = "Fluent Bit policy for cluster ${module.eks.cluster_id}"
+  policy      = file("conf/fluent-bit-policy.json")
+}
+
+module "iam_assumable_role_fluent_bit" {
+  source                        = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
+  version                       = "3.6.0"
+  create_role                   = true
+  role_name                     = "fluent-bit"
+  provider_url                  = replace(module.eks.cluster_oidc_issuer_url, "https://", "")
+  role_policy_arns              = [aws_iam_policy.fluent_bit.arn]
+  oidc_fully_qualified_subjects = ["system:serviceaccount:${local.k8s_service_account_namespace}:${local.k8s_fluentbit_account_name}"]
+}
+
+resource "helm_release" "aws_fluent_bit" {
+  count      = var.create_es ? 1 : 0
+  name       = "aws-for-fluent-bit"
+  namespace  = local.k8s_service_account_namespace
+
+  repository = "https://aws.github.io/eks-charts"
+  chart      = "aws-for-fluent-bit"
+
+  depends_on = [module.iam_assumable_role_fluent_bit, aws_elasticsearch_domain.test_w7b6]
+
+  values = [templatefile("conf/fluent-bit-chart-values.yml", {role_arn = module.iam_assumable_role_fluent_bit.this_iam_role_arn, svc_acc_name = local.k8s_fluentbit_account_name, region=var.region, es_url=aws_elasticsearch_domain.test_w7b6[0].endpoint, log_s3_bucket=var.webhook_broker_log_bucket, log_s3_path_prefix=var.webhook_broker_log_path})]
+}
 
 # Webhook Broker
 
