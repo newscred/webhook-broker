@@ -28,8 +28,13 @@ const (
 	`
 )
 
-func writeToFile(filePath, content string) error {
-	return ioutil.WriteFile(filePath, []byte(content), 0644)
+func writeToFile(filePath, content string) (err error) {
+	err = ioutil.WriteFile(filePath, []byte(content), 0644)
+	// Test failure happens because the below notification is called twice; the only reason do it would be if file change for previous write
+	// and the subsequent write happens so fast that they both get notified as causing wg.Done to get negative. This is causing multiple test
+	// failures in CI environment, hence introduced this delay.
+	time.Sleep(3 * time.Millisecond)
+	return err
 }
 
 func TestCLIConfigPathChangeNotification(t *testing.T) {
@@ -44,6 +49,7 @@ func TestCLIConfigPathChangeNotification(t *testing.T) {
 		cliConfig.NotifyOnConfigFileChange(func() {
 			wg.Done()
 		})
+		defer cliConfig.StopWatcher()
 		assert.True(t, cliConfig.watcherStarted)
 		time.Sleep(5 * time.Millisecond)
 		err = writeToFile(notificationFilePath, notificationDifferentContent)
@@ -51,7 +57,6 @@ func TestCLIConfigPathChangeNotification(t *testing.T) {
 			log.Fatal().Err(err).Msg("could not write to file")
 		}
 		wg.Wait()
-		cliConfig.StopWatcher()
 	})
 	t.Run("NoNotifyOnFileContentUnchanged", func(t *testing.T) {
 		err := writeToFile(noChangeFilePath, notificationInitialContent)
@@ -63,6 +68,7 @@ func TestCLIConfigPathChangeNotification(t *testing.T) {
 		cliConfig.NotifyOnConfigFileChange(func() {
 			wg.Done()
 		})
+		defer cliConfig.StopWatcher()
 		assert.True(t, cliConfig.watcherStarted)
 		time.Sleep(1 * time.Millisecond)
 		err = writeToFile(noChangeFilePath, notificationInitialContent)
@@ -71,7 +77,6 @@ func TestCLIConfigPathChangeNotification(t *testing.T) {
 		}
 		time.Sleep(3 * time.Millisecond)
 		wg.Wait()
-		cliConfig.StopWatcher()
 	})
 	t.Run("NothingHappensOnFileRemoval", func(t *testing.T) {
 		/*
@@ -89,6 +94,7 @@ func TestCLIConfigPathChangeNotification(t *testing.T) {
 		cliConfig.NotifyOnConfigFileChange(func() {
 			wg.Done()
 		})
+		defer cliConfig.StopWatcher()
 		assert.True(t, cliConfig.watcherStarted)
 		time.Sleep(1 * time.Millisecond)
 		err = os.Remove(removeFilePath)
@@ -97,7 +103,6 @@ func TestCLIConfigPathChangeNotification(t *testing.T) {
 		}
 		time.Sleep(3 * time.Millisecond)
 		wg.Wait()
-		cliConfig.StopWatcher()
 	})
 	t.Run("NoFilePathTest", func(t *testing.T) {
 		var buf bytes.Buffer
@@ -114,6 +119,7 @@ func TestCLIConfigPathChangeNotification(t *testing.T) {
 		cliConfig.NotifyOnConfigFileChange(func() {
 			wg.Done()
 		})
+		defer cliConfig.StopWatcher()
 		time.Sleep(1 * time.Millisecond)
 		assert.Contains(t, buf.String(), errNoFileToWatch.Error())
 		assert.Contains(t, buf.String(), "could not find any file to watch")
@@ -142,6 +148,7 @@ func TestCLIConfigPathChangeNotification(t *testing.T) {
 		cliConfig.NotifyOnConfigFileChange(func() {
 			wg.Done()
 		})
+		defer cliConfig.StopWatcher()
 		assert.True(t, cliConfig.watcherStarted)
 		time.Sleep(1 * time.Millisecond)
 		assert.Contains(t, buf.String(), expectedErr.Error())
@@ -215,6 +222,7 @@ func TestCLIConfigPathChangeNotification(t *testing.T) {
 		cliConfig.NotifyOnConfigFileChange(func() {
 			wg.Done()
 		})
+		defer cliConfig.StopWatcher()
 		assert.True(t, cliConfig.watcherStarted)
 		time.Sleep(1 * time.Millisecond)
 		watcher.Errors <- expectedErr
