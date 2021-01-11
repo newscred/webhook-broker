@@ -28,16 +28,16 @@ output "database_subnets" {
 
 # VPN
 output "vpn_id" {
-  value       = module.client_vpn.vpn_id
+  value = module.client_vpn.vpn_id
 }
 
 # Elasticsearch
 output "es_endpoint" {
-  value       = element(concat(aws_elasticsearch_domain.test_w7b6.*.endpoint, list("")), 0)
+  value = element(concat(aws_elasticsearch_domain.test_w7b6.*.endpoint, list("")), 0)
 }
 
 output "es_kibana" {
-  value       = element(concat(aws_elasticsearch_domain.test_w7b6.*.kibana_endpoint, list("")), 0)
+  value = element(concat(aws_elasticsearch_domain.test_w7b6.*.kibana_endpoint, list("")), 0)
 }
 
 # RDS

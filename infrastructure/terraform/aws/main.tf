@@ -28,13 +28,13 @@ module "vpc" {
 
   cidr = local.vpc_cidr_block # 10.0.0.0/8 is reserved for EC2-Classic
 
-  azs                 = var.azs
-  private_subnets     = ["20.10.1.0/24", "20.10.2.0/24", "20.10.3.0/24"]
-  public_subnets      = ["20.10.11.0/24", "20.10.12.0/24", "20.10.13.0/24"]
-  database_subnets    = ["20.10.21.0/24", "20.10.22.0/24", "20.10.23.0/24"]
+  azs              = var.azs
+  private_subnets  = ["20.10.1.0/24", "20.10.2.0/24", "20.10.3.0/24"]
+  public_subnets   = ["20.10.11.0/24", "20.10.12.0/24", "20.10.13.0/24"]
+  database_subnets = ["20.10.21.0/24", "20.10.22.0/24", "20.10.23.0/24"]
 
-  private_subnet_tags = {"kubernetes.io/role/internal-elb":"1"}
-  public_subnet_tags  = {"kubernetes.io/role/elb":"1"}
+  private_subnet_tags = { "kubernetes.io/role/internal-elb" : "1" }
+  public_subnet_tags  = { "kubernetes.io/role/elb" : "1" }
 
   create_database_subnet_group = true
 
@@ -49,13 +49,13 @@ module "vpc" {
 
   enable_vpn_gateway = true
 
-  enable_dhcp_options            = true
-  dhcp_options_domain_name       = "ec2.internal"
+  enable_dhcp_options      = true
+  dhcp_options_domain_name = "ec2.internal"
 
   # Default security group - ingress/egress rules cleared to deny all
   manage_default_security_group  = true
   default_security_group_ingress = [{}]
-  default_security_group_egress  = [{from_port = 0, to_port = 0, protocol = "-1", cidr_blocks = "0.0.0.0/0"}]
+  default_security_group_egress  = [{ from_port = 0, to_port = 0, protocol = "-1", cidr_blocks = "0.0.0.0/0" }]
 
   tags = {
     Owner       = "user"
@@ -119,19 +119,19 @@ resource "aws_elasticsearch_domain" "test_w7b6" {
     }
   }
   ebs_options {
-    ebs_enabled         = true
-    volume_size         = 35
+    ebs_enabled = true
+    volume_size = 35
   }
   vpc_options {
-    subnet_ids          = module.vpc.private_subnets
-    security_group_ids  = [aws_security_group.es[0].id]
+    subnet_ids         = module.vpc.private_subnets
+    security_group_ids = [aws_security_group.es[0].id]
   }
   domain_endpoint_options {
     enforce_https       = false
     tls_security_policy = "Policy-Min-TLS-1-2-2019-07"
   }
 
-  access_policies       = <<CONFIG
+  access_policies = <<CONFIG
 {
     "Version": "2012-10-17",
     "Statement": [
@@ -157,8 +157,8 @@ data "aws_availability_zones" "available" {
 }
 
 module "eks" {
-  source  = "terraform-aws-modules/eks/aws"
-  version = "13.2.1"
+  source          = "terraform-aws-modules/eks/aws"
+  version         = "13.2.1"
   cluster_name    = local.cluster_name
   cluster_version = "1.18"
   subnets         = module.vpc.public_subnets
@@ -187,15 +187,15 @@ module "eks" {
       ]
     },
     {
-      name                 = "worker-spot-group-1"
-      asg_desired_capacity = "2"
-      asg_max_size         = "100"
-      kubelet_extra_args   = "--node-labels=node.kubernetes.io/lifecycle=spot"
-      instance_type        = "c5.large"
-      ami_id               = "ami-0e609024e4dbce4a5"
-      spot_instance_pools  = 2
-      spot_allocation_strategy      = "lowest-price" # Valid options are 'lowest-price' and 'capacity-optimized'. If 'lowest-price', the Auto Scaling group launches instances using the Spot pools with the lowest price, and evenly allocates your instances across the number of Spot pools. If 'capacity-optimized', the Auto Scaling group launches instances using Spot pools that are optimally chosen based on the available Spot capacity.
-      spot_price                    = "0.068"
+      name                     = "worker-spot-group-1"
+      asg_desired_capacity     = "2"
+      asg_max_size             = "100"
+      kubelet_extra_args       = "--node-labels=node.kubernetes.io/lifecycle=spot"
+      instance_type            = "c5.large"
+      ami_id                   = "ami-0e609024e4dbce4a5"
+      spot_instance_pools      = 2
+      spot_allocation_strategy = "lowest-price" # Valid options are 'lowest-price' and 'capacity-optimized'. If 'lowest-price', the Auto Scaling group launches instances using the Spot pools with the lowest price, and evenly allocates your instances across the number of Spot pools. If 'capacity-optimized', the Auto Scaling group launches instances using Spot pools that are optimally chosen based on the available Spot capacity.
+      spot_price               = "0.068"
       tags = [
         {
           "key"                 = "k8s.io/cluster-autoscaler/enabled"
@@ -316,16 +316,16 @@ resource "kubernetes_cluster_role_binding" "cluster-admin-binding" {
 }
 
 resource "helm_release" "aws-spot-termination-handler" {
-  name       = "aws-node-termination-handler"
-  namespace  = local.k8s_service_account_namespace
+  name      = "aws-node-termination-handler"
+  namespace = local.k8s_service_account_namespace
 
   repository = "https://aws.github.io/eks-charts"
   chart      = "aws-node-termination-handler"
 }
 
 resource "helm_release" "cluster-autoscaler" {
-  name       = "cluster-autoscaler"
-  namespace  = local.k8s_service_account_namespace
+  name      = "cluster-autoscaler"
+  namespace = local.k8s_service_account_namespace
 
   repository = "https://kubernetes.github.io/autoscaler"
   chart      = "cluster-autoscaler-chart"
@@ -333,7 +333,7 @@ resource "helm_release" "cluster-autoscaler" {
   depends_on = [module.iam_assumable_role_admin]
 
   values = [
-    templatefile("conf/cluster-autoscaler-chart-values.yml", {role_arn = module.iam_assumable_role_admin.this_iam_role_arn})
+    templatefile("conf/cluster-autoscaler-chart-values.yml", { role_arn = module.iam_assumable_role_admin.this_iam_role_arn })
   ]
 }
 
@@ -346,16 +346,16 @@ resource "kubernetes_namespace" "k8s-dashboard-namespace" {
 }
 
 resource "helm_release" "kubernetes-dashboard" {
-  name       = "kubernetes-dashboard"
-  namespace  = local.k8s_dashboard_namespace
+  name      = "kubernetes-dashboard"
+  namespace = local.k8s_dashboard_namespace
 
   repository = "https://kubernetes.github.io/dashboard/"
   chart      = "kubernetes-dashboard"
   depends_on = [kubernetes_namespace.k8s-dashboard-namespace]
 
   set {
-      name = "serviceAccount.name"
-      value = local.k8s_dashboard_service_account_name
+    name  = "serviceAccount.name"
+    value = local.k8s_dashboard_service_account_name
   }
 }
 
@@ -364,8 +364,8 @@ resource "helm_release" "kubernetes-dashboard" {
 # TODO: This chart has been deprecated, we will need to move to the new chart once official
 # https://github.com/kubernetes-sigs/metrics-server/issues/572
 resource "helm_release" "metrics-server" {
-  name       = "metrics-server"
-  namespace  = local.k8s_service_account_namespace
+  name      = "metrics-server"
+  namespace = local.k8s_service_account_namespace
 
   repository = "https://charts.helm.sh/stable"
   chart      = "metrics-server"
@@ -374,13 +374,13 @@ resource "helm_release" "metrics-server" {
   depends_on = [module.eks]
 
   set {
-      name = "image.repository"
-      value = "k8s.gcr.io/metrics-server/metrics-server"
+    name  = "image.repository"
+    value = "k8s.gcr.io/metrics-server/metrics-server"
   }
 
   set {
-      name = "image.tag"
-      value = "v0.4.1"
+    name  = "image.tag"
+    value = "v0.4.1"
   }
 }
 
@@ -405,15 +405,15 @@ module "iam_assumable_role_ingress" {
 }
 
 resource "helm_release" "alb-ingress-controller" {
-  name       = "aws-load-balancer-controller"
-  namespace  = local.k8s_service_account_namespace
+  name      = "aws-load-balancer-controller"
+  namespace = local.k8s_service_account_namespace
 
   repository = "https://aws.github.io/eks-charts"
   chart      = "aws-load-balancer-controller"
 
   depends_on = [module.iam_assumable_role_ingress]
 
-  values = [templatefile("conf/alb-ingress-chart-values.yml", {role_arn = module.iam_assumable_role_ingress.this_iam_role_arn, svc_acc_name = local.k8s_alb_service_account_name, cluster_name = local.cluster_name, region = var.region, vpc_id = module.vpc.vpc_id})]
+  values = [templatefile("conf/alb-ingress-chart-values.yml", { role_arn = module.iam_assumable_role_ingress.this_iam_role_arn, svc_acc_name = local.k8s_alb_service_account_name, cluster_name = local.cluster_name, region = var.region, vpc_id = module.vpc.vpc_id })]
 }
 
 # External DNS
@@ -435,15 +435,15 @@ module "iam_assumable_role_external_dns" {
 }
 
 resource "helm_release" "external_dns" {
-  name       = "external-dns"
-  namespace  = local.k8s_service_account_namespace
+  name      = "external-dns"
+  namespace = local.k8s_service_account_namespace
 
   repository = "https://charts.bitnami.com/bitnami"
   chart      = "external-dns"
 
   depends_on = [module.iam_assumable_role_external_dns]
 
-  values = [templatefile("conf/external-dns-chart-values.yml", {role_arn = module.iam_assumable_role_external_dns.this_iam_role_arn, svc_acc_name = local.k8s_external_dns_account_name, region = var.region})]
+  values = [templatefile("conf/external-dns-chart-values.yml", { role_arn = module.iam_assumable_role_external_dns.this_iam_role_arn, svc_acc_name = local.k8s_external_dns_account_name, region = var.region })]
 }
 
 # Fluent bit
@@ -465,16 +465,16 @@ module "iam_assumable_role_fluent_bit" {
 }
 
 resource "helm_release" "aws_fluent_bit" {
-  count      = var.create_es ? 1 : 0
-  name       = "aws-for-fluent-bit"
-  namespace  = local.k8s_service_account_namespace
+  count     = var.create_es ? 1 : 0
+  name      = "aws-for-fluent-bit"
+  namespace = local.k8s_service_account_namespace
 
   repository = "https://aws.github.io/eks-charts"
   chart      = "aws-for-fluent-bit"
 
   depends_on = [module.iam_assumable_role_fluent_bit, aws_elasticsearch_domain.test_w7b6]
 
-  values = [templatefile("conf/fluent-bit-chart-values.yml", {role_arn = module.iam_assumable_role_fluent_bit.this_iam_role_arn, svc_acc_name = local.k8s_fluentbit_account_name, region=var.region, es_url=aws_elasticsearch_domain.test_w7b6[0].endpoint, log_s3_bucket=var.webhook_broker_log_bucket, log_s3_path_prefix=var.webhook_broker_log_path})]
+  values = [templatefile("conf/fluent-bit-chart-values.yml", { role_arn = module.iam_assumable_role_fluent_bit.this_iam_role_arn, svc_acc_name = local.k8s_fluentbit_account_name, region = var.region, es_url = aws_elasticsearch_domain.test_w7b6[0].endpoint, log_s3_bucket = var.webhook_broker_log_bucket, log_s3_path_prefix = var.webhook_broker_log_path })]
 }
 
 # Webhook Broker
@@ -487,7 +487,7 @@ module "sg_mysql" {
   name    = "security-group-mysql-${module.vpc.vpc_id}"
   vpc_id  = module.vpc.vpc_id
 
-  create  = var.create_rds
+  create = var.create_rds
 
   ingress_cidr_blocks = [
     local.vpc_cidr_block, local.vpn_cidr_block
@@ -495,10 +495,10 @@ module "sg_mysql" {
 }
 
 module "rds" {
-  source               = "terraform-aws-modules/rds/aws"
-  version              = "2.20.0"
+  source  = "terraform-aws-modules/rds/aws"
+  version = "2.20.0"
 
-  create_db_instance   = var.create_rds
+  create_db_instance = var.create_rds
 
   identifier        = "w7b6"
   engine            = "mysql"
@@ -565,8 +565,8 @@ resource "kubernetes_namespace" "webhook_broker_namespace" {
 
 
 resource "helm_release" "webhook-broker" {
-  name       = "webhook-broker"
-  namespace  = local.k8s_w7b6_namespace
+  name      = "webhook-broker"
+  namespace = local.k8s_w7b6_namespace
 
   repository = "https://helm.imytech.net/"
   chart      = "webhook-broker-chart"
@@ -575,6 +575,6 @@ resource "helm_release" "webhook-broker" {
   depends_on = [module.rds, kubernetes_namespace.webhook_broker_namespace, helm_release.external_dns]
 
   values = [
-    templatefile("conf/webhook-broker-values.yml", {https_cert_arn=var.webhook_broker_https_cert_arn, db_url="${module.rds.this_db_instance_username}:${var.db_password}@tcp(${module.rds.this_db_instance_endpoint})/${module.rds.this_db_instance_name}?charset=utf8&parseTime=true&multiStatements=true", access_log_s3_bucket=var.webhook_broker_access_log_bucket, access_log_s3_path_prefix=var.webhook_broker_access_log_path, subnets=join(", ", module.vpc.private_subnets), hostname=var.webhook_broker_hostname})
+    templatefile("conf/webhook-broker-values.yml", { https_cert_arn = var.webhook_broker_https_cert_arn, db_url = "${module.rds.this_db_instance_username}:${var.db_password}@tcp(${module.rds.this_db_instance_endpoint})/${module.rds.this_db_instance_name}?charset=utf8&parseTime=true&multiStatements=true", access_log_s3_bucket = var.webhook_broker_access_log_bucket, access_log_s3_path_prefix = var.webhook_broker_access_log_path, subnets = join(", ", module.vpc.private_subnets), hostname = var.webhook_broker_hostname })
   ]
 }

@@ -3,7 +3,7 @@ terraform {
 
   required_providers {
     aws = {
-      source = "hashicorp/aws"
+      source  = "hashicorp/aws"
       version = "3.22.0"
     }
 
@@ -31,4 +31,6 @@ terraform {
       version = "~> 2.0.1"
     }
   }
+
+  #INJECT: Terraform Cloud Backend here in CI
 }

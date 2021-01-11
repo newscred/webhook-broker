@@ -1,0 +1,76 @@
+name: Terraform
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  terraform:
+    name: 'Terraform Plan'
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v1
+        with:
+          terraform_version: 0.14.3
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Terraform fmt
+        id: fmt
+        working-directory: infrastructure/terraform/aws/
+        run: terraform fmt -check
+
+      - name: Find and Replace
+        uses: jacobtomlinson/gha-find-replace@master
+        with:
+          find: "#INJECT: Terraform Cloud Backend here in CI"
+          replace: |
+            #INJECT: Terraform Cloud Backend here in CI
+            backend "remote" {
+              organization = "imyousuf-oss"
+
+              workspaces {
+                name = "webhook-broker-aws"
+              }
+            }
+          include: "infrastructure/terraform/aws/versions.tf"
+
+      - name: Terraform Init
+        id: init
+        working-directory: infrastructure/terraform/aws/
+        run: terraform init
+
+      - name: Terraform Validate
+        id: validate
+        working-directory: infrastructure/terraform/aws/
+        run: terraform validate -no-color
+
+      - name: Terraform Plan
+        id: plan
+        working-directory: infrastructure/terraform/aws/
+        run: terraform plan -no-color
+
+      - uses: actions/github-script@0.9.0
+        if: github.event_name == 'pull_request'
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const output = `#### Terraform Format and Style 🖌\`${{ steps.fmt.outcome }}\`
+            #### Terraform Initialization ⚙️\`${{ steps.init.outcome }}\`
+            #### Terraform Validation 🤖${{ steps.validate.outputs.stdout }}
+            #### Terraform Plan 📖\`${{ steps.plan.outcome }}\`
+
+            *Pusher: @${{ github.actor }}, Action: \`${{ github.event_name }}\`, Working Directory: \`${{ env.tf_actions_working_dir }}\`, Workflow: \`${{ github.workflow }}\`*`;
+
+            github.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
