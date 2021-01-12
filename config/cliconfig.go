@@ -1,12 +1,14 @@
 package config
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/rs/zerolog/log"
@@ -15,7 +17,8 @@ import (
 )
 
 var (
-	errNoFileToWatch = errors.New("no file to watch")
+	errNoFileToWatch       = errors.New("no file to watch")
+	errTruncatedConfigFile = errors.New("truncated config file")
 )
 
 // CLIConfig represents the Command Line Args config
@@ -114,6 +117,7 @@ var (
 	processFileChangeEvent = func(event *fsnotify.Event, workerConf *watcherWorkerConfig) bool {
 		currentConfigFile, _ := filepath.EvalSymlinks(workerConf.filename)
 		const writeOrCreateMask = fsnotify.Write | fsnotify.Create
+		log.Debug().Uint32("writeOrCreateMask", uint32(event.Op)).Str("eventName", event.Name).Msg("File change event")
 		if (filepath.Clean(event.Name) == workerConf.configFile &&
 			event.Op&writeOrCreateMask != 0) ||
 			(currentConfigFile != "" && currentConfigFile != workerConf.realConfigFile) {
@@ -130,9 +134,14 @@ var (
 	callCallbacksIfChanged = func(realConfigFile, oldHash string, callbacks []func()) string {
 		newhash, err := getFileHash(realConfigFile)
 		if err != nil {
-			log.Error().Err(err).Msg("could not generate file hash on change")
+			if err == errTruncatedConfigFile {
+				log.Warn().Err(err).Msg("truncation of config file not expected")
+			} else {
+				log.Error().Err(err).Msg("could not generate file hash on change")
+			}
 			return oldHash
 		}
+		log.Debug().Str("oldHash", oldHash).Str("newHash", newhash).Msg("Old and new hash")
 		if newhash != oldHash {
 			for _, callback := range callbacks {
 				go callback()
@@ -166,9 +175,16 @@ var (
 		}
 		defer file.Close()
 
-		hasher := sha256.New()
-		if _, err = io.Copy(hasher, file); err == nil {
-			hashHex = hex.EncodeToString(hasher.Sum(nil))
+		var buf bytes.Buffer
+		if _, err = io.Copy(&buf, file); err == nil {
+			log.Debug().Str("Content", buf.String()).Msg("Content generating hash for")
+			if buf.Len() == 0 {
+				return "", errTruncatedConfigFile
+			}
+			hasher := sha256.New()
+			if _, err = io.Copy(hasher, strings.NewReader(buf.String())); err == nil {
+				hashHex = hex.EncodeToString(hasher.Sum(nil))
+			}
 		}
 		return hashHex, err
 	}

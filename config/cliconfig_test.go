@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"errors"
 	"io/ioutil"
+	"math/rand"
 	"os"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -14,12 +16,18 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-const (
-	notificationFilePath       = "../testdatadir/webhook-broker.notifytest.cfg"
-	noChangeFilePath           = "../testdatadir/webhook-broker.no-change-test.cfg"
-	removeFilePath             = "../testdatadir/webhook-broker.remove-test.cfg"
-	hashTestPath               = "../testdatadir/webhook-broker.hash-err.cfg"
+func randomString() string {
+	return strconv.Itoa(randomizer.Int())
+}
+
+var (
 	wdTestPath                 = "../testdatadir/"
+	randomizer                 = rand.New(rand.NewSource(time.Now().UnixNano()))
+	notificationFilePath       = wdTestPath + "webhook-broker.change-test_" + randomString() + ".cfg"
+	noChangeFilePath           = wdTestPath + "webhook-broker.no-notify_" + randomString() + ".cfg"
+	removeFilePath             = wdTestPath + "webhook-broker.remove_" + randomString() + ".cfg"
+	hashTestPath               = wdTestPath + "webhook-broker.hash-err_" + randomString() + ".cfg"
+	truncateTestPath           = wdTestPath + "webhook-broker.truncate_" + randomString() + ".cfg"
 	notificationInitialContent = `[broker]
 	max-message-queue-size=10000000
 	`
@@ -30,10 +38,6 @@ const (
 
 func writeToFile(filePath, content string) (err error) {
 	err = ioutil.WriteFile(filePath, []byte(content), 0644)
-	// Test failure happens because the below notification is called twice; the only reason do it would be if file change for previous write
-	// and the subsequent write happens so fast that they both get notified as causing wg.Done to get negative. This is causing multiple test
-	// failures in CI environment, hence introduced this delay.
-	time.Sleep(3 * time.Millisecond)
 	return err
 }
 
@@ -77,6 +81,34 @@ func TestCLIConfigPathChangeNotification(t *testing.T) {
 		}
 		time.Sleep(3 * time.Millisecond)
 		wg.Wait()
+	})
+	t.Run("NoNotifyOnFileTruncation", func(t *testing.T) {
+		var buf bytes.Buffer
+		oldLogger := log.Logger
+		log.Logger = log.Output(&buf)
+		defer func() {
+			log.Logger = oldLogger
+		}()
+		err := writeToFile(noChangeFilePath, notificationInitialContent)
+		if err != nil {
+			log.Fatal().Err(err).Msg("could not write to file")
+		}
+		cliConfig := &CLIConfig{ConfigPath: noChangeFilePath}
+		var wg sync.WaitGroup
+		cliConfig.NotifyOnConfigFileChange(func() {
+			wg.Done()
+		})
+		defer cliConfig.StopWatcher()
+		assert.True(t, cliConfig.watcherStarted)
+		time.Sleep(1 * time.Millisecond)
+		err = writeToFile(noChangeFilePath, "")
+		if err != nil {
+			log.Fatal().Err(err).Msg("could not write to file")
+		}
+		time.Sleep(3 * time.Millisecond)
+		wg.Wait()
+		assert.Contains(t, buf.String(), "truncation of config file not expected")
+		assert.Contains(t, buf.String(), errTruncatedConfigFile.Error())
 	})
 	t.Run("NothingHappensOnFileRemoval", func(t *testing.T) {
 		/*

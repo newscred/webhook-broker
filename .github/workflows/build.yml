@@ -46,7 +46,7 @@ jobs:
       env:
         CC_TEST_REPORTER_ID: ${{ secrets.CODECLIMATE_REPORTER_ID }}
       with:
-        coverageCommand: go test -coverprofile=cover.out ./... -short
+        coverageCommand: go test -timeout 30s -coverprofile=cover.out ./... -short
         debug: true
         prefix: github.com/imyousuf/webhook-broker/
         coverageLocations: |

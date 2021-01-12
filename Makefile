@@ -68,7 +68,7 @@ ci-test:
 	go test -timeout 30s -mod=readonly -v ./... -short
 
 test:
-	go test -mod=readonly ./...
+	go test -timeout 30s -mod=readonly ./...
 
 install: build
 	go install -mod=readonly
@@ -78,6 +78,7 @@ setup-docker:
 
 clean:
 	mkdir -p ./dist/
+	-rm -v ./testdatadir/*.cfg
 	-rm -vrf ./dist/*
 	-rm -v webhook-broker
 

@@ -28,6 +28,7 @@ import (
 
 const (
 	configFilePath             = "./testdatadir/webhook-broker.main.cfg"
+	configFilePath2            = "./testdatadir/webhook-broker.main-2.cfg"
 	notificationInitialContent = `[http]
 	listener=:12345	
 	`
@@ -184,9 +185,9 @@ func TestMainFunc(t *testing.T) {
 		assert.NotNil(t, consumer)
 	})
 	t.Run("SuccessRunWithExitOnConfigChange", func(t *testing.T) {
-		ioutil.WriteFile(configFilePath, []byte(notificationInitialContent), 0644)
+		ioutil.WriteFile(configFilePath2, []byte(notificationInitialContent), 0644)
 		oldArgs := os.Args
-		os.Args = []string{"webhook-broker", "-migrate", "./migration/sqls/", "-config", configFilePath, "-stop-on-conf-change"}
+		os.Args = []string{"webhook-broker", "-migrate", "./migration/sqls/", "-config", configFilePath2, "-stop-on-conf-change"}
 		defer func() {
 			os.Args = oldArgs
 		}()
@@ -198,7 +199,7 @@ func TestMainFunc(t *testing.T) {
 		}()
 		go func() {
 			waitForStatusEndpoint(":12345")
-			ioutil.WriteFile(configFilePath, []byte(notificationDifferentContent), 0644)
+			ioutil.WriteFile(configFilePath2, []byte(notificationDifferentContent), 0644)
 			wg.Done()
 		}()
 		wg.Wait()
