@@ -1,4 +1,4 @@
-name: webhook-broker CI
+name: Webhook Broker CI
 
 on:
   push:

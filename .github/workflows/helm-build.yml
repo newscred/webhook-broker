@@ -1,0 +1,53 @@
+name: Helm Build
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+    - 'deploy-pkg/webhook-broker-chart/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+    - 'deploy-pkg/webhook-broker-chart/**'
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - uses: azure/setup-helm@v1
+    - run: helm lint
+      working-directory: deploy-pkg/webhook-broker-chart/
+
+  deploy:
+
+    if: github.event_name == 'push'
+
+    needs: [ build ]
+
+    runs-on: ubuntu-latest
+
+    env:
+      AWS_REGION: 'us-east-1'
+      AWS_ACCESS_KEY_ID: ${{ secrets.HELM_AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.HELM_AWS_SECRET_ACCESS_KEY }}
+
+    steps:
+    - uses: actions/checkout@v2
+    - uses: azure/setup-helm@v1
+    - name: Install Helm S3 Plugin
+      run: helm plugin install https://github.com/hypnoglow/helm-s3.git
+    - name: Setup helm.imytech.net Helm Repo
+      run: helm repo add imy-helm-charts s3://imy-us-public/helm-charts/
+    - name: Build Helm Package
+      working-directory: deploy-pkg/webhook-broker-chart/
+      run: helm package ./
+    - name: Push to Helm Repo
+      working-directory: deploy-pkg/webhook-broker-chart/
+      run: helm s3 push --force --relative ./webhook-broker-chart-*.tgz imy-helm-charts
+    - uses: chetan/invalidate-cloudfront-action@master
+      env:
+        DISTRIBUTION: ${{ secrets.DISTRIBUTION }}
+        PATHS: '/*'
