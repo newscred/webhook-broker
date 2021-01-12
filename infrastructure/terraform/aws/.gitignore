@@ -1,6 +1,0 @@
-terraform.tfstate*
-.terraform*
-kubeconfig*
-
-# terraform customization tfvars
-custom_vars.auto.tfvars

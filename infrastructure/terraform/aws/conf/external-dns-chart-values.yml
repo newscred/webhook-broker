@@ -1,7 +1,0 @@
-provider: aws
-aws:
-  region: ${region}
-serviceAccount:
-  name: ${svc_acc_name}
-  annotations:
-    eks.amazonaws.com/role-arn: ${role_arn}
