@@ -21,3 +21,17 @@ version: 0.1.0-dev
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
 appVersion: 0.1.0-dev
+
+keywords:
+- webhook
+- broker
+- message passing
+- service bus
+home: https://github.com/imyousuf/webhook-broker
+sources:
+- https://github.com/imyousuf/webhook-broker
+maintainers:
+- name: imyousuf
+  email: imyousuf@imytech.net
+kubeVersion: ">=1.18.0-0"
+icon: https://helm.imytech.net/w7b6.svg
