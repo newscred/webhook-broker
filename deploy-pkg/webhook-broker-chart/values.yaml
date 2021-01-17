@@ -15,6 +15,7 @@ nameOverride: ""
 fullnameOverride: ""
 
 broker:
+  configFileWatchMode: "stop" # Possible values stop, restart, ignore
   port: 8080
   probeInitialDelay: 5
   probeInterval: 10

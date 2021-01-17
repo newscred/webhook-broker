@@ -34,7 +34,7 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: ["/webhook-broker"]
-          args: ["-migrate", "/migration/sqls/", "-config", "/app-config/webhook-broker.cfg", "-stop-on-conf-change"]
+          args: ["-migrate", "/migration/sqls/", "-config", "/app-config/webhook-broker.cfg"{{ if eq .Values.broker.configFileWatchMode "stop" }}, "-stop-on-conf-change"{{ end }}{{ if eq .Values.broker.configFileWatchMode "ignore" }}, "-do-not-watch-conf-change"{{ end }}]
           ports:
             - name: http
               containerPort: {{ .Values.broker.port }}
