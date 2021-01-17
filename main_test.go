@@ -251,6 +251,23 @@ func TestMainFunc(t *testing.T) {
 			os.Args = oldArgs
 		}()
 	})
+	t.Run("NoWatcher", func(t *testing.T) {
+		oldExit := exit
+		oldArgs := os.Args
+		exit = panicExit
+		os.Args = []string{"webhook-broker", "-do-not-watch-conf-change"}
+		inConfig, _, cliCfgErr := parseArgs(os.Args[0], os.Args[1:])
+		assert.Nil(t, cliCfgErr)
+		assert.True(t, inConfig.DoNotWatchConfigChange)
+		inConfig.NotifyOnConfigFileChange(func() {
+			t.FailNow()
+		})
+		assert.False(t, inConfig.IsConfigWatcherStarted())
+		defer func() {
+			exit = oldExit
+			os.Args = oldArgs
+		}()
+	})
 	t.Run("ConfError", func(t *testing.T) {
 		ln, netErr := net.Listen("tcp", ":8080")
 		if netErr == nil {

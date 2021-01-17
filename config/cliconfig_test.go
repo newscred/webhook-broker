@@ -262,4 +262,12 @@ func TestCLIConfigPathChangeNotification(t *testing.T) {
 		assert.Contains(t, buf.String(), expectedErr.Error())
 		assert.Contains(t, buf.String(), "watcher error")
 	})
+	t.Run("NoWatchDueToConfig", func(t *testing.T) {
+		inConfig := &CLIConfig{DoNotWatchConfigChange: true}
+		assert.True(t, inConfig.DoNotWatchConfigChange)
+		inConfig.NotifyOnConfigFileChange(func() {
+			t.FailNow()
+		})
+		assert.False(t, inConfig.IsConfigWatcherStarted())
+	})
 }

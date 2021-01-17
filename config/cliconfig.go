@@ -23,13 +23,14 @@ var (
 
 // CLIConfig represents the Command Line Args config
 type CLIConfig struct {
-	ConfigPath          string
-	MigrationSource     string
-	StopOnConfigChange  bool
-	callbacks           []func()
-	watcherStarted      bool
-	watcherStarterMutex sync.Mutex
-	watcher             *fsnotify.Watcher
+	ConfigPath             string
+	MigrationSource        string
+	StopOnConfigChange     bool
+	DoNotWatchConfigChange bool
+	callbacks              []func()
+	watcherStarted         bool
+	watcherStarterMutex    sync.Mutex
+	watcher                *fsnotify.Watcher
 }
 
 // IsMigrationEnabled returns whether migration is enabled
@@ -39,10 +40,18 @@ func (conf *CLIConfig) IsMigrationEnabled() bool {
 
 // NotifyOnConfigFileChange registers a callback function for changes to ConfigPath; it calls the `callback` when a change is detected
 func (conf *CLIConfig) NotifyOnConfigFileChange(callback func()) {
+	if conf.DoNotWatchConfigChange {
+		return
+	}
 	conf.callbacks = append(conf.callbacks, callback)
 	if !conf.watcherStarted {
 		conf.startConfigWatcher()
 	}
+}
+
+// IsConfigWatcherStarted returns whether config watcher is running
+func (conf *CLIConfig) IsConfigWatcherStarted() bool {
+	return conf.watcherStarted
 }
 
 func (conf *CLIConfig) startConfigWatcher() {
