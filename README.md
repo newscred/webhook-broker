@@ -10,7 +10,35 @@ This is a fully HTTP based Pub/Sub Broker with a goal to simplify systems archit
 
 ## Install & Usage
 
-TBD
+Consider one of the following 3 strategies to use Webhook Broker.
+
+### Terraform
+
+As part of this project we are committed to maintain a [terraform module](https://github.com/imyousuf/terraform-aws-webhook-broker) to make it easy to deploy and manage Webhook Broker in a Kubernetes setting. The module is available in [Terraform Registry](https://registry.terraform.io/modules/imyousuf/webhook-broker/aws/latest?tab=inputs) as well; please make sure to checkout the [w7b6 submodule](https://registry.terraform.io/modules/imyousuf/webhook-broker/aws/latest/submodules/w7b6) if you are just interested in Webhook Broker; we also recommend to additionally consider [k8s modules](https://registry.terraform.io/modules/imyousuf/webhook-broker/aws/latest/submodules/kubernetes-goodies).
+
+### Helm Chart
+
+As part of the Terraform configuration, we deploy Webhook Broker using a [Helm Chart](https://artifacthub.io/packages/helm/imytech/webhook-broker-chart) maintained within [this repo](./deploy-pkg/webhook-broker-chart/README.md).
+
+### DIY
+
+All the above should give plenty of hints around how to deploy the application on its own. The CLI Arguments look like -
+
+```bash
+$ ./webhook-broker -h
+{"level":"debug","time":"2021-01-16T20:58:51-05:00","message":"Webhook Broker - 0.1-dev"}
+Usage of ./webhook-broker:
+  -config string
+    	Config file location
+  -do-not-watch-conf-change
+    	Do not watch config change
+  -migrate string
+    	Migration source folder
+  -stop-on-conf-change
+    	Restart internally on -config change if this flag is absent
+```
+
+In addition consult our [configuration documentation](./docs/configuration.md) to setup the application.
 
 ## Implementation Details
 
