@@ -14,7 +14,7 @@ require (
 	github.com/rs/xid v1.2.1
 	github.com/rs/zerolog v1.20.0
 	github.com/smartystreets/goconvey v1.6.4 // indirect
-	github.com/stretchr/testify v1.6.1
+	github.com/stretchr/testify v1.7.0
 	gopkg.in/ini.v1 v1.62.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 )
