@@ -58,8 +58,14 @@ build-docker-image:
 build:
 	go build -mod=readonly
 	cp ./webhook-broker ./dist/
+ifndef APP_VERSION
 	@echo "Version: $(shell git log --pretty=format:'%h' -n 1)"
 	(cd dist && tar cjvf webhook-broker-$(shell git log --pretty=format:'%h' -n 1).tar.bz2 ./webhook-broker)
+endif
+ifdef APP_VERSION
+	@echo "Version (Ref): $(APP_VERSION)"
+	(cd dist && tar cjvf webhook-broker-$(APP_VERSION).tar.bz2 ./webhook-broker)
+endif
 
 time-test:
 	time go test -timeout 30s -mod=readonly ./... -count=1

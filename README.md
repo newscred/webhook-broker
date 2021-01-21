@@ -10,7 +10,7 @@ This is a fully HTTP based Pub/Sub Broker with a goal to simplify systems archit
 
 ## Install & Usage
 
-Consider one of the following 3 strategies to use Webhook Broker.
+Consider one of the following 4 strategies to use Webhook Broker.
 
 ### Terraform
 
@@ -20,22 +20,32 @@ As part of this project we are committed to maintain a [terraform module](https:
 
 As part of the Terraform configuration, we deploy Webhook Broker using a [Helm Chart](https://artifacthub.io/packages/helm/imytech/webhook-broker-chart) maintained within [this repo](./deploy-pkg/webhook-broker-chart/README.md).
 
-### DIY
+### DIY - Use Docker Image
+
+Our docker images are host in 2 repositories -
+
+1. [Docker Hub](https://hub.docker.com/repository/docker/imyousuf/webhook-broker)
+2. [Github Docker Registry](https://github.com/imyousuf/webhook-broker/packages)
+
+The difference being Docker Hub will have images for builds from `main` branch whenever a commit is pushed to the branch. Whereas Github registry will only contain releases. The distinction is made so that docker hub can be used for continuous deployment whereas Github Docker Registry for stable releases. The docker [compose file](https://github.com/imyousuf/webhook-broker/blob/main/docker-compose.integration-test.yaml) for integration test gives a good idea how about to setup an environment using docker images and how to configure it through volume mount.
+
+### DIY - Build and Use
 
 All the above should give plenty of hints around how to deploy the application on its own. The CLI Arguments look like -
 
 ```bash
+$ make dep-tools deps build
 $ ./webhook-broker -h
 {"level":"debug","time":"2021-01-16T20:58:51-05:00","message":"Webhook Broker - 0.1-dev"}
 Usage of ./webhook-broker:
   -config string
-    	Config file location
+      Config file location
   -do-not-watch-conf-change
-    	Do not watch config change
+      Do not watch config change
   -migrate string
-    	Migration source folder
+      Migration source folder
   -stop-on-conf-change
-    	Restart internally on -config change if this flag is absent
+      Restart internally on -config change if this flag is absent
 ```
 
 In addition consult our [configuration documentation](./docs/configuration.md) to setup the application.

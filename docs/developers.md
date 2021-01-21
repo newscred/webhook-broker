@@ -46,3 +46,7 @@ If you are intending to work with deployment of Webhook Broker, we recommend you
 sudo curl -o /usr/local/bin/aws-iam-authenticator "https://amazon-eks.s3.us-west-2.amazonaws.com/1.18.9/2020-11-02/bin/linux/amd64/aws-iam-authenticator"
 sudo chmod +x /usr/local/bin/aws-iam-authenticator
 ```
+
+## Release Management
+
+Currently the release is managed through tag pushes and that should be done in 2 PRs. First pull request to update the version for [CLI](https://github.com/imyousuf/webhook-broker/blob/main/config/config.go#L37) and [Helm package](https://github.com/imyousuf/webhook-broker/blob/main/deploy-pkg/webhook-broker-chart/Chart.yaml#L23) to set to the new release versions along with any CHANGELOG changes and once this is merged, follow up a tag for this change; that should trigger the release process. Then the second pull request promoting the versions to the next dev version.
