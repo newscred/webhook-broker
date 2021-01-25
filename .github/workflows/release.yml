@@ -69,26 +69,27 @@ jobs:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+    -
+      uses: docker/login-action@v1
+      name: Login to Github Docker Registry
+      with:
+        registry: ghcr.io
+        username: ${{ github.repository_owner }}
+        password: ${{ secrets.CR_PAT }}
+
     - name: Get the version
       id: get_version
       run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
 
     -
       uses: docker/build-push-action@v2
-      name: Push to Dockerhub
-      id: dockerhub_build_push
+      name: Push
+      id: build_push
       with:
         push: true
         tags: |
           imyousuf/webhook-broker:${{ steps.get_version.outputs.VERSION }}
-    - name: Push to GitHub Packages
-      uses: docker/build-push-action@v1
-      with:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-        registry: docker.pkg.github.com
-        repository: imyousuf/webhook-broker/w7b6
-        tag_with_ref: true
+          ghcr.io/imyousuf/webhook-broker:${{ steps.get_version.outputs.VERSION }}
 
   helm_chart:
     name: Helm Chart Release
