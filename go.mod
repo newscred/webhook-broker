@@ -8,7 +8,7 @@ require (
 	github.com/go-ini/ini v1.62.0
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/golang-migrate/migrate/v4 v4.14.1
-	github.com/google/wire v0.4.0
+	github.com/google/wire v0.5.0
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/mattn/go-sqlite3 v1.14.6
 	github.com/rs/xid v1.2.1
