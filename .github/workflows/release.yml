@@ -21,7 +21,7 @@ jobs:
       id: get_version
       run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
     - name: Run Test & Build
-      run: make dep-tools deps ci-test build
+      run: make os-deps dep-tools deps ci-test build
       env:
         APP_VERSION: ${{ steps.get_version.outputs.VERSION }}
     - name: Upload build artifact
