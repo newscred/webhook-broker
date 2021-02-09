@@ -14,7 +14,7 @@ jobs:
     - uses: actions/checkout@v2
     - uses: actions/setup-go@v2
       with:
-        go-version: '1.15.6'
+        go-version: '1.15.8'
     - name: Create dist
       run: mkdir ./dist/
     - name: Get the version
@@ -28,7 +28,7 @@ jobs:
       uses: actions/upload-artifact@v2
       with:
         name: dist-app
-        path: dist/webhook-broker-${{ steps.get_version.outputs.VERSION }}.tar.bz2
+        path: dist/webhook-broker-${{ steps.get_version.outputs.VERSION }}*.tar.bz2
     - name: Create Release
       id: create_release
       uses: actions/create-release@v1
@@ -39,16 +39,14 @@ jobs:
         release_name: Release ${{ github.ref }}
         draft: false
         prerelease: false
-    - name: Upload Release Asset
-      id: upload-release-asset
-      uses: actions/upload-release-asset@v1
+    - name: Upload Release Assets
+      id: upload-release-assets
+      uses: dwenegar/upload-release-assets@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: dist/webhook-broker-${{ steps.get_version.outputs.VERSION }}.tar.bz2
-        asset_name: webhook-broker_${{ steps.get_version.outputs.VERSION }}_amd64.tar.bz2
-        asset_content_type: application/x-bzip2
+        release_id: ${{ steps.create_release.outputs.id }}
+        assets_path: dist/webhook-broker-*.tar.bz2
 
   docker_containers:
     name: Docker Container Release
@@ -57,6 +55,18 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+
+    -
+      name: Set up QEMU
+      id: qemu
+      uses: docker/setup-qemu-action@v1
+      with:
+        image: tonistiigi/binfmt:latest
+        platforms: all
+
+    -
+      name: Available platforms
+      run: echo ${{ steps.qemu.outputs.platforms }}
 
     -
         name: Set up Docker Buildx
@@ -87,6 +97,7 @@ jobs:
       id: build_push
       with:
         push: true
+        platforms: linux/amd64,linux/arm64
         tags: |
           imyousuf/webhook-broker:${{ steps.get_version.outputs.VERSION }}
           ghcr.io/imyousuf/webhook-broker:${{ steps.get_version.outputs.VERSION }}

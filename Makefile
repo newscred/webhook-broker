@@ -1,11 +1,15 @@
 SHELL = /bin/bash -o pipefail
 
 UNAME_S := $(shell uname -s)
+
+ARCH := $(shell arch)
+
 OS := $(shell test -f /etc/os-release && cat /etc/os-release | grep '^NAME' | sed -e 's/NAME="\(.*\)"/\1/g')
 
 all: clean os-deps dep-tools deps test build
 
 apt-packages:
+	sudo apt install --yes gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
 
 brew-packages:
 
@@ -56,16 +60,32 @@ build-docker-image:
 	docker build . --tag=imyousuf/webhook-broker:latest
 
 build:
-	go build -mod=readonly
-	cp ./webhook-broker ./dist/
+	@echo "Architecture: $(ARCH)"
+	go build -mod=readonly -o ./dist/linux/$(ARCH)/webhook-broker
+	cp ./dist/linux/$(ARCH)/webhook-broker ./
+	$(eval build_archs := \
+		$(ARCH)\
+	)
+ifeq ($(OS),Ubuntu)
+	$(eval build_archs := \
+		x86_64\
+		arm64\
+		arm-v7\
+	)
+	env CC=aarch64-linux-gnu-gcc CXX=aarch64-linux-gnu-g++ CGO_ENABLED=1 GOOS=linux GOARCH=arm64 go build -mod=readonly -o ./dist/linux/arm64/webhook-broker
+	env CC=arm-linux-gnueabihf-gcc CXX=arm-linux-gnueabihf-g++ CGO_ENABLED=1 GOOS=linux GOARCH=arm GOARM=7 go build -mod=readonly -o ./dist/linux/arm-v7/webhook-broker
+endif
 ifndef APP_VERSION
 	@echo "Version: $(shell git log --pretty=format:'%h' -n 1)"
-	(cd dist && tar cjvf webhook-broker-$(shell git log --pretty=format:'%h' -n 1).tar.bz2 ./webhook-broker)
+	$(eval this_version := $(shell git log --pretty=format:'%h' -n 1))
 endif
 ifdef APP_VERSION
 	@echo "Version (Ref): $(APP_VERSION)"
-	(cd dist && tar cjvf webhook-broker-$(APP_VERSION).tar.bz2 ./webhook-broker)
+	$(eval this_version := $(APP_VERSION))
 endif
+	@- $(foreach X,$(build_archs), \
+	tar cjvf ./dist/webhook-broker-$(this_version)_$(X).tar.bz2 -C ./dist/linux/$(X)/ .;\
+	)
 
 time-test:
 	time go test -timeout 30s -mod=readonly ./... -count=1

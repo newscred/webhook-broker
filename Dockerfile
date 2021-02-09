@@ -1,4 +1,4 @@
-FROM golang:1.15.6-alpine3.12 AS build-env
+FROM golang:1.15.8-alpine3.13 AS build-env
 
 RUN apk update && apk add bash make git
 
@@ -27,7 +27,7 @@ ADD dispatcher ./dispatcher
 RUN make build
 RUN make test
 
-FROM alpine:3.12
+FROM alpine:3.13
 RUN apk update && apk add curl
 WORKDIR /
 COPY --from=build-env /go/src/github.com/imyousuf/webhook-broker/webhook-broker /webhook-broker
