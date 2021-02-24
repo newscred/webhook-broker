@@ -8,6 +8,32 @@
 
 This is a fully HTTP based Pub/Sub Broker with a goal to simplify systems architected in SOA or Microservice architecture. It aims to solve the inter service communication problem.
 
+## Use Case
+
+In a system where there are multiple services it is natural that there is inter service dependency which are asynchronous in nature. Lets see an example to understand it. There is a SaaS product; when a user registration happens there will be a congratulatory welcome email sent to the user. Here, for the sake of this conversation, lets assume there is a service that is responsible for sending out email to the end user; so the registration action will trigger the email; but email sending does not necessarily need to block the registration process; so it is asynchronous in nature. In this example, the registration service will call the email service to send out the welcome email to a certain email-address. Now when this call is made, there is no guarantee that email service is available so how does registration service ensure sending the message. Here is where the webhook broker (**w7b6**) comes in. The broker is a simple service that does very straightforward work and is deployed with high-availability in mind and it guarantees delivery of a message that it received with transparency at least once.
+
+So in the example above -
+
+**registration service** ---------- Email address and welcome email ------> **webhook-broker** ------ relay message -------> **email service**
+What broker introduces here is the asynchronous, non-blocking, guarantee of delivery.
+
+Some of the use cases we are considering using it for is -
+
+1. Message passing between systems where the use cases are -
+   1. Propagate changes to objects for search-index indexing
+   1. Propagate changes to objects for Authentication and Authorization computation
+   1. For triggering asynchronous processing/denormalizing objects
+1. For delivery of Public API Webhook events.
+
+If the use case seems overlapping with RabbitMQ, AWS SQS, Celery or similar services then yes it is similar. The advantage of using **w7b6** over these services would be -
+
+1. Tech stack agnostic for producer and subscriber/consumer
+1. Development and deployment is easier since everything is just Web APIs
+1. With HTTP2 there is the advantage of multiplexing request/response hence better network utilization between server and client.
+1. Easy use of "prioritized" message queues
+1. Guaranteed delivery of message at least once (push and not polling)
+1. Ease of new queue/topic setup
+
 ## Install & Usage
 
 Consider one of the following 4 strategies to use Webhook Broker.
