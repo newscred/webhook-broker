@@ -98,7 +98,7 @@ func (msgRepo *MessageDBRepository) SetDispatched(txContext context.Context, mes
 	tx, ok := txContext.Value(txContextKey).(*sql.Tx)
 	if ok {
 		currentTime := time.Now()
-		err := inTransactionExec(tx, emptyOps, "UPDATE message SET status = ?, outboxedAt = ?, updatedAt = ? WHERE id like ? and status like ?", args2SliceFnWrapper(data.MsgStatusDispatched, currentTime, currentTime, message.ID, data.MsgStatusAcknowledged), int64(1))
+		err := inTransactionExec(tx, emptyOps, "UPDATE message SET status = ?, outboxedAt = ?, updatedAt = ? WHERE id like ? and status = ?", args2SliceFnWrapper(data.MsgStatusDispatched, currentTime, currentTime, message.ID, data.MsgStatusAcknowledged), int64(1))
 		if err == nil {
 			message.Status = data.MsgStatusDispatched
 			message.OutboxedAt = currentTime
@@ -145,7 +145,7 @@ func (msgRepo *MessageDBRepository) GetMessagesNotDispatchedForCertainPeriod(del
 	page := data.NewPagination(nil, nil)
 	more := true
 	for more {
-		baseQuery := messageSelectRowCommonQuery + " status like ? AND receivedAt <= ?" + getPaginationQueryFragmentWithConfigurablePageSize(page, true, largePageSizeWithOrder)
+		baseQuery := messageSelectRowCommonQuery + " status = ? AND receivedAt <= ?" + getPaginationQueryFragmentWithConfigurablePageSize(page, true, largePageSizeWithOrder)
 		pageMessages, pagination, err := msgRepo.getMessages(baseQuery, appendWithPaginationArgs(page, data.MsgStatusAcknowledged, earliestReceivedAt)...)
 		if err == nil {
 			msgCount := len(pageMessages)

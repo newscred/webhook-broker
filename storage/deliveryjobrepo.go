@@ -138,7 +138,7 @@ func (djRepo *DeliveryJobDBRepository) getJobsForStatusAndDelta(status data.JobS
 		dateCol = "statusChangedAt"
 	}
 	for more {
-		baseQuery := jobCommonSelectQuery + " status like ? AND " + dateCol + " <= ?" + getPaginationQueryFragmentWithConfigurablePageSize(page, true, largePageSizeWithOrder)
+		baseQuery := jobCommonSelectQuery + " status = ? AND " + dateCol + " <= ?" + getPaginationQueryFragmentWithConfigurablePageSize(page, true, largePageSizeWithOrder)
 		pageJobs, pagination, err := djRepo.getJobs(baseQuery, nil, nil, appendWithPaginationArgs(page, status, time.Now().Add(delta)))
 		if err == nil {
 			jobs = append(jobs, pageJobs...)
