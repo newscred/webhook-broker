@@ -42,7 +42,7 @@ jobs:
       id: docker_build
       with:
         push: true
-        platforms: linux/amd64,linux/arm64
+        platforms: linux/amd64
         tags: |
           imyousuf/webhook-broker:${{ github.sha }}
           imyousuf/webhook-broker:latest
