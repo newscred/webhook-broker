@@ -97,7 +97,7 @@ jobs:
       id: build_push
       with:
         push: true
-        platforms: linux/amd64
+        platforms: linux/amd64,linux/arm64
         tags: |
           imyousuf/webhook-broker:${{ steps.get_version.outputs.VERSION }}
           ghcr.io/imyousuf/webhook-broker:${{ steps.get_version.outputs.VERSION }}
