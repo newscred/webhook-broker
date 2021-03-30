@@ -2,9 +2,9 @@ name: Webhook Broker CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ 0.1-maint ]
   pull_request:
-    branches: [ main ]
+    branches: [ 0.1-maint ]
 
 jobs:
   build:

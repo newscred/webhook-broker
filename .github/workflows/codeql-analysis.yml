@@ -13,10 +13,10 @@ name: "Code & Container Security Checks"
 
 on:
   push:
-    branches: [ main ]
+    branches: [ 0.1-maint ]
   pull_request:
     # The branches below must be a subset of the branches above
-    branches: [ main ]
+    branches: [ 0.1-maint ]
   schedule:
     - cron: '17 14 * * 0'
 
