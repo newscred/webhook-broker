@@ -11,7 +11,7 @@ require (
 	github.com/google/wire v0.5.0
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/mattn/go-sqlite3 v1.14.6
-	github.com/rs/xid v1.2.1
+	github.com/rs/xid v1.3.0
 	github.com/rs/zerolog v1.21.0
 	github.com/smartystreets/goconvey v1.6.4 // indirect
 	github.com/stretchr/testify v1.7.0
