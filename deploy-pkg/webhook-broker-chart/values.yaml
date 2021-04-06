@@ -7,7 +7,7 @@ replicaCount: 1
 image:
   repository: registry.hub.docker.com/imyousuf/webhook-broker
   pullPolicy: Always
-  # Overrides the image tag whose default is the chart appVersion.
+  # Specifies release image tag
   tag: "v0.1.0"
 
 imagePullSecrets: []

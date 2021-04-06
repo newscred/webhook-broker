@@ -2,11 +2,11 @@ name: Helm Build
 
 on:
   push:
-    branches: [ main ]
+    branches: [ 0.1-maint ]
     paths:
     - 'deploy-pkg/webhook-broker-chart/**'
   pull_request:
-    branches: [ main ]
+    branches: [ 0.1-maint ]
     paths:
     - 'deploy-pkg/webhook-broker-chart/**'
 
