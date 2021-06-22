@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -54,6 +55,8 @@ const (
 	consumerIDPrefix               = "integration-test-consumer-"
 	formDataContentTypeHeaderValue = "application/x-www-form-urlencoded"
 	headerContentType              = "Content-Type"
+	headerUnmodifiedSince          = "If-Unmodified-Since"
+	headerLastModified             = "Last-Modified"
 	headerChannelToken             = "X-Broker-Channel-Token"
 	headerProducerToken            = "X-Broker-Producer-Token"
 	headerProducerID               = "X-Broker-Producer-ID"
@@ -109,9 +112,10 @@ func createProducer() (err error) {
 	}
 	return err
 }
+
 func createChannel() (err error) {
 	formValues := url.Values{}
-	formValues.Add(tokenFormParamKey, token)
+	formValues.Add(tokenFormParamKey, token+"NEW")
 	req, _ := http.NewRequest(http.MethodPut, brokerBaseURL+"/channel/"+channelID, strings.NewReader(formValues.Encode()))
 	defer req.Body.Close()
 	req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
@@ -125,6 +129,59 @@ func createChannel() (err error) {
 	}
 	return err
 }
+
+type MsgStakeholder struct {
+	ID        string
+	Name      string
+	Token     string
+	ChangedAt time.Time
+}
+
+func updateChannel() (err error) {
+	gReq, _ := http.NewRequest(http.MethodGet, brokerBaseURL+"/channel/"+channelID, nil)
+	gResp, err := client.Do(gReq)
+	if err != nil {
+		log.Println(err)
+		return err
+	} else {
+		defer gResp.Body.Close()
+	}
+	var data MsgStakeholder
+	reqBody, err := io.ReadAll(gResp.Body)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	log.Println(string(reqBody))
+	err = json.Unmarshal(reqBody, &data)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	if data.ChangedAt.Format(http.TimeFormat) != gResp.Header.Get(headerLastModified) {
+		log.Fatal("Changed at and last modified not same - ", data.ChangedAt.Format(http.TimeFormat), " vs ", gResp.Header.Get(headerLastModified))
+	}
+	formValues := url.Values{}
+	formValues.Add(tokenFormParamKey, token)
+	req, _ := http.NewRequest(http.MethodPut, brokerBaseURL+"/channel/"+channelID, strings.NewReader(formValues.Encode()))
+	defer req.Body.Close()
+	req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
+	req.Header.Add(headerUnmodifiedSince, data.ChangedAt.Format(http.TimeFormat))
+	var resp *http.Response
+	resp, err = client.Do(req)
+	if err == nil {
+		defer resp.Body.Close()
+	} else {
+		log.Println(err)
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusBadRequest {
+		err = errDuringCreation
+		body, _ := io.ReadAll(resp.Body)
+		log.Println(resp.Status, string(body))
+	}
+	return err
+}
+
 func createConsumers(baseURI string) int {
 	for index := 0; index < consumerCount; index++ {
 		indexString := strconv.Itoa(index)
@@ -152,6 +209,7 @@ func createConsumers(baseURI string) int {
 	}
 	return consumerCount
 }
+
 func broadcastMessage(sendCount int) (err error) {
 	td := tdigest.NewWithCompression(maxMessages)
 	batchStart := time.Now()
@@ -303,6 +361,11 @@ func testBasicObjectCreation(portString string) {
 	err = createChannel()
 	if err != nil {
 		log.Println("error creating channel", err)
+		return
+	}
+	err = updateChannel()
+	if err != nil {
+		log.Println("error updating channel", err)
 		return
 	}
 	baseURLString := "http://" + consumerHostName + portString
