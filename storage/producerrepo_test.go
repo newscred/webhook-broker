@@ -167,6 +167,9 @@ func TestProducerStore(t *testing.T) {
 		updatedProducer, err := repo.Store(producer)
 		assert.Nil(t, err)
 		assert.Equal(t, successfulGetTestToken, updatedProducer.Token)
+		updatedProducer, err = repo.Get(successfulUpdateTestProducerID)
+		assert.Nil(t, err)
+		assert.Equal(t, successfulGetTestToken, updatedProducer.Token)
 		assert.True(t, producer.UpdatedAt.Before(updatedProducer.UpdatedAt))
 	})
 }

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -98,10 +97,36 @@ func consumerController(w http.ResponseWriter, r *http.Request, params httproute
 
 func createProducer() (err error) {
 	formValues := url.Values{}
+	formValues.Add(tokenFormParamKey, token+"NEW")
+	req, _ := http.NewRequest(http.MethodPut, brokerBaseURL+"/producer/"+producerID, strings.NewReader(formValues.Encode()))
+	defer req.Body.Close()
+	req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
+	var resp *http.Response
+	resp, err = client.Do(req)
+	if err == nil {
+		defer resp.Body.Close()
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusBadRequest {
+		err = errDuringCreation
+	}
+	return err
+}
+
+func updateProducer() (err error) {
+	gReq, _ := http.NewRequest(http.MethodGet, brokerBaseURL+"/producer/"+producerID, nil)
+	gResp, err := client.Do(gReq)
+	if err != nil {
+		log.Println(err)
+		return err
+	} else {
+		defer gResp.Body.Close()
+	}
+	formValues := url.Values{}
 	formValues.Add(tokenFormParamKey, token)
 	req, _ := http.NewRequest(http.MethodPut, brokerBaseURL+"/producer/"+producerID, strings.NewReader(formValues.Encode()))
 	defer req.Body.Close()
 	req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
+	req.Header.Add(headerUnmodifiedSince, gResp.Header.Get(headerLastModified))
 	var resp *http.Response
 	resp, err = client.Do(req)
 	if err == nil {
@@ -146,27 +171,12 @@ func updateChannel() (err error) {
 	} else {
 		defer gResp.Body.Close()
 	}
-	var data MsgStakeholder
-	reqBody, err := io.ReadAll(gResp.Body)
-	if err != nil {
-		log.Println(err)
-		return err
-	}
-	log.Println(string(reqBody))
-	err = json.Unmarshal(reqBody, &data)
-	if err != nil {
-		log.Println(err)
-		return err
-	}
-	if data.ChangedAt.Format(http.TimeFormat) != gResp.Header.Get(headerLastModified) {
-		log.Fatal("Changed at and last modified not same - ", data.ChangedAt.Format(http.TimeFormat), " vs ", gResp.Header.Get(headerLastModified))
-	}
 	formValues := url.Values{}
 	formValues.Add(tokenFormParamKey, token)
 	req, _ := http.NewRequest(http.MethodPut, brokerBaseURL+"/channel/"+channelID, strings.NewReader(formValues.Encode()))
 	defer req.Body.Close()
 	req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
-	req.Header.Add(headerUnmodifiedSince, data.ChangedAt.Format(http.TimeFormat))
+	req.Header.Add(headerUnmodifiedSince, gResp.Header.Get(headerLastModified))
 	var resp *http.Response
 	resp, err = client.Do(req)
 	if err == nil {
@@ -176,8 +186,6 @@ func updateChannel() (err error) {
 	}
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusBadRequest {
 		err = errDuringCreation
-		body, _ := io.ReadAll(resp.Body)
-		log.Println(resp.Status, string(body))
 	}
 	return err
 }
@@ -356,6 +364,11 @@ func testBasicObjectCreation(portString string) {
 	err = createProducer()
 	if err != nil {
 		log.Println("error creating producer", err)
+		return
+	}
+	err = updateProducer()
+	if err != nil {
+		log.Println("error updating producer", err)
 		return
 	}
 	err = createChannel()
