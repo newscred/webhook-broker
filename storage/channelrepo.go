@@ -39,7 +39,7 @@ func (repo *ChannelDBRepository) updateChannel(channel *data.Channel, name, toke
 		channel.Token = token
 		channel.UpdatedAt = time.Now()
 	}, "UPDATE channel SET name = ?, token = ?, updatedAt = ? WHERE channelId = ?",
-		args2SliceFnWrapper(channel.Name, channel.Token, channel.UpdatedAt, channel.ChannelID))
+		args2SliceFnWrapper(&channel.Name, &channel.Token, &channel.UpdatedAt, &channel.ChannelID))
 	return channel, err
 }
 
