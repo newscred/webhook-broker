@@ -159,11 +159,20 @@ func TestChannelStore(t *testing.T) {
 	})
 	t.Run("Update:Success", func(t *testing.T) {
 		t.Parallel()
-		channel, _ := data.NewChannel(successfulUpdateTestChannelID, "oldtoken")
+		oldToken := "oldtoken"
+		channel, _ := data.NewChannel(successfulUpdateTestChannelID, oldToken)
 		repo := getChannelRepo()
-		repo.Store(channel)
+		channel, err := repo.Store(channel)
+		assert.Nil(t, err)
+		assert.Equal(t, oldToken, channel.Token)
+		channel, err = repo.Get(successfulUpdateTestChannelID)
+		assert.Nil(t, err)
+		assert.Equal(t, oldToken, channel.Token)
 		channel.Token = successfulGetTestToken
 		updatedChannel, err := repo.Store(channel)
+		assert.Nil(t, err)
+		assert.Equal(t, successfulGetTestToken, updatedChannel.Token)
+		updatedChannel, err = repo.Get(successfulUpdateTestChannelID)
 		assert.Nil(t, err)
 		assert.Equal(t, successfulGetTestToken, updatedChannel.Token)
 		assert.True(t, channel.UpdatedAt.Before(updatedChannel.UpdatedAt))
