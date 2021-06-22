@@ -33,7 +33,7 @@ func (repo *ProducerDBRepository) updateProducer(producer *data.Producer, name, 
 		producer.Token = token
 		producer.UpdatedAt = time.Now()
 	}, "UPDATE producer SET name = ?, token = ?, updatedAt = ? WHERE producerId = ?",
-		args2SliceFnWrapper(producer.Name, producer.Token, producer.UpdatedAt, producer.ProducerID))
+		args2SliceFnWrapper(&producer.Name, &producer.Token, &producer.UpdatedAt, producer.ProducerID))
 	return producer, err
 }
 

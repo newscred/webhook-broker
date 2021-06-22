@@ -43,7 +43,7 @@ func (consumerRepo *ConsumerDBRepository) updateConsumer(consumer *data.Consumer
 		consumer.CallbackURL = callbackURL
 		consumer.UpdatedAt = time.Now()
 	}, "UPDATE consumer SET name = ?, token = ?, callbackUrl=?, updatedAt = ? WHERE consumerId = ? and channelId = ?",
-		args2SliceFnWrapper(consumer.Name, consumer.Token, consumer.CallbackURL, consumer.UpdatedAt, consumer.ConsumerID, consumer.ConsumingFrom.ChannelID))
+		args2SliceFnWrapper(&consumer.Name, &consumer.Token, &consumer.CallbackURL, &consumer.UpdatedAt, consumer.ConsumerID, consumer.ConsumingFrom.ChannelID))
 	return consumer, err
 }
 

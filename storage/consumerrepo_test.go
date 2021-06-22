@@ -288,6 +288,9 @@ func TestConsumerStore(t *testing.T) {
 		updatedConsumer, err := repo.Store(consumer)
 		assert.Nil(t, err)
 		assert.Equal(t, successfulGetTestToken, updatedConsumer.Token)
+		updatedConsumer, err = repo.Get(channel1.ChannelID, successfulUpdateTestConsumerID)
+		assert.Nil(t, err)
+		assert.Equal(t, successfulGetTestToken, updatedConsumer.Token)
 		assert.True(t, consumer.UpdatedAt.Before(updatedConsumer.UpdatedAt))
 	})
 }
