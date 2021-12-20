@@ -12,7 +12,7 @@ require (
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/mattn/go-sqlite3 v1.14.9
 	github.com/rs/xid v1.3.0
-	github.com/rs/zerolog v1.26.0
+	github.com/rs/zerolog v1.26.1
 	github.com/stretchr/testify v1.7.0
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 )
