@@ -2,6 +2,10 @@
 
 This contains all the release of the project from oldest to newest.
 
+## Release `0.1.2`
+
+[Bug - 104](https://github.com/imyousuf/webhook-broker/issues/104) - webhook-broker fails to dispatch with ambiguous error
+
 ## Release `0.1.1`
 
 Hot fix: [Issue](https://github.com/imyousuf/webhook-broker/issues/83) - Fix update Channel, Producer and Consumer Web APIs to work as expected

@@ -34,7 +34,7 @@ type LogLevel uint8
 
 // GetVersion provides the current version of the project
 func GetVersion() AppVersion {
-	return "0.1.1"
+	return "0.1.2"
 }
 
 const (

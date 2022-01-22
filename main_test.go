@@ -38,7 +38,7 @@ const (
 )
 
 func TestGetAppVersion(t *testing.T) {
-	assert.Equal(t, string(GetAppVersion()), "0.1.1")
+	assert.Equal(t, string(GetAppVersion()), "0.1.2")
 }
 
 var mainFunctionBreaker = func(stop *chan os.Signal) {
