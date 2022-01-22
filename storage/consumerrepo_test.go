@@ -30,8 +30,8 @@ const (
 )
 
 var (
-	channel1, channel2       *data.Channel // Used by messagerepo_test as well
-	callbackURL, relativeURL *url.URL
+	channel1, channel2, channel3 *data.Channel // Used by messagerepo_test as well
+	callbackURL, relativeURL     *url.URL
 )
 
 func getConsumerRepo() ConsumerRepository {
@@ -44,6 +44,7 @@ func SetupForConsumerTests() {
 	channelRepo := NewChannelRepository(testDB)
 	channel1 = createTestChannel("channel1-for-consumer", "sampletoken", channelRepo)
 	channel2 = createTestChannel("channel2-for-consumer", "sampletoken", channelRepo)
+	channel3 = createTestChannel("channel3-for-no-consumers", "sampletoken", channelRepo)
 	callbackURL = parseTestURL("https://imytech.net/")
 	relativeURL = parseTestURL("./test/")
 }
@@ -333,6 +334,16 @@ func TestConsumerGetList(t *testing.T) {
 		_, _, err := repo.GetList(channel2.ChannelID, data.NewPagination(nil, nil))
 		assert.Equal(t, expectedErr, err)
 		assert.Nil(t, mock.ExpectationsWereMet())
+	})
+	t.Run("EmptyChannel", func(t *testing.T) {
+		t.Parallel()
+		consumers, page, err := repo.GetList(channel3.ChannelID, data.NewPagination(nil, nil))
+		assert.Nil(t, err)
+		assert.NotNil(t, consumers)
+		assert.NotNil(t, page)
+		assert.Equal(t, 0, len(consumers))
+		assert.Nil(t, page.Next)
+		assert.Nil(t, page.Previous)
 	})
 	t.Run("Root", func(t *testing.T) {
 		t.Parallel()
