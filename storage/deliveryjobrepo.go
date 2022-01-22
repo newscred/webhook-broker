@@ -42,11 +42,16 @@ func (djRepo *DeliveryJobDBRepository) DispatchMessage(message *data.Message, de
 	}
 	if err == nil {
 		query = query[:len(query)-1]
-		err = transactionalWrites(djRepo.db, func(tx *sql.Tx) error {
-			return inTransactionExec(tx, emptyOps, query, args2SliceFnWrapper(args...), int64(len(deliveryJobs)))
-		}, func(tx *sql.Tx) error {
+		txs := make([]func(tx *sql.Tx) error, 0, 2)
+		if len(deliveryJobs) > 0 {
+			txs = append(txs, func(tx *sql.Tx) error {
+				return inTransactionExec(tx, emptyOps, query, args2SliceFnWrapper(args...), int64(len(deliveryJobs)))
+			})
+		}
+		txs = append(txs, func(tx *sql.Tx) error {
 			return djRepo.mesageRepository.SetDispatched(context.WithValue(context.Background(), txContextKey, tx), message)
 		})
+		err = transactionalWrites(djRepo.db, txs...)
 	}
 	return err
 }

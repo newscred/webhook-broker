@@ -96,6 +96,22 @@ func TestDispatchMessage(t *testing.T) {
 		assert.Nil(t, err)
 		assert.Equal(t, 0, len(dJobs))
 	})
+	t.Run("NoJobs", func(t *testing.T) {
+		t.Parallel()
+		djRepo := getDeliverJobRepository()
+		msgRepo := getMessageRepository()
+		message := getMessageForJob()
+		msgRepo.Create(message)
+		err := djRepo.DispatchMessage(message)
+		assert.Nil(t, err)
+		// Asserts for SetDispatched
+		assert.Equal(t, data.MsgStatusDispatched, message.Status)
+		assert.Greater(t, message.OutboxedAt.UnixNano(), message.ReceivedAt.UnixNano())
+		assert.Greater(t, message.UpdatedAt.UnixNano(), message.CreatedAt.UnixNano())
+		count := 0
+		testDB.QueryRow("select count(*) from job where messageId like ?", message.ID).Scan(&count)
+		assert.Equal(t, 0, count)
+	})
 	t.Run("MessageAlreadyDispatched", func(t *testing.T) {
 		t.Parallel()
 		djRepo := getDeliverJobRepository()
