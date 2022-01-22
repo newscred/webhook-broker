@@ -50,9 +50,9 @@ generate:
 	mockery --name ProducerRepository --structname "MockProducerRepository" --dir "./storage/" --output "./storage" --testonly --outpkg "storage"
 
 dep-tools:
-	go get github.com/google/wire/cmd/wire
+	go install github.com/google/wire/cmd/wire@latest
 ifneq ($(OS),Alpine Linux)
-	go get github.com/golang-migrate/migrate/v4/cmd/migrate
+	go install github.com/golang-migrate/migrate/v4/cmd/migrate@latest
 	go get github.com/vektra/mockery/v2/.../
 endif
 
