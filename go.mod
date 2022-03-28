@@ -11,7 +11,7 @@ require (
 	github.com/google/wire v0.5.0
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/mattn/go-sqlite3 v1.14.10
-	github.com/rs/xid v1.3.0
+	github.com/rs/xid v1.4.0
 	github.com/rs/zerolog v1.26.1
 	github.com/stretchr/testify v1.7.0
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
