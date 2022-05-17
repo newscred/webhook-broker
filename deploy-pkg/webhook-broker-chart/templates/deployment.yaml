@@ -39,6 +39,10 @@ spec:
             - name: http
               containerPort: {{ .Values.broker.port }}
               protocol: TCP
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 30"]
           volumeMounts:
             - name: conf-vol
               mountPath: /app-config/
