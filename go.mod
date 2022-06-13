@@ -13,6 +13,6 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.10
 	github.com/rs/xid v1.3.0
 	github.com/rs/zerolog v1.26.1
-	github.com/stretchr/testify v1.7.0
+	github.com/stretchr/testify v1.7.2
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 )
