@@ -1,7 +1,7 @@
 # webhook-broker
 
-![webhook-broker CI](https://github.com/imyousuf/webhook-broker/workflows/webhook-broker%20CI/badge.svg?branch=main)
-![webhook-broker Container CI](https://github.com/imyousuf/webhook-broker/workflows/webhook-broker%20Container%20CI/badge.svg)
+![webhook-broker CI](https://github.com/newscred/webhook-broker/actions/workflows/build.yml/badge.svg)
+![webhook-broker Container CI](https://github.com/newscred/webhook-broker/actions/workflows/container-build.yml/badge.svg)
 [![Test Coverage](https://api.codeclimate.com/v1/badges/bf5ba73ffe2743c7c7ad/test_coverage)](https://codeclimate.com/github/imyousuf/webhook-broker/test_coverage)
 [![Maintainability](https://api.codeclimate.com/v1/badges/bf5ba73ffe2743c7c7ad/maintainability)](https://codeclimate.com/github/imyousuf/webhook-broker/maintainability)
 [![Go Report Card](https://goreportcard.com/badge/github.com/imyousuf/webhook-broker)](https://goreportcard.com/report/github.com/imyousuf/webhook-broker)
