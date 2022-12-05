@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/imyousuf/webhook-broker/storage/data"
+	"github.com/newscred/webhook-broker/storage/data"
 )
 
 // NewChannelRepository retrieves new instance of channel repository

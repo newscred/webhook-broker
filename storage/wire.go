@@ -1,10 +1,11 @@
-//+build wireinject
+//go:build wireinject
+// +build wireinject
 
 package storage
 
 import (
 	"github.com/google/wire"
-	"github.com/imyousuf/webhook-broker/config"
+	"github.com/newscred/webhook-broker/config"
 )
 
 // GetNewDataAccessor provides the facade for accessing all the object repositories

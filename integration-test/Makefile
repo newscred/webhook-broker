@@ -40,7 +40,7 @@ generate:
 dep-tools:
 
 build-docker-iamge:
-	docker build . --tag=imyousuf/webhook-broker-integration-test:latest
+	docker build . --tag=newscred/webhook-broker-integration-test:latest
 
 build:
 	go build -mod=readonly

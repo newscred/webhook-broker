@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/imyousuf/webhook-broker/config"
-	"github.com/imyousuf/webhook-broker/storage/data"
+	"github.com/newscred/webhook-broker/config"
+	"github.com/newscred/webhook-broker/storage/data"
 )
 
 // DataAccessor is the facade to all the data repository

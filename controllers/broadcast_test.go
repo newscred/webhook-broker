@@ -13,11 +13,11 @@ import (
 
 	"github.com/rs/zerolog/log"
 
-	dispatchermocks "github.com/imyousuf/webhook-broker/dispatcher/mocks"
-	"github.com/imyousuf/webhook-broker/storage"
-	"github.com/imyousuf/webhook-broker/storage/data"
-	storagemocks "github.com/imyousuf/webhook-broker/storage/mocks"
 	"github.com/julienschmidt/httprouter"
+	dispatchermocks "github.com/newscred/webhook-broker/dispatcher/mocks"
+	"github.com/newscred/webhook-broker/storage"
+	"github.com/newscred/webhook-broker/storage/data"
+	storagemocks "github.com/newscred/webhook-broker/storage/mocks"
 	"github.com/rs/xid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

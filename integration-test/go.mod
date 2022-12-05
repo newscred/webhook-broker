@@ -1,4 +1,4 @@
-module github.com/imyousuf/webhook-broker/integration-test
+module github.com/newscred/webhook-broker/integration-test
 
 go 1.16
 

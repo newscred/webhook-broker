@@ -22,9 +22,9 @@ import (
 	"net/http/pprof"
 
 	"github.com/google/wire"
-	"github.com/imyousuf/webhook-broker/config"
-	"github.com/imyousuf/webhook-broker/storage/data"
 	"github.com/julienschmidt/httprouter"
+	"github.com/newscred/webhook-broker/config"
+	"github.com/newscred/webhook-broker/storage/data"
 )
 
 var (

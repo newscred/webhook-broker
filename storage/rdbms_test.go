@@ -15,9 +15,9 @@ import (
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database"
-	"github.com/imyousuf/webhook-broker/config"
-	configmocks "github.com/imyousuf/webhook-broker/config/mocks"
-	"github.com/imyousuf/webhook-broker/storage/data"
+	"github.com/newscred/webhook-broker/config"
+	configmocks "github.com/newscred/webhook-broker/config/mocks"
+	"github.com/newscred/webhook-broker/storage/data"
 	"github.com/stretchr/testify/assert"
 )
 

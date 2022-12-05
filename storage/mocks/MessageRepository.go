@@ -5,7 +5,7 @@ package mocks
 import (
 	context "context"
 
-	data "github.com/imyousuf/webhook-broker/storage/data"
+	data "github.com/newscred/webhook-broker/storage/data"
 	mock "github.com/stretchr/testify/mock"
 
 	time "time"

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/imyousuf/webhook-broker/storage/data"
+	"github.com/newscred/webhook-broker/storage/data"
 )
 
 var (

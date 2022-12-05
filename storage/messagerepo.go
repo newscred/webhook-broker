@@ -8,7 +8,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 
-	"github.com/imyousuf/webhook-broker/storage/data"
+	"github.com/newscred/webhook-broker/storage/data"
 )
 
 // MessageDBRepository is the MessageRepository implementation

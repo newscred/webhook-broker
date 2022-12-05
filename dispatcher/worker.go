@@ -13,8 +13,8 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
-	"github.com/imyousuf/webhook-broker/config"
-	"github.com/imyousuf/webhook-broker/storage"
+	"github.com/newscred/webhook-broker/config"
+	"github.com/newscred/webhook-broker/storage"
 )
 
 const (

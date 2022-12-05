@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/imyousuf/webhook-broker/storage/data"
-	storagemocks "github.com/imyousuf/webhook-broker/storage/mocks"
+	"github.com/newscred/webhook-broker/storage/data"
+	storagemocks "github.com/newscred/webhook-broker/storage/mocks"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -74,7 +74,6 @@ func waitTimeout(wg *sync.WaitGroup, timeout time.Duration) bool {
 		return true // timed out
 	}
 }
-
 
 func TestNotifyOnInterrupt(t *testing.T) {
 	stop := make(chan os.Signal, 1)

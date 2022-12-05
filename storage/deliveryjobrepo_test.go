@@ -12,7 +12,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/imyousuf/webhook-broker/storage/data"
+	"github.com/newscred/webhook-broker/storage/data"
 	"github.com/rs/xid"
 	"github.com/stretchr/testify/assert"
 )

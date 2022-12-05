@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/imyousuf/webhook-broker/storage"
-	"github.com/imyousuf/webhook-broker/storage/data"
 	"github.com/julienschmidt/httprouter"
+	"github.com/newscred/webhook-broker/storage"
+	"github.com/newscred/webhook-broker/storage/data"
 )
 
 const (

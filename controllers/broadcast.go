@@ -10,10 +10,10 @@ import (
 
 	"github.com/rs/zerolog/hlog"
 
-	"github.com/imyousuf/webhook-broker/dispatcher"
-	"github.com/imyousuf/webhook-broker/storage"
-	"github.com/imyousuf/webhook-broker/storage/data"
 	"github.com/julienschmidt/httprouter"
+	"github.com/newscred/webhook-broker/dispatcher"
+	"github.com/newscred/webhook-broker/storage"
+	"github.com/newscred/webhook-broker/storage/data"
 )
 
 const (

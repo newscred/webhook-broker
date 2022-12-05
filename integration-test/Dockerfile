@@ -1,9 +1,9 @@
-FROM golang:1.17.6-alpine3.15
+FROM golang:1.19.3-alpine3.15
 
 RUN apk update && apk add bash make git
 
-RUN mkdir -p /go/src/github.com/imyousuf/webhook-broker/integration-test/
-WORKDIR /go/src/github.com/imyousuf/webhook-broker/integration-test/
+RUN mkdir -p /go/src/github.com/newscred/webhook-broker/integration-test/
+WORKDIR /go/src/github.com/newscred/webhook-broker/integration-test/
 
 ADD Makefile .
 RUN make os-deps dep-tools
