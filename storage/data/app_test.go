@@ -3,7 +3,7 @@ package data
 import (
 	"testing"
 
-	"github.com/imyousuf/webhook-broker/config"
+	"github.com/newscred/webhook-broker/config"
 	"github.com/stretchr/testify/assert"
 )
 

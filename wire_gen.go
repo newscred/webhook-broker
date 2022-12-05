@@ -6,10 +6,10 @@
 package main
 
 import (
-	"github.com/imyousuf/webhook-broker/config"
-	"github.com/imyousuf/webhook-broker/controllers"
-	"github.com/imyousuf/webhook-broker/dispatcher"
-	"github.com/imyousuf/webhook-broker/storage"
+	"github.com/newscred/webhook-broker/config"
+	"github.com/newscred/webhook-broker/controllers"
+	"github.com/newscred/webhook-broker/dispatcher"
+	"github.com/newscred/webhook-broker/storage"
 )
 
 // Injectors from wire.go:

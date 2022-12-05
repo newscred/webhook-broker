@@ -50,14 +50,14 @@ generate:
 	mockery --name ProducerRepository --structname "MockProducerRepository" --dir "./storage/" --output "./storage" --testonly --outpkg "storage"
 
 dep-tools:
-	go install github.com/google/wire/cmd/wire@latest
+	go install github.com/google/wire/cmd/wire@v0.5.0
 ifneq ($(OS),Alpine Linux)
-	go install github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+	go install github.com/golang-migrate/migrate/v4/cmd/migrate@v4.15.2
 	go get github.com/vektra/mockery/v2/.../
 endif
 
 build-docker-image:
-	docker build . --tag=imyousuf/webhook-broker:latest
+	docker build . --tag=newscred/webhook-broker:latest
 
 build:
 	@echo "Architecture: $(ARCH)"

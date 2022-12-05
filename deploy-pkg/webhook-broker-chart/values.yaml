@@ -5,7 +5,7 @@
 replicaCount: 1
 
 image:
-  repository: registry.hub.docker.com/imyousuf/webhook-broker
+  repository: registry.hub.docker.com/newscred/webhook-broker
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
   tag: "latest"

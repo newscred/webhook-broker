@@ -3,8 +3,8 @@
 package mocks
 
 import (
-	config "github.com/imyousuf/webhook-broker/config"
-	data "github.com/imyousuf/webhook-broker/storage/data"
+	config "github.com/newscred/webhook-broker/config"
+	data "github.com/newscred/webhook-broker/storage/data"
 
 	mock "github.com/stretchr/testify/mock"
 )

@@ -13,8 +13,8 @@ import (
 	migrate_mysql "github.com/golang-migrate/migrate/v4/database/mysql"
 	migrate_sqlite3 "github.com/golang-migrate/migrate/v4/database/sqlite3"
 	"github.com/google/wire"
-	"github.com/imyousuf/webhook-broker/config"
-	"github.com/imyousuf/webhook-broker/storage/data"
+	"github.com/newscred/webhook-broker/config"
+	"github.com/newscred/webhook-broker/storage/data"
 
 	// MySQL DB Driver
 	_ "github.com/go-sql-driver/mysql"

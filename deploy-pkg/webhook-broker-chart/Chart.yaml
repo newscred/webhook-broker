@@ -27,9 +27,9 @@ keywords:
 - broker
 - message passing
 - service bus
-home: https://github.com/imyousuf/webhook-broker
+home: https://github.com/newscred/webhook-broker
 sources:
-- https://github.com/imyousuf/webhook-broker
+- https://github.com/newscred/webhook-broker
 maintainers:
 - name: imyousuf
   email: imyousuf@imytech.net

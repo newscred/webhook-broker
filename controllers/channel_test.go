@@ -13,9 +13,9 @@ import (
 
 	"github.com/rs/zerolog/log"
 
-	"github.com/imyousuf/webhook-broker/storage"
-	"github.com/imyousuf/webhook-broker/storage/data"
-	storagemocks "github.com/imyousuf/webhook-broker/storage/mocks"
+	"github.com/newscred/webhook-broker/storage"
+	"github.com/newscred/webhook-broker/storage/data"
+	storagemocks "github.com/newscred/webhook-broker/storage/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )

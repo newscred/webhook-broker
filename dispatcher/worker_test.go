@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/imyousuf/webhook-broker/storage/data"
-	storagemocks "github.com/imyousuf/webhook-broker/storage/mocks"
+	"github.com/newscred/webhook-broker/storage/data"
+	storagemocks "github.com/newscred/webhook-broker/storage/mocks"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/assert"

@@ -8,9 +8,9 @@ import (
 
 	"github.com/rs/zerolog/log"
 
-	"github.com/imyousuf/webhook-broker/config"
-	"github.com/imyousuf/webhook-broker/storage"
-	"github.com/imyousuf/webhook-broker/storage/data"
+	"github.com/newscred/webhook-broker/config"
+	"github.com/newscred/webhook-broker/storage"
+	"github.com/newscred/webhook-broker/storage/data"
 )
 
 const (

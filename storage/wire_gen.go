@@ -6,7 +6,7 @@
 package storage
 
 import (
-	"github.com/imyousuf/webhook-broker/config"
+	"github.com/newscred/webhook-broker/config"
 )
 
 import (

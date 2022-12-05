@@ -3,7 +3,7 @@
 package mocks
 
 import (
-	config "github.com/imyousuf/webhook-broker/config"
+	config "github.com/newscred/webhook-broker/config"
 	mock "github.com/stretchr/testify/mock"
 
 	time "time"

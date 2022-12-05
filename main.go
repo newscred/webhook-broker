@@ -17,11 +17,11 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/google/wire"
-	"github.com/imyousuf/webhook-broker/config"
-	"github.com/imyousuf/webhook-broker/controllers"
-	"github.com/imyousuf/webhook-broker/dispatcher"
-	"github.com/imyousuf/webhook-broker/storage"
-	"github.com/imyousuf/webhook-broker/storage/data"
+	"github.com/newscred/webhook-broker/config"
+	"github.com/newscred/webhook-broker/controllers"
+	"github.com/newscred/webhook-broker/dispatcher"
+	"github.com/newscred/webhook-broker/storage"
+	"github.com/newscred/webhook-broker/storage/data"
 	lumberjack "gopkg.in/natefinch/lumberjack.v2"
 )
 

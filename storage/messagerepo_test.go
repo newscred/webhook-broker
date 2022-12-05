@@ -12,8 +12,8 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-sql-driver/mysql"
-	"github.com/imyousuf/webhook-broker/storage/data"
 	sqlite "github.com/mattn/go-sqlite3"
+	"github.com/newscred/webhook-broker/storage/data"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )

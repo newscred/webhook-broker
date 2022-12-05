@@ -1,7 +1,7 @@
 package data
 
 import (
-	"github.com/imyousuf/webhook-broker/config"
+	"github.com/newscred/webhook-broker/config"
 )
 
 // AppStatus represents the status of this App

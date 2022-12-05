@@ -3,7 +3,7 @@
 package mocks
 
 import (
-	storage "github.com/imyousuf/webhook-broker/storage"
+	storage "github.com/newscred/webhook-broker/storage"
 	mock "github.com/stretchr/testify/mock"
 )
 

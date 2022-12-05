@@ -2,7 +2,7 @@ package dispatcher
 
 import (
 	"github.com/google/wire"
-	"github.com/imyousuf/webhook-broker/storage/data"
+	"github.com/newscred/webhook-broker/storage/data"
 )
 
 var (

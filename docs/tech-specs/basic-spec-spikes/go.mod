@@ -1,4 +1,4 @@
-module github.com/imyousuf/webhook-broker/docs/tech-specs/basic-spec-spikes
+module github.com/newscred/webhook-broker/docs/tech-specs/basic-spec-spikes
 
 go 1.15
 

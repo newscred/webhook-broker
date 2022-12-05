@@ -3,7 +3,7 @@
 package storage
 
 import (
-	data "github.com/imyousuf/webhook-broker/storage/data"
+	data "github.com/newscred/webhook-broker/storage/data"
 	mock "github.com/stretchr/testify/mock"
 )
 
