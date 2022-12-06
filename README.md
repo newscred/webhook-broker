@@ -2,9 +2,9 @@
 
 ![webhook-broker CI](https://github.com/newscred/webhook-broker/actions/workflows/build.yml/badge.svg)
 ![webhook-broker Container CI](https://github.com/newscred/webhook-broker/actions/workflows/container-build.yml/badge.svg)
-[![Test Coverage](https://api.codeclimate.com/v1/badges/bf5ba73ffe2743c7c7ad/test_coverage)](https://codeclimate.com/github/imyousuf/webhook-broker/test_coverage)
-[![Maintainability](https://api.codeclimate.com/v1/badges/bf5ba73ffe2743c7c7ad/maintainability)](https://codeclimate.com/github/imyousuf/webhook-broker/maintainability)
-[![Go Report Card](https://goreportcard.com/badge/github.com/imyousuf/webhook-broker)](https://goreportcard.com/report/github.com/imyousuf/webhook-broker)
+[![Test Coverage](https://api.codeclimate.com/v1/badges/0242f0e077ad68716c26/test_coverage)](https://codeclimate.com/github/newscred/webhook-broker/test_coverage)
+[![Maintainability](https://api.codeclimate.com/v1/badges/0242f0e077ad68716c26/maintainability)](https://codeclimate.com/github/newscred/webhook-broker/maintainability)
+[![Go Report Card](https://goreportcard.com/badge/github.com/newscred/webhook-broker)](https://goreportcard.com/report/github.com/newscred/webhook-broker)
 
 This is a fully HTTP based Pub/Sub Broker with a goal to simplify systems architected in SOA or Microservice architecture. It aims to solve the inter service communication problem.
 
@@ -48,7 +48,7 @@ As part of the Terraform configuration, we deploy Webhook Broker using a [Helm C
 
 ### DIY - Use Docker Image
 
-Our docker images are host in 2 repositories -
+Our docker images are host in 2 repositories (to be updated) -
 
 1. [Docker Hub](https://hub.docker.com/repository/docker/imyousuf/webhook-broker)
 2. [Github Docker Registry](https://github.com/users/imyousuf/packages/container/package/webhook-broker)
@@ -84,9 +84,9 @@ The Tech Specs are good place to understand the implementation details -
 
 ## Contributors
 
-The [Project Board](https://github.com/imyousuf/webhook-broker/projects/1) represents the works slated for current release. Once you find something you want to work on please fork the project, create a topic/issue/ticket branch, once complete open a PR against master.
+The [Project Board](https://github.com/newscred/webhook-broker/projects/1) represents the works slated for current release. Once you find something you want to work on please fork the project, create a topic/issue/ticket branch, once complete open a PR against master.
 
-If you find any bug, please report it [here](https://github.com/imyousuf/webhook-broker/issues).
+If you find any bug, please report it [here](https://github.com/newscred/webhook-broker/issues).
 
 For all support and discussion please use the Slack Channel **`#webhook-broker`** in the [Gophers](https://gophers.slack.com/) workspace. For direct invite please email to `webhook-broker at imytech.net`.
 
