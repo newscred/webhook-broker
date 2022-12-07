@@ -9,11 +9,13 @@ OS := $(shell test -f /etc/os-release && cat /etc/os-release | grep '^NAME' | se
 all: clean os-deps dep-tools deps test build
 
 apt-packages:
+	sudo apt-get update
 	sudo apt install --yes gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
 
 brew-packages:
 
 alpine-packages:
+	apk update
 	apk add --no-cache gcc musl-dev curl
 
 os-deps:
