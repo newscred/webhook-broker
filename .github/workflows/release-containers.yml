@@ -33,6 +33,9 @@ jobs:
     -
       uses: docker/login-action@v1
       name: Login to DockerHub
+      env:
+        dockerhub_setup: ${{ secrets.DOCKERHUB_USERNAME }}
+      if: ${{ env.dockerhub_setup != '' }}
       with:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -40,6 +43,9 @@ jobs:
     -
       uses: docker/login-action@v1
       name: Login to Github Docker Registry
+      env:
+        gcr_pat: ${{ secrets.CR_PAT }}
+      if: ${{ env.gcr_pat != '' }}
       with:
         registry: ghcr.io
         username: ${{ github.repository_owner }}
@@ -53,6 +59,10 @@ jobs:
       uses: docker/build-push-action@v2
       name: Push
       id: build_push
+      env:
+        gcr_pat: ${{ secrets.CR_PAT }}
+        dockerhub_setup: ${{ secrets.DOCKERHUB_USERNAME }}
+      if: ${{ env.gcr_pat != '' && env.dockerhub_setup != '' }}
       with:
         push: true
         platforms: linux/amd64,linux/arm64

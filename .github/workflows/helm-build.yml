@@ -23,7 +23,7 @@ jobs:
 
   deploy:
 
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && AWS_ACCESS_KEY_ID != ''
 
     needs: [ build ]
 
