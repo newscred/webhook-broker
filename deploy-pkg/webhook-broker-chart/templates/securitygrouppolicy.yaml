@@ -1,0 +1,14 @@
+{{- if .Values.useEksSecurityGroupForPods -}}
+apiVersion: vpcresources.k8s.aws/v1beta1
+kind: SecurityGroupPolicy
+metadata:
+  name: {{ include "webhook-broker-chart.name" . }}
+  labels:
+    {{- include "webhook-broker-chart.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "webhook-broker-chart.name" . }}
+  securityGroups:
+    groupIds: {{ .Values.securityGroups }}
+{{- end -}}
