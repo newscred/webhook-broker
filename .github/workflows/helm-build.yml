@@ -10,6 +10,10 @@ on:
     paths:
     - 'deploy-pkg/webhook-broker-chart/**'
 
+permissions:
+  id-token: write # This is required for requesting the JWT
+  contents: read  # This is required for actions/checkout
+
 jobs:
   build:
 
@@ -17,37 +21,43 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - uses: azure/setup-helm@v1
+    - uses: azure/setup-helm@v3
     - run: helm lint
       working-directory: deploy-pkg/webhook-broker-chart/
 
   deploy:
 
-    if: github.event_name == 'push' && AWS_ACCESS_KEY_ID != ''
+    if: github.event_name == 'push'
 
     needs: [ build ]
 
     runs-on: ubuntu-latest
 
-    env:
-      AWS_REGION: 'us-east-1'
-      AWS_ACCESS_KEY_ID: ${{ secrets.HELM_AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.HELM_AWS_SECRET_ACCESS_KEY }}
-
     steps:
+    - 
+      name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        role-to-assume: ${{ secrets.AWS_PUBLIC_ECR_HELM_IAM_ROLE }}
+        aws-region: us-east-1
+
     - uses: actions/checkout@v2
-    - uses: azure/setup-helm@v1
+
+    - uses: azure/setup-helm@v3
+
     - name: Install Helm S3 Plugin
       run: helm plugin install https://github.com/hypnoglow/helm-s3.git
-    - name: Setup helm.imytech.net Helm Repo
-      run: helm repo add imy-helm-charts s3://imy-us-public/helm-charts/
+
+    - name: Init helm repo
+      run: helm s3 init s3://optimizely-helm-charts/public/stable
+
+    - name: Setup optimizely-helm-charts Helm Repo
+      run: helm repo add optimizely-helm-charts s3://optimizely-helm-charts/public/stable
+
     - name: Build Helm Package
       working-directory: deploy-pkg/webhook-broker-chart/
       run: helm package ./
+
     - name: Push to Helm Repo
       working-directory: deploy-pkg/webhook-broker-chart/
-      run: helm s3 push --force --relative ./webhook-broker-chart-*.tgz imy-helm-charts
-    - uses: chetan/invalidate-cloudfront-action@master
-      env:
-        DISTRIBUTION: ${{ secrets.DISTRIBUTION }}
-        PATHS: '/*'
+      run: helm s3 push --force --relative ./webhook-broker-chart-*.tgz optimizely-helm-charts
