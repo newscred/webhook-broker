@@ -13,6 +13,7 @@ image:
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
+securityGroupPolicyAnnotations: {}
 
 useEksSecurityGroupForPods: false
 securityGroups: []

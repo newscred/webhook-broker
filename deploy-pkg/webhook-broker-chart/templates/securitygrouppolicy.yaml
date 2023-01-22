@@ -5,6 +5,10 @@ metadata:
   name: {{ include "webhook-broker-chart.name" . }}
   labels:
     {{- include "webhook-broker-chart.labels" . | nindent 4 }}
+  {{- with .Values.securityGroupPolicyAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   podSelector:
     matchLabels:
