@@ -1,13 +1,41 @@
 package dispatcher
 
 import (
-	"container/list"
+	"container/heap"
 	"sync"
 )
 
-// A PriorityQueue implements heap.Interface and holds Items.
+type jobs []*Job
+
+func (jbs jobs) Len() int {
+	return len(jbs)
+}
+
+func (jbs jobs) Swap(i, j int) {
+	jbs[i], jbs[j] = jbs[j], jbs[i]
+}
+
+func (jbs jobs) Less(i, j int) bool {
+	// We want Pop to give us the highest, not lowest, priority so we use greater than here.
+	return jbs[i].Priority > jbs[j].Priority
+}
+
+func (jbs *jobs) Push(x any) {
+	item := x.(*Job)
+	*jbs = append(*jbs, item)
+}
+
+func (jbs *jobs) Pop() any {
+	old := *jbs
+	n := len(old)
+	item := old[n-1]
+	old[n-1] = nil // avoid memory leak
+	*jbs = old[0 : n-1]
+	return item
+}
+
 type PriorityQueue struct {
-	jobs *list.List
+	jobs jobs
 	mu   sync.Mutex
 }
 
@@ -20,35 +48,17 @@ func (pq *PriorityQueue) Len() int {
 func (pq *PriorityQueue) Enqueue(job *Job) {
 	pq.mu.Lock()
 	defer pq.mu.Unlock()
-	var marker *list.Element
-	var firstElement bool = true
-	for e := pq.jobs.Back(); e != nil; e = e.Prev() {
-		firstElement = false
-		queuedJob := e.Value.(*Job)
-		if job.Priority <= queuedJob.Priority {
-			marker = e
-			break
-		}
-	}
-	if firstElement {
-		pq.jobs.PushFront(job)
-	} else if marker == nil {
-		pq.jobs.PushFront(job)
-	} else {
-		pq.jobs.InsertAfter(job, marker)
-	}
+	heap.Push(&pq.jobs, job)
 }
 
 // Dequeue pops the item next in order
 func (pq *PriorityQueue) Dequeue() *Job {
 	pq.mu.Lock()
 	defer pq.mu.Unlock()
-	frontElement := pq.jobs.Front()
-	job := pq.jobs.Remove(frontElement).(*Job)
-	return job
+	return heap.Pop(&pq.jobs).(*Job)
 }
 
 // NewJobPriorityQueue initializes a priority queue for Jobs
 func NewJobPriorityQueue() *PriorityQueue {
-	return &PriorityQueue{jobs: list.New()}
+	return &PriorityQueue{}
 }
