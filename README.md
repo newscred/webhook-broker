@@ -80,7 +80,8 @@ In addition consult our [configuration documentation](./docs/configuration.md) t
 
 The Tech Specs are good place to understand the implementation details -
 
-* [Base Release Specs](./docs/tech-specs/basic-spec.md)
+- [Base Release Specs](./docs/tech-specs/basic-spec.md)
+- [Pull Based Consumer Specs](./docs/tech-specs/pull-consumer-spec.md)
 
 ## Contributors
 
