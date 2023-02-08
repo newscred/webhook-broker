@@ -70,6 +70,7 @@ type DeliveryJobRepository interface {
 	RequeueDeadJobsForConsumer(consumer *data.Consumer) error
 	GetJobsForMessage(message *data.Message, page *data.Pagination) ([]*data.DeliveryJob, *data.Pagination, error)
 	GetJobsForConsumer(consumer *data.Consumer, jobStatus data.JobStatus, page *data.Pagination) ([]*data.DeliveryJob, *data.Pagination, error)
+	GetPrioritizedJobsForConsumer(consumer *data.Consumer, jobStatus data.JobStatus, pageSize int) ([]*data.DeliveryJob, error)
 	GetByID(id string) (*data.DeliveryJob, error)
 	GetJobsInflightSince(delta time.Duration) []*data.DeliveryJob
 	GetJobsReadyForInflightSince(delta time.Duration) []*data.DeliveryJob
