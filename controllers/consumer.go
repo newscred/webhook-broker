@@ -14,6 +14,7 @@ const (
 	consumersPath          = channelPath + "/consumers"
 	consumerIDPathParamKey = "consumerId"
 	consumerPath           = channelPath + "/consumer/:" + consumerIDPathParamKey
+	jobsPath               = consumerPath + "/queued-jobs"
 )
 
 // ConsumerModel represents the data communicated to HTTP clients
@@ -166,4 +167,30 @@ func (controller *ConsumersController) GetPath() string {
 // FormatAsRelativeLink formats this controllers URL with the parameters provided. Both `consumerId` and `channelId` params must be sent else it will return the templated URL
 func (controller *ConsumersController) FormatAsRelativeLink(params ...httprouter.Param) string {
 	return formatURL(params, consumersPath, channelIDPathParamKey)
+}
+
+// JobsController represents all endpoints related to the queued jobs for a consumer of a channel
+type JobsController struct {
+	ConsumerEndpoint EndpointController
+}
+
+// NewJobsController creates and returns a new instance of JobsController
+func NewJobsController(consumerEndpoint *ConsumerController) *JobsController {
+	return &JobsController{ConsumerEndpoint: consumerEndpoint}
+}
+
+// Get implements the GET /channel/:channelId/consumer/:consumerId/queued-jobs endpoint
+func (controller *JobsController) Get(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+	data := ListResult{Result: make([]string, 0), Pages: make(map[string]string), Links: make(map[string]string)}
+	writeJSON(w, data)
+}
+
+// GetPath returns the endpoint's path
+func (controller *JobsController) GetPath() string {
+	return jobsPath
+}
+
+// FormatAsRelativeLink formats this controllers URL with the parameters provided. Both `consumerId` and `channelId` params must be sent else it will return the templated URL
+func (controller *JobsController) FormatAsRelativeLink(params ...httprouter.Param) string {
+	return formatURL(params, jobsPath, channelIDPathParamKey, consumerIDPathParamKey)
 }
