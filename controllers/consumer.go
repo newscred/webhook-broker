@@ -171,17 +171,55 @@ func (controller *ConsumersController) FormatAsRelativeLink(params ...httprouter
 
 // JobsController represents all endpoints related to the queued jobs for a consumer of a channel
 type JobsController struct {
-	ConsumerEndpoint EndpointController
+	ConsumerRepo    storage.ConsumerRepository
+	DeliveryJobRepo storage.DeliveryJobRepository
 }
 
 // NewJobsController creates and returns a new instance of JobsController
-func NewJobsController(consumerEndpoint *ConsumerController) *JobsController {
-	return &JobsController{ConsumerEndpoint: consumerEndpoint}
+func NewJobsController(consumerRepo storage.ConsumerRepository, deliveryJobRepo storage.DeliveryJobRepository) *JobsController {
+	return &JobsController{ConsumerRepo: consumerRepo, DeliveryJobRepo: deliveryJobRepo}
+}
+
+type JobListResult struct {
+	Result []*DeliveryJobModel
+	Pages  map[string]string
+	Links  map[string]string
 }
 
 // Get implements the GET /channel/:channelId/consumer/:consumerId/queued-jobs endpoint
 func (controller *JobsController) Get(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
-	data := ListResult{Result: make([]string, 0), Pages: make(map[string]string), Links: make(map[string]string)}
+	channelID := findParam(params, channelIDPathParamKey)
+	consumerID := findParam(params, consumerIDPathParamKey)
+	consumer, err := controller.ConsumerRepo.Get(channelID, consumerID)
+
+	if err != nil {
+		switch err {
+		case sql.ErrNoRows:
+			writeNotFound(w)
+		default:
+			writeErr(w, err)
+		}
+		return
+	}
+
+	jobs, resultPagination, err := controller.DeliveryJobRepo.GetJobsForConsumer(consumer, data.JobQueued, getPagination(r))
+
+	if err != nil {
+		switch err {
+		case sql.ErrNoRows:
+			writeNotFound(w)
+		default:
+			writeErr(w, err)
+		}
+		return
+	}
+
+	jobModels := make([]*DeliveryJobModel, len(jobs))
+	for index, job := range jobs {
+		jobModels[index] = newDeliveryJobModel(job)
+	}
+
+	data := JobListResult{Result: jobModels, Pages: getPaginationLinks(r, resultPagination), Links: make(map[string]string)}
 	writeJSON(w, data)
 }
 
