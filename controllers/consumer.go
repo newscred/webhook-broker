@@ -8,6 +8,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/newscred/webhook-broker/storage"
 	"github.com/newscred/webhook-broker/storage/data"
+	"github.com/rs/xid"
 )
 
 const (
@@ -180,8 +181,36 @@ func NewJobsController(consumerRepo storage.ConsumerRepository, deliveryJobRepo 
 	return &JobsController{ConsumerRepo: consumerRepo, DeliveryJobRepo: deliveryJobRepo}
 }
 
+type QeuedMessageModel struct {
+	MessageID   string
+	Payload     string
+	ContentType string
+	Priority    uint
+}
+
+func newQueuedMessageModel(message *data.Message) *QeuedMessageModel {
+	return &QeuedMessageModel{
+		MessageID:   message.MessageID,
+		Payload:     message.Payload,
+		ContentType: message.ContentType,
+		Priority:    message.Priority,
+	}
+}
+
+type QueuedDeliveryJobModel struct {
+	ID      xid.ID
+	Message *QeuedMessageModel
+}
+
+func newQueuedDeliveryJobModel(job *data.DeliveryJob) *QueuedDeliveryJobModel {
+	return &QueuedDeliveryJobModel{
+		ID:      job.ID,
+		Message: newQueuedMessageModel(job.Message),
+	}
+}
+
 type JobListResult struct {
-	Result []*DeliveryJobModel
+	Result []*QueuedDeliveryJobModel
 	Pages  map[string]string
 	Links  map[string]string
 }
@@ -214,9 +243,9 @@ func (controller *JobsController) Get(w http.ResponseWriter, r *http.Request, pa
 		return
 	}
 
-	jobModels := make([]*DeliveryJobModel, len(jobs))
+	jobModels := make([]*QueuedDeliveryJobModel, len(jobs))
 	for index, job := range jobs {
-		jobModels[index] = newDeliveryJobModel(job)
+		jobModels[index] = newQueuedDeliveryJobModel(job)
 	}
 
 	data := JobListResult{Result: jobModels, Pages: getPaginationLinks(r, resultPagination), Links: make(map[string]string)}
