@@ -231,7 +231,7 @@ func (controller *JobsController) Get(w http.ResponseWriter, r *http.Request, pa
 		return
 	}
 
-	jobs, resultPagination, err := controller.DeliveryJobRepo.GetJobsForConsumer(consumer, data.JobQueued, getPagination(r))
+	jobs, resultPagination, err := controller.DeliveryJobRepo.GetPrioritizedJobsForConsumer(consumer, data.JobQueued, getPagination(r))
 
 	if err != nil {
 		switch err {
