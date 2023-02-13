@@ -14,6 +14,8 @@ const (
 	consumersPath          = channelPath + "/consumers"
 	consumerIDPathParamKey = "consumerId"
 	consumerPath           = channelPath + "/consumer/:" + consumerIDPathParamKey
+	jobIDPathParamKey      = "jobId"
+	jobPath                = consumerPath + "/job/:" + jobIDPathParamKey
 )
 
 // ConsumerModel represents the data communicated to HTTP clients
@@ -158,4 +160,33 @@ func (controller *ConsumersController) GetPath() string {
 // FormatAsRelativeLink formats this controllers URL with the parameters provided. Both `consumerId` and `channelId` params must be sent else it will return the templated URL
 func (controller *ConsumersController) FormatAsRelativeLink(params ...httprouter.Param) string {
 	return formatURL(params, consumersPath, channelIDPathParamKey)
+}
+
+// JobController represents all endpoints related to a single job for a consumer
+type JobController struct {
+	ChannelRepo     storage.ChannelRepository
+	ConsumerRepo    storage.ConsumerRepository
+	DeliveryJobRepo storage.DeliveryJobRepository
+}
+
+// NewJobController creates and returns a new instance of JobController
+func NewJobController(channelRepo storage.ChannelRepository, consumerRepo storage.ConsumerRepository, deliveryJobRepo storage.DeliveryJobRepository) *JobController {
+	return &JobController{ChannelRepo: channelRepo, ConsumerRepo: consumerRepo, DeliveryJobRepo: deliveryJobRepo}
+}
+
+// Post implements the POST /channel/:channelId/consumer/:consumerId/job/:jobId endpoint
+func (controller *JobController) Post(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+	jobID := findParam(params, jobIDPathParamKey)
+	job, err := controller.DeliveryJobRepo.GetByID(jobID)
+	writeGetResult(err, func(w http.ResponseWriter) { writeErr(w, err) }, w, newDeliveryJobModel(job))
+}
+
+// GetPath returns the endpoint's path
+func (controller *JobController) GetPath() string {
+	return jobPath
+}
+
+// FormatAsRelativeLink formats this controllers URL with the parameters provided. All of `consumerId`, `channelId` and `jobId` params must be sent else it will return the templated URL
+func (controller *JobController) FormatAsRelativeLink(params ...httprouter.Param) (result string) {
+	return formatURL(params, jobPath, channelIDPathParamKey, consumerIDPathParamKey, jobIDPathParamKey)
 }
