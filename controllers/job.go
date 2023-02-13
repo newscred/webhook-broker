@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -16,15 +17,19 @@ import (
 const (
 	headerConsumerToken = "X-Broker-Consumer-Token"
 	jobsPath            = consumerPath + "/queued-jobs"
+	jobIDPathParamKey   = "jobId"
+	jobPath             = consumerPath + "/job/:" + jobIDPathParamKey
 	defaultPageSize     = 25
 	maxPageSize         = 100
 )
 
 var (
 	errInvalidQueryParam        = errors.New("invalid query parameter")
+	errInvalidTransitionRequest = errors.New("invalid transition request")
 	errConsumerDoesNotExist     = errors.New("consumer could not be found")
 	errConsumerTokenNotMatching = errors.New("consumer token does not match")
 	errConsumerNotPullBased     = errors.New("consumer not pull based")
+	errJobDoesNotExist          = errors.New("job could not be found")
 )
 
 // JobsController represents all endpoints related to the queued jobs for a consumer of a channel
@@ -155,4 +160,94 @@ func getConsumerWithValidation(w http.ResponseWriter, r *http.Request, params ht
 		valid = false
 	}
 	return consumer, valid
+}
+
+// JobController represents all endpoints related to a single job for a consumer
+type JobController struct {
+	ChannelRepo     storage.ChannelRepository
+	ConsumerRepo    storage.ConsumerRepository
+	DeliveryJobRepo storage.DeliveryJobRepository
+}
+
+// NewJobController creates and returns a new instance of JobController
+func NewJobController(channelRepo storage.ChannelRepository, consumerRepo storage.ConsumerRepository, deliveryJobRepo storage.DeliveryJobRepository) *JobController {
+	return &JobController{ChannelRepo: channelRepo, ConsumerRepo: consumerRepo, DeliveryJobRepo: deliveryJobRepo}
+}
+
+// Post implements the POST /channel/:channelId/consumer/:consumerId/job/:jobId endpoint
+func (controller *JobController) Post(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+	job, valid := getJobWithValidation(w, r, params, controller.ChannelRepo, controller.ConsumerRepo, controller.DeliveryJobRepo)
+	if !valid {
+		return
+	}
+
+	updateData := struct{ NextState string }{}
+	err := json.NewDecoder(r.Body).Decode(&updateData)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+
+	if job.Status.String() == updateData.NextState {
+		writeStatus(w, http.StatusAccepted, nil)
+		return
+	}
+
+	switch updateData.NextState {
+	case data.JobInflight.String():
+		switch job.Status {
+		case data.JobQueued:
+			err = controller.DeliveryJobRepo.MarkJobInflight(job)
+		case data.JobDead:
+			err = controller.DeliveryJobRepo.MarkDeadJobAsInflight(job)
+		default:
+			writeStatus(w, http.StatusBadRequest, errInvalidTransitionRequest)
+			return
+		}
+	case data.JobDelivered.String():
+		err = controller.DeliveryJobRepo.MarkJobDelivered(job)
+	case data.JobDead.String():
+		err = controller.DeliveryJobRepo.MarkJobDead(job)
+	default:
+		writeStatus(w, http.StatusBadRequest, errInvalidTransitionRequest)
+		return
+	}
+
+	if err != nil {
+		writeStatus(w, http.StatusBadRequest, errInvalidTransitionRequest)
+		return
+	}
+
+	writeStatus(w, http.StatusAccepted, nil)
+}
+
+// GetPath returns the endpoint's path
+func (controller *JobController) GetPath() string {
+	return jobPath
+}
+
+// FormatAsRelativeLink formats this controllers URL with the parameters provided. All of `consumerId`, `channelId` and `jobId` params must be sent else it will return the templated URL
+func (controller *JobController) FormatAsRelativeLink(params ...httprouter.Param) (result string) {
+	return formatURL(params, jobPath, channelIDPathParamKey, consumerIDPathParamKey, jobIDPathParamKey)
+}
+
+func getJobWithValidation(w http.ResponseWriter, r *http.Request, params httprouter.Params, channelRepo storage.ChannelRepository, consumerRepo storage.ConsumerRepository, deliveryJobRepo storage.DeliveryJobRepository) (job *data.DeliveryJob, valid bool) {
+	logger := hlog.FromRequest(r)
+	consumer, valid := getConsumerWithValidation(w, r, params, channelRepo, consumerRepo)
+	if !valid {
+		return nil, valid
+	}
+
+	jobID := params.ByName(jobIDPathParamKey)
+	job, err := deliveryJobRepo.GetByID(jobID)
+	if err != nil {
+		logger.Error().Err(err).Msg("no job found: " + jobID)
+		writeStatus(w, http.StatusNotFound, errJobDoesNotExist)
+		valid = false
+	} else if job.Listener.ConsumerID != consumer.ConsumerID {
+		logger.Error().Msg(fmt.Sprintf("consumer id did not match: %s vs %s", job.Listener.ConsumerID, consumer.ConsumerID))
+		writeStatus(w, http.StatusUnauthorized, errJobDoesNotExist)
+		valid = false
+	}
+	return job, valid
 }

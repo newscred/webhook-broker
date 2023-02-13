@@ -32,7 +32,7 @@ var (
 	routerInitializer sync.Once
 	server            *http.Server
 	// ControllerInjector for binding controllers
-	ControllerInjector = wire.NewSet(ConfigureAPI, NewRouter, NewStatusController, NewProducersController, NewProducerController, NewChannelController, NewChannelsController, NewConsumerController, NewConsumersController, NewJobsController, NewBroadcastController, NewMessageController, NewMessagesController, NewDLQController, wire.Struct(new(Controllers), "StatusController", "ProducersController", "ProducerController", "ChannelController", "ConsumerController", "ConsumersController", "JobsController", "BroadcastController", "MessageController", "MessagesController", "DLQController", "ChannelsController"))
+	ControllerInjector = wire.NewSet(ConfigureAPI, NewRouter, NewStatusController, NewProducersController, NewProducerController, NewChannelController, NewChannelsController, NewConsumerController, NewConsumersController, NewJobsController, NewJobController, NewBroadcastController, NewMessageController, NewMessagesController, NewDLQController, wire.Struct(new(Controllers), "StatusController", "ProducersController", "ProducerController", "ChannelController", "ConsumerController", "ConsumersController", "JobsController", "JobController", "BroadcastController", "MessageController", "MessagesController", "DLQController", "ChannelsController"))
 	// ErrUnsupportedMediaType is returned when client does not provide appropriate `Content-Type` header
 	ErrUnsupportedMediaType = errors.New("Media type not supported")
 	// ErrConditionalFailed is returned when update is missing `If-Unmodified-Since` header
@@ -68,6 +68,7 @@ type (
 		ConsumerController  *ConsumerController
 		ConsumersController *ConsumersController
 		JobsController      *JobsController
+		JobController       *JobController
 		BroadcastController *BroadcastController
 		MessageController   *MessageController
 		MessagesController  *MessagesController
@@ -214,7 +215,7 @@ func NewRouter(controllers *Controllers) *httprouter.Router {
 	apiRouter.Handler(http.MethodGet, "/debug/pprof/threadcreate", pprof.Handler("threadcreate"))
 	apiRouter.Handler(http.MethodGet, "/debug/pprof/block", pprof.Handler("block"))
 	setupAPIRoutes(apiRouter, controllers.StatusController, controllers.ProducersController, controllers.ProducerController, controllers.ChannelController,
-		controllers.ConsumerController, controllers.ConsumersController, controllers.JobsController, controllers.BroadcastController, controllers.MessageController,
+		controllers.ConsumerController, controllers.ConsumersController, controllers.JobsController, controllers.JobController, controllers.BroadcastController, controllers.MessageController,
 		controllers.MessagesController, controllers.DLQController, controllers.ChannelsController)
 	return apiRouter
 }
