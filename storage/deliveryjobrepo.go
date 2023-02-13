@@ -197,10 +197,10 @@ func (djRepo *DeliveryJobDBRepository) GetPrioritizedJobsForConsumer(consumer *d
 	if page == nil || (page.Next != nil && page.Previous != nil) {
 		return getDefaultErrorResponseForJobs()
 	}
-	fields := "job.id, job.messageId, job.consumerId, job.status, job.dispatchReceivedAt, job.retryAttemptCount, job.statusChangedAt, job.earliestNextAttemptAt, job.createdAt, job.updatedAt"
-	joinedTables := "job JOIN message ON job.messageId=message.id"
-	filters := "job.consumerId like ? AND job.status = ?"
-	order := " ORDER BY message.priority DESC"
+	fields := "id, messageId, consumerId, status, dispatchReceivedAt, retryAttemptCount, statusChangedAt, earliestNextAttemptAt, createdAt, updatedAt"
+	joinedTables := "job JOIN (SELECT id as mid, priority FROM message) ON messageId=mid"
+	filters := "consumerId like ? AND status = ?"
+	order := " ORDER BY priority DESC"
 	paginate := " LIMIT 25"
 	baseQuery := "SELECT " + fields + " FROM " + joinedTables + " WHERE " + filters + getPaginationQueryFragmentWithConfigurablePageSize(page, true, orderByClause(order+paginate))
 	return djRepo.getJobs(baseQuery, nil, consumer, appendWithPaginationArgs(page, consumer.ID.String(), jobStatus))
