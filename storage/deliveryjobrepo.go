@@ -97,6 +97,20 @@ func (djRepo *DeliveryJobDBRepository) MarkJobRetry(deliveryJob *data.DeliveryJo
 	return err
 }
 
+// MarkDeadJobAsInflight increases the retry attempt count and sets the status of the job to Queued if the job's current status is Dead in the object and DB; else returns error
+func (djRepo *DeliveryJobDBRepository) MarkDeadJobAsInflight(deliveryJob *data.DeliveryJob) (err error) {
+	currentTime := time.Now()
+	err = transactionalSingleRowWriteExec(djRepo.db, emptyOps, "UPDATE job SET status = ?, statusChangedAt = ?, updatedAt = ?, earliestNextAttemptAt = ?, retryAttemptCount = ? WHERE id like ? and status = ?", args2SliceFnWrapper(data.JobInflight, currentTime, currentTime, currentTime, deliveryJob.RetryAttemptCount+1, deliveryJob.ID, data.JobDead))
+	if err == nil {
+		deliveryJob.Status = data.JobInflight
+		deliveryJob.StatusChangedAt = currentTime
+		deliveryJob.UpdatedAt = currentTime
+		deliveryJob.EarliestNextAttemptAt = currentTime
+		deliveryJob.RetryAttemptCount = deliveryJob.RetryAttemptCount + 1
+	}
+	return err
+}
+
 func (djRepo *DeliveryJobDBRepository) getJobs(baseQuery string, message *data.Message, consumer *data.Consumer, args []interface{}) (jobs []*data.DeliveryJob, pagination *data.Pagination, err error) {
 	jobs = make([]*data.DeliveryJob, 0)
 	pagination = &data.Pagination{}

@@ -67,6 +67,7 @@ type DeliveryJobRepository interface {
 	MarkJobDelivered(deliveryJob *data.DeliveryJob) error
 	MarkJobDead(deliveryJob *data.DeliveryJob) error
 	MarkJobRetry(deliveryJob *data.DeliveryJob, earliestDelta time.Duration) error
+	MarkDeadJobAsInflight(deliveryJob *data.DeliveryJob) error
 	RequeueDeadJobsForConsumer(consumer *data.Consumer) error
 	GetJobsForMessage(message *data.Message, page *data.Pagination) ([]*data.DeliveryJob, *data.Pagination, error)
 	GetJobsForConsumer(consumer *data.Consumer, jobStatus data.JobStatus, page *data.Pagination) ([]*data.DeliveryJob, *data.Pagination, error)
