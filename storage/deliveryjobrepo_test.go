@@ -248,6 +248,25 @@ func TestStatusUpdatesForJob(t *testing.T) {
 		assert.Equal(t, data.JobQueued, dJob.Status)
 		assert.Greater(t, dJob.EarliestNextAttemptAt.UnixNano(), now.UnixNano())
 	})
+	t.Run("MarkDeadJobAsInflight", func(t *testing.T) {
+		t.Parallel()
+		job := jobs[5]
+		err := djRepo.MarkDeadJobAsInflight(job)
+		assert.Error(t, err)
+		err = djRepo.MarkJobInflight(job)
+		assert.NoError(t, err)
+		err = djRepo.MarkDeadJobAsInflight(job)
+		assert.Error(t, err)
+		err = djRepo.MarkJobDead(job)
+		assert.NoError(t, err)
+		currentRetryAttempCount := job.RetryAttemptCount
+		err = djRepo.MarkDeadJobAsInflight(job)
+		assert.NoError(t, err)
+		dJob, err := djRepo.GetByID(job.ID.String())
+		assert.NoError(t, err)
+		assert.Equal(t, data.JobInflight, dJob.Status)
+		assert.Equal(t, currentRetryAttempCount+1, dJob.RetryAttemptCount)
+	})
 }
 
 func TestStatusBasedJobsListing(t *testing.T) {
