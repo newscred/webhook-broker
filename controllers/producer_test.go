@@ -32,7 +32,7 @@ const (
 // ProducerTestSetup is called from TestMain for the package
 func ProducerTestSetup() {
 	producerRepo = storage.NewProducerRepository(db)
-	for index := 48; index > -1; index = index - 1 {
+	for index := 47; index > -1; index = index - 1 {
 		indexString := strconv.Itoa(index)
 		producer, err := data.NewProducer(listTestProducerIDPrefix+indexString, successfulGetTestToken+" - "+indexString)
 		if err == nil {
