@@ -17,10 +17,11 @@ import (
 )
 
 var (
-	deliveryJobRepo storage.DeliveryJobRepository
-	jobTestChannel  *data.Channel
-	jobTestProducer *data.Producer
-	jobTestConsumer *data.Consumer
+	deliveryJobRepo      storage.DeliveryJobRepository
+	jobTestChannel       *data.Channel
+	jobTestProducer      *data.Producer
+	jobTestConsumer      *data.Consumer
+	jobTestOtherConsumer *data.Consumer
 )
 
 const (
@@ -34,7 +35,8 @@ const (
 func JobTestSetup() {
 	setupTestChannel()
 	setupTestProducer()
-	setupTestConsumer()
+	jobTestConsumer = setupTestConsumer(jobTestConsumerID)
+	jobTestOtherConsumer = setupTestConsumer("other-" + jobTestConsumerID)
 
 	deliveryJobRepo = storage.NewDeliveryJobRepository(db, messageRepo, consumerRepo)
 }
@@ -61,19 +63,20 @@ func setupTestProducer() {
 	}
 }
 
-func setupTestConsumer() {
+func setupTestConsumer(consumerID string) *data.Consumer {
 	callbackURL, err := url.Parse("https://imytech.net/")
 	if err != nil {
 		log.Fatal().Err(err)
 	}
-	consumer, err := data.NewConsumer(jobTestChannel, jobTestConsumerID, successfulGetTestToken, callbackURL)
+	consumer, err := data.NewConsumer(jobTestChannel, consumerID, successfulGetTestToken, callbackURL)
 	if err != nil {
 		log.Fatal()
 	}
-	jobTestConsumer, err = consumerRepo.Store(consumer)
+	consumer, err = consumerRepo.Store(consumer)
 	if err != nil {
 		log.Fatal().Err(err)
 	}
+	return consumer
 }
 
 func setupTestJob() (*data.DeliveryJob, error) {
@@ -145,7 +148,6 @@ func TestJobControllerPost_Success(t *testing.T) {
 
 			rr := httptest.NewRecorder()
 			testRouter.ServeHTTP(rr, req)
-
 			assert.Equal(t, http.StatusAccepted, rr.Code)
 
 			updatedJob, err := deliveryJobRepo.GetByID(job.ID.String())
@@ -184,7 +186,6 @@ func TestJobControllerPost_TransitionFailure(t *testing.T) {
 
 			rr := httptest.NewRecorder()
 			testRouter.ServeHTTP(rr, req)
-
 			assert.Equal(t, http.StatusBadRequest, rr.Code)
 
 			updatedJob, err := deliveryJobRepo.GetByID(job.ID.String())
@@ -216,4 +217,193 @@ func TestJobControllerPost_TransitionFailure(t *testing.T) {
 	for _, invalidNextState := range invalidNextStates {
 		runInvalidTransitionTest(invalidNextState)
 	}
+}
+
+func TestJobControllerPost_Error(t *testing.T) {
+	jobController := NewJobController(channelRepo, consumerRepo, deliveryJobRepo)
+	testRouter := createTestRouter(jobController)
+	t.Run("400 Channel Not Found", func(t *testing.T) {
+		t.Parallel()
+		testURI := jobController.FormatAsRelativeLink(
+			httprouter.Param{Key: channelIDPathParamKey, Value: "invalid-channel-id"},
+			httprouter.Param{Key: consumerIDPathParamKey, Value: "invalid-consumer-id"},
+			httprouter.Param{Key: jobIDPathParamKey, Value: "invalid-job-id"},
+		)
+		t.Log(testURI)
+
+		bodyString := "{\"NextState\": \"INFLIGHT\"}"
+		requestBody := ioutil.NopCloser(strings.NewReader(bodyString))
+		req, err := http.NewRequest("POST", testURI, requestBody)
+		assert.NoError(t, err)
+
+		rr := httptest.NewRecorder()
+		testRouter.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusNotFound, rr.Code)
+	})
+
+	t.Run("403 Channel Token Mismatch", func(t *testing.T) {
+		t.Parallel()
+		testURI := jobController.FormatAsRelativeLink(
+			httprouter.Param{Key: channelIDPathParamKey, Value: jobTestChannel.ChannelID},
+			httprouter.Param{Key: consumerIDPathParamKey, Value: "invalid-consumer-id"},
+			httprouter.Param{Key: jobIDPathParamKey, Value: "invalid-job-id"},
+		)
+		t.Log(testURI)
+
+		bodyString := "{\"NextState\": \"INFLIGHT\"}"
+		requestBody := ioutil.NopCloser(strings.NewReader(bodyString))
+		req, err := http.NewRequest("POST", testURI, requestBody)
+		assert.NoError(t, err)
+
+		req.Header.Add(headerContentType, jobPostTestContentType)
+
+		rr := httptest.NewRecorder()
+		testRouter.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusForbidden, rr.Code)
+	})
+
+	t.Run("401 Consumer Not Found", func(t *testing.T) {
+		t.Parallel()
+		testURI := jobController.FormatAsRelativeLink(
+			httprouter.Param{Key: channelIDPathParamKey, Value: jobTestChannel.ChannelID},
+			httprouter.Param{Key: consumerIDPathParamKey, Value: "invalid-consumer-id"},
+			httprouter.Param{Key: jobIDPathParamKey, Value: "invalid-job-id"},
+		)
+		t.Log(testURI)
+
+		bodyString := "{\"NextState\": \"INFLIGHT\"}"
+		requestBody := ioutil.NopCloser(strings.NewReader(bodyString))
+		req, err := http.NewRequest("POST", testURI, requestBody)
+		assert.NoError(t, err)
+
+		req.Header.Add(headerContentType, jobPostTestContentType)
+		req.Header.Add(headerChannelToken, jobTestChannel.Token)
+
+		rr := httptest.NewRecorder()
+		testRouter.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusUnauthorized, rr.Code)
+	})
+
+	t.Run("403 Consumer Token Mismatch", func(t *testing.T) {
+		t.Parallel()
+		testURI := jobController.FormatAsRelativeLink(
+			httprouter.Param{Key: channelIDPathParamKey, Value: jobTestChannel.ChannelID},
+			httprouter.Param{Key: consumerIDPathParamKey, Value: jobTestConsumer.ConsumerID},
+			httprouter.Param{Key: jobIDPathParamKey, Value: "invalid-job-id"},
+		)
+		t.Log(testURI)
+
+		bodyString := "{\"NextState\": \"INFLIGHT\"}"
+		requestBody := ioutil.NopCloser(strings.NewReader(bodyString))
+		req, err := http.NewRequest("POST", testURI, requestBody)
+		assert.NoError(t, err)
+
+		req.Header.Add(headerContentType, jobPostTestContentType)
+		req.Header.Add(headerChannelToken, jobTestChannel.Token)
+
+		rr := httptest.NewRecorder()
+		testRouter.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusForbidden, rr.Code)
+	})
+
+	t.Run("404 Job NotFound", func(t *testing.T) {
+		t.Parallel()
+		testURI := jobController.FormatAsRelativeLink(
+			httprouter.Param{Key: channelIDPathParamKey, Value: jobTestChannel.ChannelID},
+			httprouter.Param{Key: consumerIDPathParamKey, Value: jobTestConsumer.ConsumerID},
+			httprouter.Param{Key: jobIDPathParamKey, Value: "invalid-job-id"},
+		)
+		t.Log(testURI)
+
+		bodyString := "{\"NextState\": \"INFLIGHT\"}"
+		requestBody := ioutil.NopCloser(strings.NewReader(bodyString))
+		req, err := http.NewRequest("POST", testURI, requestBody)
+		assert.NoError(t, err)
+
+		req.Header.Add(headerContentType, jobPostTestContentType)
+		req.Header.Add(headerChannelToken, jobTestChannel.Token)
+		req.Header.Add(headerConsumerToken, jobTestConsumer.Token)
+
+		rr := httptest.NewRecorder()
+		testRouter.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusNotFound, rr.Code)
+	})
+
+	t.Run("401 Job Not for Consumer", func(t *testing.T) {
+		t.Parallel()
+		job, err := setupTestJob()
+		assert.NoError(t, err)
+
+		testURI := jobController.FormatAsRelativeLink(
+			httprouter.Param{Key: channelIDPathParamKey, Value: jobTestChannel.ChannelID},
+			httprouter.Param{Key: consumerIDPathParamKey, Value: jobTestOtherConsumer.ConsumerID},
+			httprouter.Param{Key: jobIDPathParamKey, Value: job.ID.String()},
+		)
+		t.Log(testURI)
+
+		bodyString := "{\"NextState\": \"INFLIGHT\"}"
+		requestBody := ioutil.NopCloser(strings.NewReader(bodyString))
+		req, err := http.NewRequest("POST", testURI, requestBody)
+		assert.NoError(t, err)
+
+		req.Header.Add(headerContentType, jobPostTestContentType)
+		req.Header.Add(headerChannelToken, jobTestChannel.Token)
+		req.Header.Add(headerConsumerToken, jobTestConsumer.Token)
+
+		rr := httptest.NewRecorder()
+		testRouter.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusUnauthorized, rr.Code)
+	})
+
+	t.Run("400 Invalid Request Body", func(t *testing.T) {
+		t.Parallel()
+		job, err := setupTestJob()
+		assert.NoError(t, err)
+
+		testURI := jobController.FormatAsRelativeLink(
+			httprouter.Param{Key: channelIDPathParamKey, Value: jobTestChannel.ChannelID},
+			httprouter.Param{Key: consumerIDPathParamKey, Value: jobTestConsumer.ConsumerID},
+			httprouter.Param{Key: jobIDPathParamKey, Value: job.ID.String()},
+		)
+		t.Log(testURI)
+
+		bodyString := "{}"
+		requestBody := ioutil.NopCloser(strings.NewReader(bodyString))
+		req, err := http.NewRequest("POST", testURI, requestBody)
+		assert.NoError(t, err)
+
+		req.Header.Add(headerContentType, jobPostTestContentType)
+		req.Header.Add(headerChannelToken, jobTestChannel.Token)
+		req.Header.Add(headerConsumerToken, jobTestConsumer.Token)
+
+		rr := httptest.NewRecorder()
+		testRouter.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusBadRequest, rr.Code)
+	})
+
+	t.Run("400 Invalid NextState", func(t *testing.T) {
+		t.Parallel()
+		job, err := setupTestJob()
+		assert.NoError(t, err)
+
+		testURI := jobController.FormatAsRelativeLink(
+			httprouter.Param{Key: channelIDPathParamKey, Value: jobTestChannel.ChannelID},
+			httprouter.Param{Key: consumerIDPathParamKey, Value: jobTestConsumer.ConsumerID},
+			httprouter.Param{Key: jobIDPathParamKey, Value: job.ID.String()},
+		)
+		t.Log(testURI)
+
+		bodyString := "{\"NextState\": \"invalid-state\"}"
+		requestBody := ioutil.NopCloser(strings.NewReader(bodyString))
+		req, err := http.NewRequest("POST", testURI, requestBody)
+		assert.NoError(t, err)
+
+		req.Header.Add(headerContentType, jobPostTestContentType)
+		req.Header.Add(headerChannelToken, jobTestChannel.Token)
+		req.Header.Add(headerConsumerToken, jobTestConsumer.Token)
+
+		rr := httptest.NewRecorder()
+		testRouter.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusBadRequest, rr.Code)
+	})
 }
