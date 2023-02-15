@@ -21,8 +21,6 @@ var (
 	jobTestChannel  *data.Channel
 	jobTestProducer *data.Producer
 	jobTestConsumer *data.Consumer
-	jobTestMessage  *data.Message
-	postTestJob     *data.DeliveryJob
 )
 
 const (
@@ -39,20 +37,6 @@ func JobTestSetup() {
 	setupTestConsumer()
 
 	deliveryJobRepo = storage.NewDeliveryJobRepository(db, messageRepo, consumerRepo)
-
-	var err error
-	jobTestMessage, err = data.NewMessage(jobTestChannel, jobTestProducer, "payload", "type")
-	if err != nil {
-		log.Fatal()
-	}
-	messageRepo.Create(jobTestMessage)
-	postTestJob, err = data.NewDeliveryJob(jobTestMessage, jobTestConsumer)
-	if err != nil {
-		log.Fatal()
-	}
-	deliveryJobRepo.DispatchMessage(jobTestMessage, postTestJob)
-	deliveryJobRepo.MarkJobInflight(postTestJob)
-	deliveryJobRepo.MarkJobDead(postTestJob)
 }
 
 func setupTestChannel() {
@@ -92,6 +76,22 @@ func setupTestConsumer() {
 	}
 }
 
+func setupTestJob() (*data.DeliveryJob, error) {
+	message, err := data.NewMessage(jobTestChannel, jobTestProducer, "payload", "type")
+	if err != nil {
+		log.Fatal()
+		return nil, err
+	}
+	messageRepo.Create(message)
+	job, err := data.NewDeliveryJob(message, jobTestConsumer)
+	if err != nil {
+		log.Fatal()
+		return nil, err
+	}
+	deliveryJobRepo.DispatchMessage(message, job)
+	return job, nil
+}
+
 func TestJobFormatAsRelativeLink(t *testing.T) {
 	t.Parallel()
 	controller := NewJobController(channelRepo, consumerRepo, deliveryJobRepo)
@@ -104,26 +104,30 @@ func TestJobFormatAsRelativeLink(t *testing.T) {
 	assert.Equal(t, "/channel/someChannelId/consumer/someConsumerId/job/someJobId", formattedPath)
 }
 
-func TestJobControllerPost(t *testing.T) {
+func TestJobControllerPost_Success(t *testing.T) {
 	t.Parallel()
-	jobsController := NewJobController(channelRepo, consumerRepo, deliveryJobRepo)
-	testRouter := createTestRouter(jobsController)
-	testURI := jobsController.FormatAsRelativeLink(
+	job, err := setupTestJob()
+	assert.NoError(t, err)
+
+	jobController := NewJobController(channelRepo, consumerRepo, deliveryJobRepo)
+	testRouter := createTestRouter(jobController)
+	testURI := jobController.FormatAsRelativeLink(
 		httprouter.Param{Key: channelIDPathParamKey, Value: jobTestChannel.ChannelID},
 		httprouter.Param{Key: consumerIDPathParamKey, Value: jobTestConsumer.ConsumerID},
-		httprouter.Param{Key: jobIDPathParamKey, Value: postTestJob.ID.String()},
+		httprouter.Param{Key: jobIDPathParamKey, Value: job.ID.String()},
 	)
 	t.Log(testURI)
 
 	transitions := []data.JobStatus{data.JobQueued, data.JobInflight, data.JobDead, data.JobInflight, data.JobDelivered}
 	for index := 1; index < len(transitions); index++ {
-		previousState, nextState := transitions[index-1], transitions[index]
+		currentState, nextState := transitions[index-1], transitions[index]
 
-		testName := "Success:202-Accepted " + previousState.String() + " to " + nextState.String()
+		testName := "Success:202-Accepted " + currentState.String() + " to " + nextState.String()
 		t.Run(testName, func(t *testing.T) {
 			bodyString := "{\"NextState\": \"" + nextState.String() + "\"}"
 			requestBody := ioutil.NopCloser(strings.NewReader(bodyString))
-			req, _ := http.NewRequest("POST", testURI, requestBody)
+			req, err := http.NewRequest("POST", testURI, requestBody)
+			assert.NoError(t, err)
 
 			req.Header.Add(headerContentType, jobPostTestContentType)
 			req.Header.Add(headerChannelToken, jobTestChannel.Token)
@@ -134,8 +138,9 @@ func TestJobControllerPost(t *testing.T) {
 
 			assert.Equal(t, http.StatusAccepted, rr.Code)
 
-			job, _ := deliveryJobRepo.GetByID(postTestJob.ID.String())
-			assert.Equal(t, job.Status, nextState)
+			updatedJob, err := deliveryJobRepo.GetByID(job.ID.String())
+			assert.NoError(t, err)
+			assert.Equal(t, nextState, updatedJob.Status)
 		})
 
 	}
