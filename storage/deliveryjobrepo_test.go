@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"sort"
 	"strconv"
 	"testing"
 	"time"
@@ -347,6 +348,50 @@ func TestGetJobsForConsumer(t *testing.T) {
 		assert.Equal(t, 0, len(rJobs))
 		assert.Nil(t, page3.Next)
 		assert.Nil(t, page3.Previous)
+	})
+}
+
+func TestGetPrioritizedJobsForConsumer(t *testing.T) {
+	djRepo := getDeliverJobRepository()
+	msgRepo := getMessageRepository()
+
+	message := getMessageForJob()
+	msgRepo.Create(message)
+	jobs := getDeliveryJobsInFixture(message)
+	err := djRepo.DispatchMessage(message, jobs...)
+	assert.NoError(t, err)
+
+	message2 := getMessageForJob()
+	msgRepo.Create(message2)
+	jobs2 := getDeliveryJobsInFixture(message2)
+	err = djRepo.DispatchMessage(message2, jobs2...)
+	assert.NoError(t, err)
+
+	testJob := jobs[5]
+	t.Run("PaginationDeadlock", func(t *testing.T) {
+		t.Parallel()
+		_, _, err := djRepo.GetPrioritizedJobsForConsumer(testJob.Listener, data.JobQueued, data.NewPagination(testJob, testJob))
+		assert.Equal(t, ErrPaginationDeadlock, err)
+	})
+	t.Run("Success", func(t *testing.T) {
+		t.Parallel()
+		rJobs, page, err := djRepo.GetPrioritizedJobsForConsumer(testJob.Listener, data.JobQueued, data.NewPagination(nil, nil))
+		assert.NoError(t, err)
+		assert.LessOrEqual(t, 1, len(rJobs))
+		assert.NotNil(t, page.Next)
+		assert.NotNil(t, page.Previous)
+		found := false
+		for _, job := range rJobs {
+			if job.ID == testJob.ID {
+				found = true
+			}
+			assert.Equal(t, job.Listener.ID, testJob.Listener.ID)
+			assert.Equal(t, data.JobQueued, job.Status)
+		}
+		assert.True(t, found)
+		assert.True(t, sort.SliceIsSorted(rJobs, func(i, j int) bool {
+			return rJobs[i].Message.Priority > rJobs[j].Message.Priority
+		}))
 	})
 }
 
