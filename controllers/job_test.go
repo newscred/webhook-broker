@@ -118,13 +118,23 @@ func TestJobControllerPost_Success(t *testing.T) {
 	)
 	t.Log(testURI)
 
-	transitions := []data.JobStatus{data.JobQueued, data.JobInflight, data.JobDead, data.JobInflight, data.JobDelivered}
-	for index := 1; index < len(transitions); index++ {
-		currentState, nextState := transitions[index-1], transitions[index]
-
-		testName := "Success:202-Accepted " + currentState.String() + " to " + nextState.String()
+	validTransitions := []struct {
+		current data.JobStatus
+		next    data.JobStatus
+	}{
+		{current: data.JobQueued, next: data.JobQueued},
+		{current: data.JobQueued, next: data.JobInflight},
+		{current: data.JobInflight, next: data.JobInflight},
+		{current: data.JobInflight, next: data.JobDead},
+		{current: data.JobDead, next: data.JobDead},
+		{current: data.JobDead, next: data.JobInflight},
+		{current: data.JobInflight, next: data.JobDelivered},
+		{current: data.JobDelivered, next: data.JobDelivered},
+	}
+	for _, transition := range validTransitions {
+		testName := "Success:202-Accepted " + transition.current.String() + " to " + transition.next.String()
 		t.Run(testName, func(t *testing.T) {
-			bodyString := "{\"NextState\": \"" + nextState.String() + "\"}"
+			bodyString := "{\"NextState\": \"" + transition.next.String() + "\"}"
 			requestBody := ioutil.NopCloser(strings.NewReader(bodyString))
 			req, err := http.NewRequest("POST", testURI, requestBody)
 			assert.NoError(t, err)
@@ -140,7 +150,7 @@ func TestJobControllerPost_Success(t *testing.T) {
 
 			updatedJob, err := deliveryJobRepo.GetByID(job.ID.String())
 			assert.NoError(t, err)
-			assert.Equal(t, nextState, updatedJob.Status)
+			assert.Equal(t, transition.next, updatedJob.Status)
 		})
 
 	}
@@ -183,26 +193,26 @@ func TestJobControllerPost_TransitionFailure(t *testing.T) {
 		})
 	}
 
-	invalidNextStates := []data.JobStatus{data.JobQueued, data.JobDelivered, data.JobDead}
+	invalidNextStates := []data.JobStatus{data.JobDelivered, data.JobDead}
 	for _, invalidNextState := range invalidNextStates {
 		runInvalidTransitionTest(invalidNextState)
 	}
 
 	jobController.DeliveryJobRepo.MarkJobInflight(job)
-	invalidNextStates = []data.JobStatus{data.JobQueued, data.JobInflight}
+	invalidNextStates = []data.JobStatus{data.JobQueued}
 	for _, invalidNextState := range invalidNextStates {
 		runInvalidTransitionTest(invalidNextState)
 	}
 
 	jobController.DeliveryJobRepo.MarkJobDead(job)
-	invalidNextStates = []data.JobStatus{data.JobQueued, data.JobDelivered, data.JobDead}
+	invalidNextStates = []data.JobStatus{data.JobQueued, data.JobDelivered}
 	for _, invalidNextState := range invalidNextStates {
 		runInvalidTransitionTest(invalidNextState)
 	}
 
 	jobController.DeliveryJobRepo.MarkDeadJobAsInflight(job)
 	jobController.DeliveryJobRepo.MarkJobDelivered(job)
-	invalidNextStates = []data.JobStatus{data.JobQueued, data.JobInflight, data.JobDelivered, data.JobDead}
+	invalidNextStates = []data.JobStatus{data.JobQueued, data.JobInflight, data.JobDead}
 	for _, invalidNextState := range invalidNextStates {
 		runInvalidTransitionTest(invalidNextState)
 	}
