@@ -235,7 +235,7 @@ func TestGetConfiguration(t *testing.T) {
 	seedData := config.GetSeedData()
 	assert.Equal(t, 3, len(seedData.Channels))
 	assert.Equal(t, 3, len(seedData.Producers))
-	assert.Equal(t, 3, len(seedData.Consumers))
+	assert.Equal(t, 6, len(seedData.Consumers))
 	assert.NotEmpty(t, seedData.DataHash)
 	seedChannel := seedData.Channels[0]
 	assert.Equal(t, "sample-channel", seedChannel.ID)
@@ -266,16 +266,19 @@ func TestGetConfiguration(t *testing.T) {
 	assert.Equal(t, "sample-consumer", seedConsumer.Name)
 	assert.Equal(t, "sample-consumer-token", seedConsumer.Token)
 	assert.Equal(t, "http://sample-endpoint/webhook-receiver", seedConsumer.CallbackURL.String())
+	assert.Equal(t, PushConsumerStr, seedConsumer.Type)
 	seedConsumer = seedData.Consumers[1]
 	assert.Equal(t, "test-consumer", seedConsumer.ID)
 	assert.Equal(t, "test-consumer", seedConsumer.Name)
 	assert.Equal(t, "test-consumer-token", seedConsumer.Token)
 	assert.Equal(t, "http://imy13.us/webhook-receiver", seedConsumer.CallbackURL.String())
+	assert.Equal(t, PushConsumerStr, seedConsumer.Type)
 	seedConsumer = seedData.Consumers[2]
 	assert.Equal(t, "test-consumer4", seedConsumer.ID)
 	assert.Equal(t, "test-consumer4", seedConsumer.Name)
 	assert.Equal(t, "", seedConsumer.Token)
 	assert.Equal(t, "http://imy13.us/webhook-receiver1", seedConsumer.CallbackURL.String())
+	assert.Equal(t, PushConsumerStr, seedConsumer.Type)
 	assert.Equal(t, "Test User Agent", config.GetUserAgent())
 	assert.Equal(t, "X-Test-Consumer-Token", config.GetTokenRequestHeaderName())
 	assert.Equal(t, toSecond(300), config.GetConnectionTimeout())
@@ -287,6 +290,24 @@ func TestGetConfiguration(t *testing.T) {
 	assert.Equal(t, toSecond(30), config.GetRationalDelay())
 	assert.Equal(t, []time.Duration{toSecond(15), toSecond(30), toSecond(60), toSecond(120)}, config.GetRetryBackoffDelays())
 	assert.False(t, config.IsRecoveryWorkersEnabled())
+	seedConsumer = seedData.Consumers[3]
+	assert.Equal(t, "test-consumer-push", seedConsumer.ID)
+	assert.Equal(t, "test-consumer-push", seedConsumer.Name)
+	assert.Equal(t, "test-consumer-token2", seedConsumer.Token)
+	assert.Equal(t, "http://imy13.us/webhook-receiver", seedConsumer.CallbackURL.String())
+	assert.Equal(t, PushConsumerStr, seedConsumer.Type)
+	seedConsumer = seedData.Consumers[4]
+	assert.Equal(t, "test-consumer-pull", seedConsumer.ID)
+	assert.Equal(t, "test-consumer-pull", seedConsumer.Name)
+	assert.Equal(t, "test-consumer-token2", seedConsumer.Token)
+	assert.Equal(t, "http://imy13.us/webhook-receiver", seedConsumer.CallbackURL.String())
+	assert.Equal(t, PullConsumerStr, seedConsumer.Type)
+	seedConsumer = seedData.Consumers[5]
+	assert.Equal(t, "test-consumer-default", seedConsumer.ID)
+	assert.Equal(t, "test-consumer-default", seedConsumer.Name)
+	assert.Equal(t, "test-consumer-token2", seedConsumer.Token)
+	assert.Equal(t, "http://imy13.us/webhook-receiver", seedConsumer.CallbackURL.String())
+	assert.Equal(t, PushConsumerStr, seedConsumer.Type)
 	testConfig := `[log]
 	log-level=info
 	`

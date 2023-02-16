@@ -56,9 +56,15 @@ type SeedConsumer struct {
 	SeedProducer
 	// CallbackURL represents the URl to call back
 	CallbackURL *url.URL
-	// Channels represents which channel this consumer listens to
+	// Channel represents which channel this consumer listens to
 	Channel string
+	Type    string
 }
+
+const (
+	PullConsumerStr = "pull"
+	PushConsumerStr = "push"
+)
 
 // SeedData represents data specified in configuration to ensure is present when app starts up
 type SeedData struct {

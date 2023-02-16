@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"net/url"
 	"os/user"
@@ -460,7 +461,15 @@ func parseConsumers(cfg *ini.File, seedChannels []SeedChannel) []SeedConsumer {
 		if channelErr != nil {
 			continue
 		}
-		seedConsumer := SeedConsumer{SeedProducer: SeedProducer{ID: consumer.Name(), Name: consumer.Name()}, Channel: channel}
+		consumerType, err := getConsumerType(consumerSection)
+		if err != nil {
+			continue
+		}
+		seedConsumer := SeedConsumer{
+			SeedProducer: SeedProducer{ID: consumer.Name(), Name: consumer.Name()},
+			Channel:      channel,
+			Type:         consumerType,
+		}
 		token, tokenErr := consumerSection.GetKey("token")
 		if tokenErr == nil {
 			seedConsumer.Token = token.MustString("")
@@ -487,6 +496,18 @@ func getChannelForConsumer(consumerSection *ini.Section, seedChannels []SeedChan
 		}
 	}
 	return channel, sql.ErrNoRows
+}
+
+func getConsumerType(consumerSection *ini.Section) (string, error) {
+	consumerType := consumerSection.Key("type").MustString("")
+	switch consumerType {
+	case PushConsumerStr, PullConsumerStr:
+		return consumerType, nil
+	case "":
+		return PushConsumerStr, nil
+	default:
+		return "", fmt.Errorf("invalid consumer type %v", consumerType)
+	}
 }
 
 func parseProducers(initialProducers *ini.Section, initialProducerTokens *ini.Section) []SeedProducer {

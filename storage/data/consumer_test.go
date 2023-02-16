@@ -25,56 +25,90 @@ func getChannel() *Channel {
 func TestNewConsumer(t *testing.T) {
 	t.Run("EmptyID", func(t *testing.T) {
 		t.Parallel()
-		_, err := NewConsumer(sampleChannel, "", "", sampleCallbackURL)
+		_, err := NewConsumer(sampleChannel, "", "", sampleCallbackURL, "")
 		assert.Equal(t, ErrInsufficientInformationForCreating, err)
 	})
 	t.Run("EmptyToken", func(t *testing.T) {
 		t.Parallel()
-		_, err := NewConsumer(sampleChannel, someID, "", sampleCallbackURL)
+		_, err := NewConsumer(sampleChannel, someID, "", sampleCallbackURL, "")
 		assert.Equal(t, ErrInsufficientInformationForCreating, err)
 	})
 	t.Run("NilChannel", func(t *testing.T) {
 		t.Parallel()
-		_, err := NewConsumer(nil, someID, someToken, sampleCallbackURL)
+		_, err := NewConsumer(nil, someID, someToken, sampleCallbackURL, "")
 		assert.Equal(t, ErrInsufficientInformationForCreating, err)
 	})
 	t.Run("RelativeURL", func(t *testing.T) {
 		t.Parallel()
-		_, err := NewConsumer(sampleChannel, someID, someToken, sampleRelativeCallbackURL)
+		_, err := NewConsumer(sampleChannel, someID, someToken, sampleRelativeCallbackURL, "")
 		assert.Equal(t, ErrInsufficientInformationForCreating, err)
 	})
 	t.Run("Valid", func(t *testing.T) {
 		t.Parallel()
-		consumer, err := NewConsumer(sampleChannel, someID, someToken, sampleCallbackURL)
+		consumer, err := NewConsumer(sampleChannel, someID, someToken, sampleCallbackURL, "")
 		assert.Nil(t, err)
 		assert.NotNil(t, consumer.ID)
 		assert.Equal(t, someID, consumer.ConsumerID)
 		assert.Equal(t, someID, consumer.Name)
 		assert.Equal(t, someToken, consumer.Token)
 	})
+
+}
+
+func TestNewConsumerWithVariousConsumerType(t *testing.T) {
+	cases := []struct {
+		name                 string
+		typeString           string
+		expectedConsumerType ConsumerType
+	}{
+		{name: "PushConsumer", typeString: "push", expectedConsumerType: PushConsumer},
+		{name: "PullConsumer", typeString: "pull", expectedConsumerType: PullConsumer},
+		{name: "EmptyConsumer", typeString: "", expectedConsumerType: PushConsumer},
+		{name: "WrongConsumerType", typeString: "wrongType", expectedConsumerType: PushConsumer},
+	}
+	for _, tt := range cases {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			consumer, err := NewConsumer(sampleChannel, someID, someToken, sampleCallbackURL, tt.typeString)
+
+			if tt.typeString == "wrongType" {
+				assert.NotNil(t, err)
+				assert.Equal(t, "invalid consumerType: wrongType", err.Error())
+				return
+			}
+			assert.Nil(t, err)
+			assert.Nil(t, err)
+			assert.NotNil(t, consumer.ID)
+			assert.Equal(t, someID, consumer.ConsumerID)
+			assert.Equal(t, someID, consumer.Name)
+			assert.Equal(t, someToken, consumer.Token)
+			assert.Equal(t, tt.expectedConsumerType, consumer.Type)
+		})
+	}
 }
 
 func TestConsumerIsInValidState(t *testing.T) {
 	t.Run("True", func(t *testing.T) {
 		t.Parallel()
-		consumer, _ := NewConsumer(sampleChannel, someID, someToken, sampleCallbackURL)
+		consumer, _ := NewConsumer(sampleChannel, someID, someToken, sampleCallbackURL, "")
 		assert.True(t, consumer.IsInValidState())
 	})
 	t.Run("EmptyIDFalse", func(t *testing.T) {
 		t.Parallel()
-		consumer, _ := NewConsumer(sampleChannel, someID, someToken, sampleCallbackURL)
+		consumer, _ := NewConsumer(sampleChannel, someID, someToken, sampleCallbackURL, "")
 		consumer.ConsumerID = ""
 		assert.False(t, consumer.IsInValidState())
 	})
 	t.Run("NilChannelFalse", func(t *testing.T) {
 		t.Parallel()
-		consumer, _ := NewConsumer(sampleChannel, someID, someToken, sampleCallbackURL)
+		consumer, _ := NewConsumer(sampleChannel, someID, someToken, sampleCallbackURL, "")
 		consumer.ConsumingFrom = nil
 		assert.False(t, consumer.IsInValidState())
 	})
 	t.Run("RelativeURLFalse", func(t *testing.T) {
 		t.Parallel()
-		consumer, _ := NewConsumer(sampleChannel, someID, someToken, sampleCallbackURL)
+		consumer, _ := NewConsumer(sampleChannel, someID, someToken, sampleCallbackURL, "")
 		consumer.CallbackURL = sampleRelativeCallbackURL.String()
 		assert.False(t, consumer.IsInValidState())
 	})
@@ -83,7 +117,7 @@ func TestConsumerIsInValidState(t *testing.T) {
 func TestConsumerQuickFix(t *testing.T) {
 	t.Run("ChildQuickFixChange", func(t *testing.T) {
 		t.Parallel()
-		consumer, _ := NewConsumer(sampleChannel, someID, someToken, sampleCallbackURL)
+		consumer, _ := NewConsumer(sampleChannel, someID, someToken, sampleCallbackURL, "")
 		consumer.Name = ""
 		assert.False(t, consumer.IsInValidState())
 		assert.True(t, len(consumer.Name) <= 0)
@@ -93,7 +127,7 @@ func TestConsumerQuickFix(t *testing.T) {
 	})
 	t.Run("ParentOnlyQuickFixChange", func(t *testing.T) {
 		t.Parallel()
-		consumer, _ := NewConsumer(sampleChannel, someID, someToken, sampleCallbackURL)
+		consumer, _ := NewConsumer(sampleChannel, someID, someToken, sampleCallbackURL, "")
 		consumer.Name = someName
 		assert.True(t, consumer.QuickFix())
 		assert.Equal(t, someName, consumer.Name)
@@ -101,7 +135,7 @@ func TestConsumerQuickFix(t *testing.T) {
 }
 
 func TestGetChannelIDSafely(t *testing.T) {
-	consumer, _ := NewConsumer(sampleChannel, "consumer-someID", someToken, sampleCallbackURL)
+	consumer, _ := NewConsumer(sampleChannel, "consumer-someID", someToken, sampleCallbackURL, "")
 	channel, _ := NewChannel(someID, someToken)
 	channel.QuickFix()
 	consumer.ConsumingFrom = channel

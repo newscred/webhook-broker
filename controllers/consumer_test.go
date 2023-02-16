@@ -55,7 +55,7 @@ func ConsumerTestSetup() {
 	}
 	for index := 49; index > -1; index = index - 1 {
 		indexString := strconv.Itoa(index)
-		consumer, err := data.NewConsumer(consumerTestChannel, listTestConsumerIDPrefix+indexString, successfulGetTestToken+" - "+indexString, callbackURL)
+		consumer, err := data.NewConsumer(consumerTestChannel, listTestConsumerIDPrefix+indexString, successfulGetTestToken+" - "+indexString, callbackURL, "")
 		if err == nil {
 			_, err = consumerRepo.Store(consumer)
 		}
@@ -64,7 +64,7 @@ func ConsumerTestSetup() {
 		}
 	}
 	for _, deleteID := range []string{deleteConsumerIDWithData, deleteConsumerIDFailed} {
-		consumer, err := data.NewConsumer(consumerTestChannel, deleteID, successfulGetTestToken+" - DELETE", callbackURL)
+		consumer, err := data.NewConsumer(consumerTestChannel, deleteID, successfulGetTestToken+" - DELETE", callbackURL, "")
 		if err == nil {
 			_, err = consumerRepo.Store(consumer)
 		}
@@ -204,6 +204,7 @@ func TestConsumerGet(t *testing.T) {
 		assert.Contains(t, bodyChannel.Token, successfulGetTestToken)
 		assert.Equal(t, callbackURL.String(), bodyChannel.CallbackURL)
 		assert.Equal(t, testURI+"/dlq", bodyChannel.DeadLetterQueueURL)
+		assert.Equal(t, data.PushConsumerStr, bodyChannel.Type)
 		assert.NotNil(t, bodyChannel.ChangedAt)
 		assert.Equal(t, bodyChannel.ChangedAt.Format(http.TimeFormat), rr.HeaderMap.Get(headerLastModified))
 	})
@@ -307,6 +308,7 @@ func TestConsumerPut(t *testing.T) {
 		req.PostForm.Add("token", successfulGetTestToken)
 		req.PostForm.Add("name", "CREATE NAME")
 		req.PostForm.Add("callbackUrl", callbackURL.String()+"test1")
+		req.PostForm.Add("type", data.PushConsumerStr)
 		rr := httptest.NewRecorder()
 		testRouter.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusOK, rr.Code)
@@ -315,6 +317,56 @@ func TestConsumerPut(t *testing.T) {
 		assert.Equal(t, createConsumerIDWithData, bodyChannel.ID)
 		assert.Equal(t, "CREATE NAME", bodyChannel.Name)
 		assert.Equal(t, callbackURL.String()+"test1", bodyChannel.CallbackURL)
+		assert.Equal(t, data.PushConsumerStr, bodyChannel.Type)
+		assert.Equal(t, successfulGetTestToken, bodyChannel.Token)
+	})
+	t.Run("SuccessfulPutCreateWithPullConsumer", func(t *testing.T) {
+		t.Parallel()
+		putController := getNewConsumerController(consumerRepo)
+		testRouter := createTestRouter(putController)
+		consumerID := createChannelIDWithData + "-pull"
+		testURI := putController.FormatAsRelativeLink(httprouter.Param{Key: channelIDPathParamKey, Value: consumerTestChannel.ChannelID}, httprouter.Param{Key: consumerIDPathParamKey, Value: consumerID})
+		t.Log(testURI)
+		req, _ := http.NewRequest("PUT", testURI, nil)
+		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
+		req.PostForm = url.Values{}
+		req.PostForm.Add("token", successfulGetTestToken)
+		req.PostForm.Add("name", "CREATE NAME")
+		req.PostForm.Add("callbackUrl", callbackURL.String()+"test1")
+		req.PostForm.Add("type", data.PullConsumerStr)
+		rr := httptest.NewRecorder()
+		testRouter.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusOK, rr.Code)
+		bodyChannel := &ConsumerModel{}
+		json.NewDecoder(strings.NewReader(rr.Body.String())).Decode(bodyChannel)
+		assert.Equal(t, consumerID, bodyChannel.ID)
+		assert.Equal(t, "CREATE NAME", bodyChannel.Name)
+		assert.Equal(t, callbackURL.String()+"test1", bodyChannel.CallbackURL)
+		assert.Equal(t, data.PullConsumerStr, bodyChannel.Type)
+		assert.Equal(t, successfulGetTestToken, bodyChannel.Token)
+	})
+	t.Run("SuccessfulPutCreateWithDefaultConsumerType", func(t *testing.T) {
+		t.Parallel()
+		putController := getNewConsumerController(consumerRepo)
+		testRouter := createTestRouter(putController)
+		consumerID := createChannelIDWithData + "-default"
+		testURI := putController.FormatAsRelativeLink(httprouter.Param{Key: channelIDPathParamKey, Value: consumerTestChannel.ChannelID}, httprouter.Param{Key: consumerIDPathParamKey, Value: consumerID})
+		t.Log(testURI)
+		req, _ := http.NewRequest("PUT", testURI, nil)
+		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
+		req.PostForm = url.Values{}
+		req.PostForm.Add("token", successfulGetTestToken)
+		req.PostForm.Add("name", "CREATE NAME")
+		req.PostForm.Add("callbackUrl", callbackURL.String()+"test1")
+		rr := httptest.NewRecorder()
+		testRouter.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusOK, rr.Code)
+		bodyChannel := &ConsumerModel{}
+		json.NewDecoder(strings.NewReader(rr.Body.String())).Decode(bodyChannel)
+		assert.Equal(t, consumerID, bodyChannel.ID)
+		assert.Equal(t, "CREATE NAME", bodyChannel.Name)
+		assert.Equal(t, callbackURL.String()+"test1", bodyChannel.CallbackURL)
+		assert.Equal(t, data.PushConsumerStr, bodyChannel.Type)
 		assert.Equal(t, successfulGetTestToken, bodyChannel.Token)
 	})
 	t.Run("SuccessfulPutCreateWithoutNameToken", func(t *testing.T) {
@@ -337,6 +389,24 @@ func TestConsumerPut(t *testing.T) {
 		assert.Equal(t, callbackURL.String()+"test1", bodyChannel.CallbackURL)
 		assert.True(t, len(bodyChannel.Token) == 12)
 	})
+	t.Run("FailingCreateWithWrongConsumerType", func(t *testing.T) {
+		t.Parallel()
+		putController := getNewConsumerController(consumerRepo)
+		testRouter := createTestRouter(putController)
+		consumerID := createConsumerIDWithData + "-fail"
+		testURI := putController.FormatAsRelativeLink(httprouter.Param{Key: channelIDPathParamKey, Value: consumerTestChannel.ChannelID}, httprouter.Param{Key: consumerIDPathParamKey, Value: consumerID})
+		t.Log(testURI)
+		req, _ := http.NewRequest("PUT", testURI, nil)
+		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
+		req.PostForm = url.Values{}
+		req.PostForm.Add("token", successfulGetTestToken)
+		req.PostForm.Add("name", "CREATE NAME")
+		req.PostForm.Add("callbackUrl", callbackURL.String()+"test1")
+		req.PostForm.Add("type", "wrongType")
+		rr := httptest.NewRecorder()
+		testRouter.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusBadRequest, rr.Code)
+	})
 	t.Run("SuccessfulPutUpdate", func(t *testing.T) {
 		t.Parallel()
 		putController := getNewConsumerController(consumerRepo)
@@ -357,13 +427,46 @@ func TestConsumerPut(t *testing.T) {
 		req.PostForm = url.Values{}
 		req.PostForm.Add("token", successfulGetTestToken+"Updated")
 		req.PostForm.Add("callbackUrl", callbackURL.String()+"u-test1")
+		req.PostForm.Add("type", data.PullConsumerStr)
 		rr := httptest.NewRecorder()
 		testRouter.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusOK, rr.Code)
 		updatedBodyChannel := &ConsumerModel{}
 		json.NewDecoder(strings.NewReader(rr.Body.String())).Decode(updatedBodyChannel)
 		assert.Equal(t, callbackURL.String()+"u-test1", updatedBodyChannel.CallbackURL)
+		assert.Equal(t, data.PullConsumerStr, updatedBodyChannel.Type)
 		assert.Contains(t, updatedBodyChannel.Token, "Updated")
+		assert.True(t, bodyChannel.ChangedAt.Before(updatedBodyChannel.ChangedAt))
+	})
+	t.Run("SuccessfullyUpdateConsumerType", func(t *testing.T) {
+		t.Parallel()
+		putController := getNewConsumerController(consumerRepo)
+		testRouter := createTestRouter(putController)
+		consumerID := listTestConsumerIDPrefix + "10"
+		testURI := putController.FormatAsRelativeLink(httprouter.Param{Key: channelIDPathParamKey, Value: consumerTestChannel.ChannelID}, httprouter.Param{Key: consumerIDPathParamKey, Value: consumerID})
+		t.Log(testURI)
+
+		greq, _ := http.NewRequest("GET", testURI, nil)
+		grr := httptest.NewRecorder()
+		testRouter.ServeHTTP(grr, greq)
+		assert.Equal(t, http.StatusOK, grr.Code)
+		bodyChannel := &ConsumerModel{}
+		json.NewDecoder(strings.NewReader(grr.Body.String())).Decode(bodyChannel)
+		assert.Equal(t, data.PushConsumerStr, bodyChannel.Type)
+
+		req, _ := http.NewRequest("PUT", testURI, nil)
+		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
+		req.Header.Add(headerUnmodifiedSince, bodyChannel.ChangedAt.Format(http.TimeFormat))
+		req.PostForm = url.Values{}
+		req.PostForm.Add("token", successfulGetTestToken+"Updated")
+		req.PostForm.Add("callbackUrl", callbackURL.String()+"u-test1")
+		req.PostForm.Add("type", data.PullConsumerStr)
+		rr := httptest.NewRecorder()
+		testRouter.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusOK, rr.Code)
+		updatedBodyChannel := &ConsumerModel{}
+		json.NewDecoder(strings.NewReader(rr.Body.String())).Decode(updatedBodyChannel)
+		assert.Equal(t, data.PullConsumerStr, updatedBodyChannel.Type)
 		assert.True(t, bodyChannel.ChangedAt.Before(updatedBodyChannel.ChangedAt))
 	})
 	t.Run("404", func(t *testing.T) {

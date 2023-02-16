@@ -8,7 +8,7 @@ import (
 )
 
 func getConsumer() *Consumer {
-	consumer, _ := NewConsumer(getChannel(), "sample-consumer", "sample-token", sampleCallbackURL)
+	consumer, _ := NewConsumer(getChannel(), "sample-consumer", "sample-token", sampleCallbackURL, "")
 	consumer.QuickFix()
 	return consumer
 }

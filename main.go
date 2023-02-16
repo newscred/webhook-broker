@@ -174,7 +174,7 @@ var (
 				log.Error().Err(err).Msg("no channel for the consumer as per spec")
 				continue
 			}
-			consumer, err := data.NewConsumer(channel, seedConsumer.ID, seedConsumer.Token, seedConsumer.CallbackURL)
+			consumer, err := data.NewConsumer(channel, seedConsumer.ID, seedConsumer.Token, seedConsumer.CallbackURL, seedConsumer.Type)
 			if err == nil {
 				consumer.Name = seedConsumer.Name
 				consumer.ConsumingFrom = channel

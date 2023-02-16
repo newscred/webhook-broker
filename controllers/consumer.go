@@ -21,6 +21,7 @@ type ConsumerModel struct {
 	MsgStakeholder
 	CallbackURL        string
 	DeadLetterQueueURL string
+	Type               string
 }
 
 // ConsumerController represents all endpoints related to a single consumer for a channel
@@ -48,7 +49,9 @@ func (controller *ConsumerController) getConsumerModel(consumer *data.Consumer) 
 	consumerModel := &ConsumerModel{
 		MsgStakeholder:     *getMessageStakeholder(consumer.ConsumerID, &consumer.MessageStakeholder),
 		CallbackURL:        consumer.CallbackURL,
-		DeadLetterQueueURL: controller.DLQEndpoint.FormatAsRelativeLink(channelIDParam, consumerIDParam)}
+		DeadLetterQueueURL: controller.DLQEndpoint.FormatAsRelativeLink(channelIDParam, consumerIDParam),
+		Type:               consumer.Type.String(),
+	}
 	return consumerModel
 }
 
@@ -82,7 +85,12 @@ func (controller *ConsumerController) Put(w http.ResponseWriter, r *http.Request
 		writeBadRequest(w)
 		return
 	}
-	inComingConsumer, _ := data.NewConsumer(channel, consumerID, token, callbackURL)
+	consumerType := r.PostFormValue("type")
+	inComingConsumer, err := data.NewConsumer(channel, consumerID, token, callbackURL, consumerType)
+	if err != nil {
+		writeBadRequest(w)
+		return
+	}
 	inComingConsumer.Name = name
 	consumer, updateErr := controller.ConsumerRepo.Store(inComingConsumer)
 	writeGetResult(updateErr, func(w http.ResponseWriter) { writeErr(w, updateErr) }, w, controller.getConsumerModel(consumer))
