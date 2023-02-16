@@ -46,7 +46,7 @@ func MessageTestSetup() {
 	messageChannel, _ = channelRepo.Store(channel)
 	producer, _ := data.NewProducer(messageProducerID, successfulGetTestToken)
 	messageProducer, _ = producerRepo.Store(producer)
-	consumer, _ := data.NewConsumer(messageChannel, dlqTestConsumerID, successfulGetTestToken, callbackURL)
+	consumer, _ := data.NewConsumer(messageChannel, dlqTestConsumerID, successfulGetTestToken, callbackURL, "")
 	dlqConsumer, _ = consumerRepo.Store(consumer)
 	messages = make([]*data.Message, messagesCount)
 	jobs = make(map[*data.Message]*data.DeliveryJob, messagesCount)

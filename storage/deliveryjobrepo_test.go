@@ -30,7 +30,7 @@ func SetupForDeliveryJobTests() {
 	consumerRepo := getConsumerRepo()
 	consumers = make([]*data.Consumer, 0, testConsumers)
 	for i := 0; i < testConsumers; i++ {
-		consumer, _ := data.NewConsumer(channel1, consumerIDPrefix+strconv.Itoa(i), successfulGetTestToken, callbackURL)
+		consumer, _ := data.NewConsumer(channel1, consumerIDPrefix+strconv.Itoa(i), successfulGetTestToken, callbackURL, "")
 		consumer.QuickFix()
 		consumerRepo.Store(consumer)
 		consumers = append(consumers, consumer)

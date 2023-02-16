@@ -1,6 +1,40 @@
 package data
 
-import "net/url"
+import (
+	"fmt"
+	"net/url"
+)
+
+type ConsumerType int
+
+const (
+	PullConsumer ConsumerType = iota
+	PushConsumer
+	PullConsumerStr = "pull"
+	PushConsumerStr = "push"
+)
+
+func (consumerType ConsumerType) String() string {
+	switch consumerType {
+	case PullConsumer:
+		return PullConsumerStr
+	default:
+		return PushConsumerStr
+	}
+}
+
+func getConsumerTypeFromString(value string) (ConsumerType, error) {
+	switch value {
+	case PullConsumerStr:
+		return PullConsumer, nil
+	case PushConsumerStr:
+		return PushConsumer, nil
+	case "":
+		return PushConsumer, nil
+	default:
+		return PushConsumer, fmt.Errorf("invalid consumerType: %v", value)
+	}
+}
 
 // Consumer is the object that producer broadcasts to and consumer consumes from
 type Consumer struct {
@@ -8,6 +42,7 @@ type Consumer struct {
 	ConsumerID    string
 	CallbackURL   string
 	ConsumingFrom *Channel
+	Type          ConsumerType
 }
 
 // QuickFix fixes the model to set default ID, name same as producer id, created and updated at to current time.
@@ -37,10 +72,14 @@ func (consumer *Consumer) GetChannelIDSafely() (channelID string) {
 }
 
 // NewConsumer creates new Consumer
-func NewConsumer(channel *Channel, consumerID, token string, callbackURL *url.URL) (*Consumer, error) {
+func NewConsumer(channel *Channel, consumerID, token string, callbackURL *url.URL, consumerTypeStr string) (*Consumer, error) {
 	if len(consumerID) <= 0 || len(token) <= 0 || channel == nil || !callbackURL.IsAbs() {
 		return nil, ErrInsufficientInformationForCreating
 	}
-	consumer := Consumer{ConsumerID: consumerID, ConsumingFrom: channel, CallbackURL: callbackURL.String(), MessageStakeholder: createMessageStakeholder(consumerID, token)}
+	consumerType, err := getConsumerTypeFromString(consumerTypeStr)
+	if err != nil {
+		return nil, err
+	}
+	consumer := Consumer{ConsumerID: consumerID, ConsumingFrom: channel, CallbackURL: callbackURL.String(), MessageStakeholder: createMessageStakeholder(consumerID, token), Type: consumerType}
 	return &consumer, nil
 }

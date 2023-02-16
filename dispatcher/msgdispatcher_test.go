@@ -125,7 +125,7 @@ func SetupTestFixture() {
 		consumers = make([]*data.Consumer, 0, testConsumers)
 		for i := 0; i < testConsumers; i++ {
 			callbackURL, _ := url.Parse(baseURLString + consumerReceivedURLParamPrefix + strconv.Itoa(i))
-			consumer, _ := data.NewConsumer(channel, consumerIDPrefix+strconv.Itoa(i), consumerToken, callbackURL)
+			consumer, _ := data.NewConsumer(channel, consumerIDPrefix+strconv.Itoa(i), consumerToken, callbackURL, "")
 			consumer.QuickFix()
 			dataAccessor.GetConsumerRepository().Store(consumer)
 			consumers = append(consumers, consumer)

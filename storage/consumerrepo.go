@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	consumerSelectRowCommonQuery = "SELECT id, consumerId, channelId, name, token, callbackUrl, createdAt, updatedAt FROM consumer WHERE"
+	consumerSelectRowCommonQuery = "SELECT id, consumerId, channelId, name, token, callbackUrl, type, createdAt, updatedAt FROM consumer WHERE"
 )
 
 // ConsumerDBRepository is the RDBMS implementation for ConsumerRepository
@@ -27,23 +27,24 @@ func (consumerRepo *ConsumerDBRepository) Store(consumer *data.Consumer) (*data.
 	if err != nil {
 		return consumerRepo.insertConsumer(consumer)
 	}
-	if consumer.Name != inConsumer.Name || consumer.Token != inConsumer.Token || consumer.CallbackURL != inConsumer.CallbackURL {
+	if consumer.Name != inConsumer.Name || consumer.Token != inConsumer.Token || consumer.CallbackURL != inConsumer.CallbackURL || consumer.Type != inConsumer.Type {
 		if consumer.IsInValidState() {
-			return consumerRepo.updateConsumer(inConsumer, consumer.Name, consumer.Token, consumer.CallbackURL)
+			return consumerRepo.updateConsumer(inConsumer, consumer.Name, consumer.Token, consumer.CallbackURL, consumer.Type)
 		}
 		err = ErrInvalidStateToSave
 	}
 	return inConsumer, err
 }
 
-func (consumerRepo *ConsumerDBRepository) updateConsumer(consumer *data.Consumer, name, token, callbackURL string) (*data.Consumer, error) {
+func (consumerRepo *ConsumerDBRepository) updateConsumer(consumer *data.Consumer, name, token, callbackURL string, ctype data.ConsumerType) (*data.Consumer, error) {
 	err := transactionalSingleRowWriteExec(consumerRepo.db, func() {
 		consumer.Name = name
 		consumer.Token = token
 		consumer.CallbackURL = callbackURL
 		consumer.UpdatedAt = time.Now()
-	}, "UPDATE consumer SET name = ?, token = ?, callbackUrl=?, updatedAt = ? WHERE consumerId = ? and channelId = ?",
-		args2SliceFnWrapper(&consumer.Name, &consumer.Token, &consumer.CallbackURL, &consumer.UpdatedAt, consumer.ConsumerID, consumer.ConsumingFrom.ChannelID))
+		consumer.Type = ctype
+	}, "UPDATE consumer SET name = ?, token = ?, callbackUrl=?, type=?, updatedAt = ? WHERE consumerId = ? and channelId = ?",
+		args2SliceFnWrapper(&consumer.Name, &consumer.Token, &consumer.CallbackURL, &consumer.Type, &consumer.UpdatedAt, consumer.ConsumerID, consumer.ConsumingFrom.ChannelID))
 	return consumer, err
 }
 
@@ -51,8 +52,8 @@ func (consumerRepo *ConsumerDBRepository) insertConsumer(consumer *data.Consumer
 	consumer.QuickFix()
 	var err error
 	if consumer.IsInValidState() {
-		err = transactionalSingleRowWriteExec(consumerRepo.db, emptyOps, "INSERT INTO consumer (id, channelId, consumerId, name, token, callbackUrl, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-			args2SliceFnWrapper(consumer.ID, consumer.ConsumingFrom.ChannelID, consumer.ConsumerID, consumer.Name, consumer.Token, consumer.CallbackURL, consumer.CreatedAt, consumer.UpdatedAt))
+		err = transactionalSingleRowWriteExec(consumerRepo.db, emptyOps, "INSERT INTO consumer (id, channelId, consumerId, name, token, callbackUrl, type, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			args2SliceFnWrapper(consumer.ID, consumer.ConsumingFrom.ChannelID, consumer.ConsumerID, consumer.Name, consumer.Token, consumer.CallbackURL, consumer.Type, consumer.CreatedAt, consumer.UpdatedAt))
 	} else {
 		err = ErrInvalidStateToSave
 	}
@@ -80,7 +81,7 @@ func (consumerRepo *ConsumerDBRepository) getSingleConsumer(query string, queryA
 	consumer = &data.Consumer{}
 	consumer.ConsumingFrom = &data.Channel{}
 	err = querySingleRow(consumerRepo.db, query, queryArgs,
-		args2SliceFnWrapper(&consumer.ID, &consumer.ConsumerID, &consumer.ConsumingFrom.ChannelID, &consumer.Name, &consumer.Token, &consumer.CallbackURL, &consumer.CreatedAt, &consumer.UpdatedAt))
+		args2SliceFnWrapper(&consumer.ID, &consumer.ConsumerID, &consumer.ConsumingFrom.ChannelID, &consumer.Name, &consumer.Token, &consumer.CallbackURL, &consumer.Type, &consumer.CreatedAt, &consumer.UpdatedAt))
 	if loadChannel && err == nil {
 		consumer.ConsumingFrom, err = consumerRepo.channelRepository.Get(consumer.ConsumingFrom.ChannelID)
 	}
@@ -96,12 +97,12 @@ func (consumerRepo *ConsumerDBRepository) GetList(channelID string, page *data.P
 	}
 	channel, err := consumerRepo.channelRepository.Get(channelID)
 	if err == nil {
-		baseQuery := "SELECT id, consumerId, name, token, callbackUrl, createdAt, updatedAt FROM consumer WHERE channelId like ?" + getPaginationQueryFragment(page, true)
+		baseQuery := "SELECT id, consumerId, name, token, callbackUrl, type, createdAt, updatedAt FROM consumer WHERE channelId like ?" + getPaginationQueryFragment(page, true)
 		scanArgs := func() []interface{} {
 			consumer := &data.Consumer{}
 			consumer.ConsumingFrom = channel
 			consumers = append(consumers, consumer)
-			return []interface{}{&consumer.ID, &consumer.ConsumerID, &consumer.Name, &consumer.Token, &consumer.CallbackURL, &consumer.CreatedAt, &consumer.UpdatedAt}
+			return []interface{}{&consumer.ID, &consumer.ConsumerID, &consumer.Name, &consumer.Token, &consumer.CallbackURL, &consumer.Type, &consumer.CreatedAt, &consumer.UpdatedAt}
 		}
 		var argsFunc func() []interface{} = args2SliceFnWrapper(channelID)
 		times := getPaginationTimestampQueryArgs(page)
