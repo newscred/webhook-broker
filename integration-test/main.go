@@ -36,6 +36,13 @@ type dlqList struct {
 	Pages    map[string]string
 }
 
+type ConsumerModel struct {
+	MsgStakeholder
+	CallbackURL        string
+	DeadLetterQueueURL string
+	Type               string
+}
+
 var (
 	consumerHandler         map[string]func(string, http.ResponseWriter, *http.Request)
 	server                  *http.Server
@@ -50,6 +57,7 @@ const (
 	token                          = "someRandomToken"
 	tokenFormParamKey              = "token"
 	callbackURLFormParamKey        = "callbackUrl"
+	consumerTypeFormParamKey       = "type"
 	channelID                      = "integration-test-channel"
 	producerID                     = "integration-test-producer"
 	consumerIDPrefix               = "integration-test-consumer-"
@@ -371,6 +379,8 @@ func main() {
 	}()
 	testBasicObjectCreation(portString)
 	resetHandlers()
+	testConsumerTypeCreation(portString)
+	resetHandlers()
 	testMessageTransmission()
 	resetHandlers()
 	testDLQFlow()
@@ -403,6 +413,78 @@ func testBasicObjectCreation(portString string) {
 	count = createConsumers(baseURLString)
 	log.Println("number of consumers created", count)
 	if count == 0 {
+		log.Println("error creating consumers")
+		os.Exit(4)
+	}
+}
+
+func testConsumerTypeCreation(portString string) {
+	baseURLString := "http://" + consumerHostName + portString
+	consumerCreated := 0
+
+	var tests = []struct {
+		description          string
+		passedConsumerType   string
+		expectedConsumerType string
+	}{
+		{"default consumer", "", "push"},
+		{"push consumer", "push", "push"},
+		{"pull consumer", "pull", "pull"},
+		{"wrong consumer", "wrongType", ""},
+	}
+
+	for index, tt := range tests {
+		log.Println(".......", tt.description, ".......")
+		indexString := strconv.Itoa(index + 100)
+		formValues := url.Values{}
+		formValues.Add(tokenFormParamKey, token)
+		url := baseURLString + "/" + consumerIDPrefix + indexString
+		log.Println("callback url", url)
+		formValues.Add(callbackURLFormParamKey, url)
+		log.Println("Passed ConsumerType", tt.passedConsumerType)
+		formValues.Add(consumerTypeFormParamKey, tt.passedConsumerType)
+		req, _ := http.NewRequest(http.MethodPut, brokerBaseURL+"/channel/"+channelID+"/consumer/"+consumerIDPrefix+indexString, strings.NewReader(formValues.Encode()))
+		defer req.Body.Close()
+		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
+		var resp *http.Response
+		var err error
+		resp, err = client.Do(req)
+		if err != nil {
+			log.Println("error creating consumer", err)
+			continue
+		}
+		defer resp.Body.Close()
+		respBody, _ := ioutil.ReadAll(resp.Body)
+		log.Println("response", resp.Status, string(respBody))
+
+		if tt.passedConsumerType == "wrongType" {
+			// must return bad request for invalid consumer type
+			if resp.StatusCode != http.StatusBadRequest {
+				log.Println("Error: invalid status code for wrong consumer type")
+				os.Exit(4)
+			}
+			continue
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			log.Println("Consumer Creation failed")
+			continue
+		}
+		var data ConsumerModel
+		err = json.Unmarshal(respBody, &data)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		if data.Type != tt.expectedConsumerType {
+			log.Println("Wrong Consumer Type", data.Type, tt.expectedConsumerType)
+			continue
+		}
+		consumerCreated++
+	}
+
+	log.Println("number of consumers created", consumerCreated)
+	if consumerCreated != 3 {
 		log.Println("error creating consumers")
 		os.Exit(4)
 	}
