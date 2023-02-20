@@ -97,7 +97,9 @@ var (
 	}
 
 	queueJob = func(msgDispatcher *MessageDispatcherImpl, job *data.DeliveryJob) {
-		msgDispatcher.jobQueue <- NewJob(job)
+		if job.Listener.Type == data.PushConsumer {
+			msgDispatcher.jobQueue <- NewJob(job)
+		}
 	}
 
 	genericPanicRecoveryFunc = func() {

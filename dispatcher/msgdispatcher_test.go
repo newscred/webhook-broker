@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -125,7 +126,11 @@ func SetupTestFixture() {
 		consumers = make([]*data.Consumer, 0, testConsumers)
 		for i := 0; i < testConsumers; i++ {
 			callbackURL, _ := url.Parse(baseURLString + consumerReceivedURLParamPrefix + strconv.Itoa(i))
-			consumer, _ := data.NewConsumer(channel, consumerIDPrefix+strconv.Itoa(i), consumerToken, callbackURL, "")
+			consumerType := config.PushConsumerStr
+			if i >= 15 {
+				consumerType = config.PullConsumerStr
+			}
+			consumer, _ := data.NewConsumer(channel, consumerIDPrefix+strconv.Itoa(i), consumerToken, callbackURL, consumerType)
 			consumer.QuickFix()
 			dataAccessor.GetConsumerRepository().Store(consumer)
 			consumers = append(consumers, consumer)
@@ -308,6 +313,12 @@ func TestMessageDispatcherImplDispatch(t *testing.T) {
 		}()
 		messagePayload := `{"key": "Custom JSON"}`
 		contentType := "application/json"
+		pushConsumerCount := 0
+		for index := 0; index < len(consumers); index++ {
+			if consumers[index].Type == data.PushConsumer {
+				pushConsumerCount++
+			}
+		}
 		for index := 0; index < len(consumers); index++ {
 			consumerHandler["consumer-"+strconv.Itoa(index)] = func(s string, rw http.ResponseWriter, r *http.Request) {
 				// check content body and type
@@ -324,7 +335,7 @@ func TestMessageDispatcherImplDispatch(t *testing.T) {
 				}
 			}
 		}
-		wg.Add(len(consumers))
+		wg.Add(pushConsumerCount)
 		brokerConf := getMockedBrokerConfig()
 		dispatcher := NewMessageDispatcher(getDispatcherConfiguration(dataAccessor.GetDeliveryJobRepository(), dataAccessor.GetConsumerRepository(), brokerConf, configuration, dataAccessor.GetLockRepository()))
 		msg, _ := data.NewMessage(channel, producer, messagePayload, contentType)
@@ -335,8 +346,15 @@ func TestMessageDispatcherImplDispatch(t *testing.T) {
 		jobs, _, err := dataAccessor.GetDeliveryJobRepository().GetJobsForMessage(msg, data.NewPagination(nil, nil))
 		assert.Nil(t, err)
 		assert.Equal(t, len(consumers), len(jobs))
+
+		getConsumerIndex := func(consumerID string) int {
+			parts := strings.Split(consumerID, "-")
+			ind, _ := strconv.Atoi(parts[len(parts)-1])
+			return ind
+		}
 		for _, job := range jobs {
-			if job.Listener.ConsumerID == consumerIDPrefix+"0" {
+			consumerIndex := getConsumerIndex(job.Listener.ConsumerID)
+			if job.Listener.ConsumerID == consumerIDPrefix+"0" || consumerIndex >= 15 {
 				assert.Equal(t, data.JobQueued, job.Status)
 			} else {
 				assert.Equal(t, data.JobDelivered, job.Status)
