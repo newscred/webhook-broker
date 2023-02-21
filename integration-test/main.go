@@ -406,9 +406,9 @@ func main() {
 	resetHandlers()
 	testConsumerTypeCreation(portString)
 	resetHandlers()
-	testMessageTransmission()
-	resetHandlers()
 	testQueuedMessages(portString)
+	resetHandlers()
+	testMessageTransmission()
 	resetHandlers()
 	testDLQFlow()
 }
@@ -517,38 +517,6 @@ func testConsumerTypeCreation(portString string) {
 	}
 }
 
-func testMessageTransmission() {
-	log.Println("Starting message broadcast", time.Now())
-	defaultMax := 10000
-	steps := []int{1, 10, 100, 500, 1000, 2500, 5000, 10000, 100000, maxMessages}
-	failures := 2
-	for _, step := range steps {
-		if step > defaultMax {
-			continue
-		}
-		start := time.Now()
-		wg := addConsumerVerified(step*pushConsumerCount+failures, true, failures)
-		err := broadcastMessage(step)
-		if err != nil {
-			log.Println("error broadcasting message", err)
-			os.Exit(1)
-		}
-		timeoutDuration := time.Duration(2*step)*time.Second + time.Duration(failures)*time.Second*4
-		if waitTimeout(wg, timeoutDuration) {
-			log.Println("Timed out waiting for wait group after", timeoutDuration)
-			os.Exit(2)
-		} else {
-			end := time.Now()
-			log.Println("Wait group finished", step, end)
-			log.Println("Batch Duration", step, end.Sub(start))
-			if pushConsumerAssertionFailed {
-				log.Println("Push consumer assertion failed")
-				os.Exit(3)
-			}
-		}
-	}
-}
-
 func testQueuedMessages(portString string) {
 	log.Println("starting message broadcast", time.Now())
 	step := 10
@@ -594,6 +562,38 @@ func testQueuedMessages(portString string) {
 	if pullConsumerAssertionFailed {
 		log.Println("Pull consumer assertion failed")
 		os.Exit(17)
+	}
+}
+
+func testMessageTransmission() {
+	log.Println("Starting message broadcast", time.Now())
+	defaultMax := 10000
+	steps := []int{1, 10, 100, 500, 1000, 2500, 5000, 10000, 100000, maxMessages}
+	failures := 2
+	for _, step := range steps {
+		if step > defaultMax {
+			continue
+		}
+		start := time.Now()
+		wg := addConsumerVerified(step*pushConsumerCount+failures, true, failures)
+		err := broadcastMessage(step)
+		if err != nil {
+			log.Println("error broadcasting message", err)
+			os.Exit(1)
+		}
+		timeoutDuration := time.Duration(2*step)*time.Second + time.Duration(failures)*time.Second*4
+		if waitTimeout(wg, timeoutDuration) {
+			log.Println("Timed out waiting for wait group after", timeoutDuration)
+			os.Exit(2)
+		} else {
+			end := time.Now()
+			log.Println("Wait group finished", step, end)
+			log.Println("Batch Duration", step, end.Sub(start))
+			if pushConsumerAssertionFailed {
+				log.Println("Push consumer assertion failed")
+				os.Exit(3)
+			}
+		}
 	}
 }
 
