@@ -83,7 +83,7 @@ func setupTestConsumer() {
 	if err != nil {
 		log.Fatal().Err(err)
 	}
-	consumer, err := data.NewConsumer(jobTestChannel, jobTestConsumerID, successfulGetTestToken, callbackURL)
+	consumer, err := data.NewConsumer(jobTestChannel, jobTestConsumerID, successfulGetTestToken, callbackURL, "pull")
 	if err != nil {
 		log.Fatal()
 	}
