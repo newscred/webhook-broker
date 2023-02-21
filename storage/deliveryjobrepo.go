@@ -198,7 +198,7 @@ func (djRepo *DeliveryJobDBRepository) GetPrioritizedJobsForConsumer(consumer *d
 		return getDefaultErrorResponseForJobs()
 	}
 	fields := "id, messageId, consumerId, status, dispatchReceivedAt, retryAttemptCount, statusChangedAt, earliestNextAttemptAt, createdAt, updatedAt"
-	joinedTables := "job JOIN (SELECT id as mid, priority FROM message) ON messageId=mid"
+	joinedTables := "job j JOIN (SELECT id as mid, priority FROM message) AS m ON j.messageId=m.mid"
 	filters := "consumerId like ? AND status = ?"
 	order := " ORDER BY priority DESC"
 	paginate := " LIMIT 25"
