@@ -20,6 +20,7 @@ import (
 
 	"github.com/influxdata/tdigest"
 	"github.com/julienschmidt/httprouter"
+	"github.com/rs/xid"
 )
 
 type deadDeliveryJobModel struct {
@@ -43,12 +44,31 @@ type ConsumerModel struct {
 	Type               string
 }
 
+type QeuedMessageModel struct {
+	MessageID   string
+	Payload     string
+	ContentType string
+	Priority    uint
+}
+
+type QueuedDeliveryJobModel struct {
+	ID      xid.ID
+	Message *QeuedMessageModel
+}
+
+type JobListResult struct {
+	Result []*QueuedDeliveryJobModel
+	Pages  map[string]string
+	Links  map[string]string
+}
+
 var (
 	consumerHandler         map[string]func(string, http.ResponseWriter, *http.Request)
 	server                  *http.Server
 	client                  *http.Client
 	errDuringCreation       = errors.New("error during creating fixture")
-	consumerAssertionFailed = false
+	pushConsumerAssertionFailed = false
+	pullConsumerAssertionFailed = false
 )
 
 const (
@@ -68,7 +88,8 @@ const (
 	headerChannelToken             = "X-Broker-Channel-Token"
 	headerProducerToken            = "X-Broker-Producer-Token"
 	headerProducerID               = "X-Broker-Producer-ID"
-	consumerCount                  = 5
+	pushConsumerCount              = 5
+	pullConsumerCount              = 2
 	payload                        = `{"test":"hello world"}`
 	contentType                    = "application/json"
 	concurrentPushWorkers          = 50
@@ -217,13 +238,17 @@ func updateChannel() (err error) {
 }
 
 func createConsumers(baseURI string) int {
-	for index := 0; index < consumerCount; index++ {
+	for index := 0; index < pushConsumerCount+pullConsumerCount; index++ {
 		indexString := strconv.Itoa(index)
 		formValues := url.Values{}
 		formValues.Add(tokenFormParamKey, token)
 		url := baseURI + "/" + consumerIDPrefix + indexString
 		log.Println("callback url", url)
 		formValues.Add(callbackURLFormParamKey, url)
+		if index >= pushConsumerCount {
+			consumerType := "pull"
+			formValues.Add(consumerTypeFormParamKey, consumerType)
+		}
 		req, _ := http.NewRequest(http.MethodPut, brokerBaseURL+"/channel/"+channelID+"/consumer/"+consumerIDPrefix+indexString, strings.NewReader(formValues.Encode()))
 		defer req.Body.Close()
 		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
@@ -241,7 +266,7 @@ func createConsumers(baseURI string) int {
 			return 0
 		}
 	}
-	return consumerCount
+	return pushConsumerCount+pullConsumerCount
 }
 
 func broadcastMessage(sendCount int) (err error) {
@@ -304,7 +329,7 @@ func addConsumerVerified(expectedEventCount int, assert bool, simulateFailures i
 	wg := &sync.WaitGroup{}
 	wg.Add(expectedEventCount)
 	failuresLeft := simulateFailures
-	for index := 0; index < consumerCount; index++ {
+	for index := 0; index < pushConsumerCount; index++ {
 		consumerHandler[consumerIDPrefix+strconv.Itoa(index)] = func(s string, rw http.ResponseWriter, r *http.Request) {
 			defer func() {
 				if r := recover(); r != nil {
@@ -314,11 +339,11 @@ func addConsumerVerified(expectedEventCount int, assert bool, simulateFailures i
 			if assert {
 				body, _ := ioutil.ReadAll(r.Body)
 				if string(body) != payload {
-					consumerAssertionFailed = true
+					pushConsumerAssertionFailed = true
 					log.Println("error - assertion failed for", s)
 				}
 				if r.Header.Get(headerContentType) != contentType {
-					consumerAssertionFailed = true
+					pushConsumerAssertionFailed = true
 					log.Println("error - assertion failed for", s)
 				}
 			}
@@ -383,11 +408,13 @@ func main() {
 	resetHandlers()
 	testMessageTransmission()
 	resetHandlers()
+	testQueuedMessages(portString)
+	resetHandlers()
 	testDLQFlow()
 }
 
 func testBasicObjectCreation(portString string) {
-	var count = consumerCount
+	var count = pushConsumerCount
 	var err error
 	err = createProducer()
 	if err != nil {
@@ -500,7 +527,7 @@ func testMessageTransmission() {
 			continue
 		}
 		start := time.Now()
-		wg := addConsumerVerified(step*consumerCount+failures, true, failures)
+		wg := addConsumerVerified(step*pushConsumerCount+failures, true, failures)
 		err := broadcastMessage(step)
 		if err != nil {
 			log.Println("error broadcasting message", err)
@@ -514,11 +541,59 @@ func testMessageTransmission() {
 			end := time.Now()
 			log.Println("Wait group finished", step, end)
 			log.Println("Batch Duration", step, end.Sub(start))
-			if consumerAssertionFailed {
-				log.Println("Consumer assertion failed")
+			if pushConsumerAssertionFailed {
+				log.Println("Push consumer assertion failed")
 				os.Exit(3)
 			}
 		}
+	}
+}
+
+func testQueuedMessages(portString string) {
+	log.Println("starting message broadcast", time.Now())
+	step := 10
+
+	err := broadcastMessage(step)
+	if err != nil {
+		log.Println("error broadcasting message", err)
+		os.Exit(14)
+	}
+
+	waitingTimeInSeconds := 3
+	time.Sleep(time.Duration(waitingTimeInSeconds) * time.Second)
+
+	for index := pushConsumerCount; index < pushConsumerCount+pullConsumerCount; index++ {
+		indexString := strconv.Itoa(index)
+		req, _ := http.NewRequest(http.MethodGet, brokerBaseURL+"/channel/"+channelID+"/consumer/"+consumerIDPrefix+indexString+"/queued-jobs", nil)
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Println(err)
+			os.Exit(15)
+		}
+
+		defer resp.Body.Close()
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Println(err)
+			os.Exit(16)
+		}
+
+		var data JobListResult
+		err = json.Unmarshal(respBody, &data)
+		if err != nil {
+			log.Println(err)
+			pullConsumerAssertionFailed = true
+		}
+
+		if len(data.Result) != step {
+			log.Printf("Wrong number of jobs for consumer %s, expected: %d, found: %d\n", indexString, step, len(data.Result))
+			pullConsumerAssertionFailed = true
+		}
+	}
+
+	if pullConsumerAssertionFailed {
+		log.Println("Pull consumer assertion failed")
+		os.Exit(17)
 	}
 }
 
@@ -535,11 +610,11 @@ func testDLQFlow() {
 		}()
 		body, _ := ioutil.ReadAll(r.Body)
 		if string(body) != payload {
-			consumerAssertionFailed = true
+			pushConsumerAssertionFailed = true
 			log.Println("error - assertion failed for", s)
 		}
 		if r.Header.Get(headerContentType) != contentType {
-			consumerAssertionFailed = true
+			pushConsumerAssertionFailed = true
 			log.Println("error - assertion failed for", s)
 		}
 		rw.WriteHeader(http.StatusNotFound)
@@ -558,8 +633,8 @@ func testDLQFlow() {
 		end := time.Now()
 		log.Println("Wait group finished dead messages", end)
 		log.Println("Dead Duration", end.Sub(start))
-		if consumerAssertionFailed {
-			log.Println("Consumer assertion failed")
+		if pushConsumerAssertionFailed {
+			log.Println("Push consumer assertion failed")
 			os.Exit(6)
 		}
 	}
@@ -601,11 +676,11 @@ func testDLQFlow() {
 		}()
 		body, _ := ioutil.ReadAll(r.Body)
 		if string(body) != payload {
-			consumerAssertionFailed = true
+			pushConsumerAssertionFailed = true
 			log.Println("error - assertion failed for", s)
 		}
 		if r.Header.Get(headerContentType) != contentType {
-			consumerAssertionFailed = true
+			pushConsumerAssertionFailed = true
 			log.Println("error - assertion failed for", s)
 		}
 		rw.WriteHeader(http.StatusOK)
@@ -623,8 +698,8 @@ func testDLQFlow() {
 		end := time.Now()
 		log.Println("Wait group finished dead recovery", end)
 		log.Println("Dead Recovery Duration", end.Sub(start))
-		if consumerAssertionFailed {
-			log.Println("Consumer assertion failed")
+		if pushConsumerAssertionFailed {
+			log.Println("Push consumer assertion failed")
 			os.Exit(13)
 		}
 	}
