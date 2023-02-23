@@ -17,9 +17,11 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"math"
 
 	"github.com/influxdata/tdigest"
 	"github.com/julienschmidt/httprouter"
+	"github.com/rs/xid"
 )
 
 type deadDeliveryJobModel struct {
@@ -43,6 +45,26 @@ type ConsumerModel struct {
 	Type               string
 }
 
+type QeuedMessageModel struct {
+	MessageID   string
+	Payload     string
+	ContentType string
+	Priority    uint
+}
+
+type QueuedDeliveryJobModel struct {
+	ID      xid.ID
+	Message QeuedMessageModel
+}
+
+type JobListResult struct {
+	Result []QueuedDeliveryJobModel
+}
+
+type JobStateUpdateModel struct {
+	NextState string
+}
+
 var (
 	consumerHandler         map[string]func(string, http.ResponseWriter, *http.Request)
 	server                  *http.Server
@@ -58,7 +80,8 @@ const (
 	tokenFormParamKey              = "token"
 	callbackURLFormParamKey        = "callbackUrl"
 	consumerTypeFormParamKey       = "type"
-	channelID                      = "integration-test-channel"
+	generalChannelID               = "integration-test-general-channel"
+	pullChannelID                  = "integration-test-pull-channel"
 	producerID                     = "integration-test-producer"
 	consumerIDPrefix               = "integration-test-consumer-"
 	formDataContentTypeHeaderValue = "application/x-www-form-urlencoded"
@@ -68,11 +91,15 @@ const (
 	headerChannelToken             = "X-Broker-Channel-Token"
 	headerProducerToken            = "X-Broker-Producer-Token"
 	headerProducerID               = "X-Broker-Producer-ID"
-	consumerCount                  = 5
+	headerConsumerToken            = "X-Broker-Consumer-Token"
+	pushConsumerCount              = 5
+	pullConsumerCount              = 2
 	payload                        = `{"test":"hello world"}`
 	contentType                    = "application/json"
 	concurrentPushWorkers          = 50
 	maxMessages                    = 1000000
+	JobInflightState               = "INFLIGHT"
+	JobDeliveredState              = "DELIVERED"
 )
 
 func findPort() int {
@@ -147,7 +174,7 @@ func updateProducer() (err error) {
 	return err
 }
 
-func createChannel() (err error) {
+func createChannel(channelID string) (err error) {
 	formValues := url.Values{}
 	formValues.Add(tokenFormParamKey, token+"NEW")
 	req, _ := http.NewRequest(http.MethodPut, brokerBaseURL+"/channel/"+channelID, strings.NewReader(formValues.Encode()))
@@ -164,6 +191,15 @@ func createChannel() (err error) {
 	return err
 }
 
+func createChannels() (err error) {
+	generalChannelErr := createChannel(generalChannelID)
+	pushChannelErr := createChannel(pullChannelID)
+	if generalChannelErr != nil || pushChannelErr != nil {
+		err = errDuringCreation
+	}
+	return err
+}
+
 type MsgStakeholder struct {
 	ID        string
 	Name      string
@@ -171,7 +207,7 @@ type MsgStakeholder struct {
 	ChangedAt time.Time
 }
 
-func updateChannel() (err error) {
+func updateChannel(channelID string) (err error) {
 	gReq, _ := http.NewRequest(http.MethodGet, brokerBaseURL+"/channel/"+channelID, nil)
 	gResp, err := client.Do(gReq)
 	if err != nil {
@@ -216,14 +252,32 @@ func updateChannel() (err error) {
 	return err
 }
 
+func updateChannels() (err error) {
+	generalChannelErr := updateChannel(generalChannelID)
+	pushChannelErr := updateChannel(pullChannelID)
+	if generalChannelErr != nil || pushChannelErr != nil {
+		err = errDuringCreation
+	}
+	return err
+}
+
 func createConsumers(baseURI string) int {
-	for index := 0; index < consumerCount; index++ {
+	for index := 0; index < pushConsumerCount+pullConsumerCount; index++ {
+		var channelID string
+		if index < pushConsumerCount {
+			channelID = generalChannelID
+		} else {
+			channelID = pullChannelID
+		}
 		indexString := strconv.Itoa(index)
 		formValues := url.Values{}
 		formValues.Add(tokenFormParamKey, token)
 		url := baseURI + "/" + consumerIDPrefix + indexString
 		log.Println("callback url", url)
 		formValues.Add(callbackURLFormParamKey, url)
+		if index >= pushConsumerCount {
+			formValues.Add(consumerTypeFormParamKey, "pull")
+		}
 		req, _ := http.NewRequest(http.MethodPut, brokerBaseURL+"/channel/"+channelID+"/consumer/"+consumerIDPrefix+indexString, strings.NewReader(formValues.Encode()))
 		defer req.Body.Close()
 		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
@@ -241,10 +295,10 @@ func createConsumers(baseURI string) int {
 			return 0
 		}
 	}
-	return consumerCount
+	return pushConsumerCount + pullConsumerCount
 }
 
-func broadcastMessage(sendCount int) (err error) {
+func broadcastMessage(channelID string, sendCount int) (err error) {
 	td := tdigest.NewWithCompression(maxMessages)
 	batchStart := time.Now()
 	var wg sync.WaitGroup
@@ -304,7 +358,7 @@ func addConsumerVerified(expectedEventCount int, assert bool, simulateFailures i
 	wg := &sync.WaitGroup{}
 	wg.Add(expectedEventCount)
 	failuresLeft := simulateFailures
-	for index := 0; index < consumerCount; index++ {
+	for index := 0; index < pushConsumerCount; index++ {
 		consumerHandler[consumerIDPrefix+strconv.Itoa(index)] = func(s string, rw http.ResponseWriter, r *http.Request) {
 			defer func() {
 				if r := recover(); r != nil {
@@ -383,11 +437,13 @@ func main() {
 	resetHandlers()
 	testMessageTransmission()
 	resetHandlers()
+	testJobPullFlow()
+	resetHandlers()
 	testDLQFlow()
 }
 
 func testBasicObjectCreation(portString string) {
-	var count = consumerCount
+	var count = pushConsumerCount + pullConsumerCount
 	var err error
 	err = createProducer()
 	if err != nil {
@@ -399,12 +455,12 @@ func testBasicObjectCreation(portString string) {
 		log.Println("error updating producer", err)
 		return
 	}
-	err = createChannel()
+	err = createChannels()
 	if err != nil {
 		log.Println("error creating channel", err)
 		return
 	}
-	err = updateChannel()
+	err = updateChannels()
 	if err != nil {
 		log.Println("error updating channel", err)
 		return
@@ -421,6 +477,7 @@ func testBasicObjectCreation(portString string) {
 func testConsumerTypeCreation(portString string) {
 	baseURLString := "http://" + consumerHostName + portString
 	consumerCreated := 0
+	channelID := generalChannelID
 
 	var tests = []struct {
 		description          string
@@ -500,8 +557,8 @@ func testMessageTransmission() {
 			continue
 		}
 		start := time.Now()
-		wg := addConsumerVerified(step*consumerCount+failures, true, failures)
-		err := broadcastMessage(step)
+		wg := addConsumerVerified(step*pushConsumerCount+failures, true, failures)
+		err := broadcastMessage(generalChannelID, step)
 		if err != nil {
 			log.Println("error broadcasting message", err)
 			os.Exit(1)
@@ -522,7 +579,109 @@ func testMessageTransmission() {
 	}
 }
 
+func testJobPullFlow() {
+	log.Println("beginning pull consumers workflow testing")
+	step, limit := 40, 25
+	log.Println("Starting message broadcast for pull consumers", time.Now())
+	broadcastMessage(pullChannelID, step)
+
+	getQueuedJobs := func (channelID string, consumerID string) (queuedJobs JobListResult) {
+		url := brokerBaseURL + "/channel/" + channelID + "/consumer/" + consumerID + "/queued-jobs"
+		req, _ := http.NewRequest(http.MethodGet, url, nil)
+		req.Header.Add(headerChannelToken, token)
+		req.Header.Add(headerConsumerToken, token)
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Println(err)
+			os.Exit(14)
+		}
+		defer resp.Body.Close()
+		body, _ := ioutil.ReadAll(resp.Body)
+		err = json.Unmarshal(body, &queuedJobs)
+		if err != nil {
+			log.Println(err)
+			os.Exit(15)
+		}
+		return
+	}
+
+	updateJobState := func (channelID string, consumerID string, jobID xid.ID, state string) (success bool) {
+		url := brokerBaseURL + "/channel/" + channelID + "/consumer/" + consumerID + "/job/" + jobID.String()
+		body := JobStateUpdateModel{NextState: state}
+		jsonBody, _ := json.Marshal(body)
+ 		bodyReader := bytes.NewBuffer(jsonBody)
+		req, _ := http.NewRequest(http.MethodPost, url, bodyReader)
+		req.Header.Add(headerChannelToken, token)
+		req.Header.Add(headerConsumerToken, token)
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Println(err)
+			os.Exit(16)
+		}
+
+		if resp.StatusCode == http.StatusAccepted {
+			success = true
+		} else if resp.StatusCode == http.StatusBadRequest {
+			success = false
+		} else {
+			log.Println("unknown status for state update for job", jobID)
+			os.Exit(17)
+		}
+		return
+	}
+
+	channelID := pullChannelID
+	jobIDs := make([]xid.ID, limit)
+	time.Sleep(3 * time.Second)
+	for index := pushConsumerCount; index < pushConsumerCount+pullConsumerCount; index++ {
+		indexString := strconv.Itoa(index)
+		consumerID := consumerIDPrefix + indexString
+		data := getQueuedJobs(channelID, consumerID)
+		if len(data.Result) != limit {
+			log.Println("queued jobs count mismatch for consumer", consumerID)
+			os.Exit(18)
+		}
+		for i := 0; i < limit; i++ {
+			jobIDs[i] = data.Result[i].ID
+		}
+	}
+	firstConsumerID := consumerIDPrefix + strconv.Itoa(pushConsumerCount)
+	lastConsumerID := consumerIDPrefix + strconv.Itoa(pushConsumerCount+pullConsumerCount-1)
+	for _, jobID := range jobIDs {
+		success := updateJobState(channelID, lastConsumerID, jobID, JobInflightState)
+		if !success {
+			log.Println("failed to update status from queued to inflight for job", jobID)
+			os.Exit(19)
+		}
+	}
+	time.Sleep(3 * time.Second)
+	data := getQueuedJobs(channelID, firstConsumerID)
+	if len(data.Result) != limit {
+		log.Println("received queued-job count mismatch for consumer,", firstConsumerID, "after state update")
+		os.Exit(19)
+	}
+	data = getQueuedJobs(channelID, lastConsumerID)
+	if len(data.Result) != int(math.Min(float64(limit), float64(step-limit))) {
+		log.Println("received queued-job count mismatch for consumer,", lastConsumerID, "after state update")
+		os.Exit(20)
+	}
+	firstJobID := jobIDs[0]
+	success := updateJobState(channelID, lastConsumerID, firstJobID, JobDeliveredState)
+	if !success {
+		log.Println("failed to update status from inflight to delivered for job", firstJobID)
+		os.Exit(21)
+	}
+	time.Sleep(3 * time.Second)
+	success = updateJobState(channelID, lastConsumerID, firstJobID, JobInflightState)
+	if success {
+		log.Println("wrongly updated status from delivered to inFlight for job", firstJobID)
+		os.Exit(21)
+	}
+	log.Println("pull consumers workflow testing successfully finished!")
+}
+
 func testDLQFlow() {
+	channelID := generalChannelID
 	start := time.Now()
 	wg := &sync.WaitGroup{}
 	wg.Add(6)
@@ -545,7 +704,7 @@ func testDLQFlow() {
 		rw.WriteHeader(http.StatusNotFound)
 		wg.Done()
 	}
-	err := broadcastMessage(1)
+	err := broadcastMessage(generalChannelID, 1)
 	if err != nil {
 		log.Println("error broadcasting message", err)
 		os.Exit(7)
