@@ -53,6 +53,7 @@ type DeliveryJob struct {
 	DispatchReceivedAt    time.Time
 	EarliestNextAttemptAt time.Time
 	RetryAttemptCount     uint
+	Priority              uint
 }
 
 // QuickFix fixes the object state automatically as much as possible
@@ -113,6 +114,10 @@ func (job *DeliveryJob) GetLockID() string {
 // NewDeliveryJob creates a new instance of DeliveryJob; returns insufficient info error if parameters are not valid for a new DeliveryJob
 func NewDeliveryJob(msg *Message, consumer *Consumer) (job *DeliveryJob, err error) {
 	job = &DeliveryJob{Message: msg, Listener: consumer}
+	if msg != nil {
+		job.Priority = msg.Priority
+	}
+
 	job.QuickFix()
 	if !job.IsInValidState() {
 		err = ErrInsufficientInformationForCreating

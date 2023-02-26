@@ -23,6 +23,7 @@ var (
 
 const (
 	consumerIDPrefix = "test-consumer-for-dj-"
+	messagePriority  = 5
 )
 
 func SetupForDeliveryJobTests() {
@@ -62,6 +63,7 @@ func TestDispatchMessage(t *testing.T) {
 		djRepo := getDeliverJobRepository()
 		msgRepo := getMessageRepository()
 		message := getMessageForJob()
+		message.Priority = messagePriority
 		msgRepo.Create(message)
 		jobs := getDeliveryJobsInFixture(message)
 		err := djRepo.DispatchMessage(message, jobs...)
@@ -81,6 +83,7 @@ func TestDispatchMessage(t *testing.T) {
 			assert.Equal(t, message, dJob.Message)
 			assert.Contains(t, dJob.Listener.ConsumerID, consumerIDPrefix)
 			assert.Equal(t, data.JobQueued, dJob.Status)
+			assert.Equal(t, message.Priority, dJob.Priority)
 		}
 		_, _, err = djRepo.GetJobsForMessage(message, page)
 		assert.Equal(t, ErrPaginationDeadlock, err)
