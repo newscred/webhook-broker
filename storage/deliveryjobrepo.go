@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	jobPropertyCount     = 9
-	jobCommonSelectQuery = "SELECT id, messageId, consumerId, status, dispatchReceivedAt, retryAttemptCount, statusChangedAt, earliestNextAttemptAt, createdAt, updatedAt FROM job WHERE"
+	jobPropertyCount     = 10
+	jobCommonSelectQuery = "SELECT id, messageId, consumerId, status, dispatchReceivedAt, retryAttemptCount, statusChangedAt, earliestNextAttemptAt, createdAt, updatedAt, priority FROM job WHERE"
 )
 
 // DeliveryJobDBRepository is the DeliveryJobRepository's RDBMS implementation
@@ -29,15 +29,15 @@ func (djRepo *DeliveryJobDBRepository) DispatchMessage(message *data.Message, de
 		err = ErrInvalidStateToSave
 	}
 	args := make([]interface{}, 0, len(deliveryJobs)*jobPropertyCount)
-	query := "INSERT INTO job (id, messageId, consumerId, dispatchReceivedAt, statusChangedAt, earliestNextAttemptAt, status, createdAt, updatedAt) VALUES"
+	query := "INSERT INTO job (id, messageId, consumerId, dispatchReceivedAt, statusChangedAt, earliestNextAttemptAt, status, createdAt, updatedAt, priority) VALUES"
 	if err == nil {
 		for _, job := range deliveryJobs {
 			if job == nil || !job.IsInValidState() || job.Message.ID != message.ID {
 				err = ErrInvalidStateToSave
 				break
 			}
-			args = append(args, job.ID, job.Message.ID, job.Listener.ID, job.DispatchReceivedAt, job.StatusChangedAt, job.EarliestNextAttemptAt, job.Status, job.CreatedAt, job.UpdatedAt)
-			query = query + " (?, ?, ?, ?, ?, ?, ?, ?, ?),"
+			args = append(args, job.ID, job.Message.ID, job.Listener.ID, job.DispatchReceivedAt, job.StatusChangedAt, job.EarliestNextAttemptAt, job.Status, job.CreatedAt, job.UpdatedAt, job.Priority)
+			query = query + " (?, ?, ?, ?, ?, ?, ?, ?, ?, ?),"
 		}
 	}
 	if err == nil {
@@ -105,7 +105,7 @@ func (djRepo *DeliveryJobDBRepository) getJobs(baseQuery string, message *data.M
 		job.Message = &data.Message{}
 		job.Listener = &data.Consumer{}
 		jobs = append(jobs, job)
-		return []interface{}{&job.ID, &job.Message.ID, &job.Listener.ID, &job.Status, &job.DispatchReceivedAt, &job.RetryAttemptCount, &job.StatusChangedAt, &job.EarliestNextAttemptAt, &job.CreatedAt, &job.UpdatedAt}
+		return []interface{}{&job.ID, &job.Message.ID, &job.Listener.ID, &job.Status, &job.DispatchReceivedAt, &job.RetryAttemptCount, &job.StatusChangedAt, &job.EarliestNextAttemptAt, &job.CreatedAt, &job.UpdatedAt, &job.Priority}
 	}
 	err = queryRows(djRepo.db, baseQuery, args2SliceFnWrapper(args...), scanArgs)
 	if err == nil {
@@ -209,7 +209,7 @@ func (djRepo *DeliveryJobDBRepository) GetByID(id string) (job *data.DeliveryJob
 	var consumerID string
 	err = querySingleRow(djRepo.db, jobCommonSelectQuery+" id like ?", args2SliceFnWrapper(id),
 		args2SliceFnWrapper(&job.ID, &messageID, &consumerID, &job.Status, &job.DispatchReceivedAt, &job.RetryAttemptCount, &job.StatusChangedAt,
-			&job.EarliestNextAttemptAt, &job.CreatedAt, &job.UpdatedAt))
+			&job.EarliestNextAttemptAt, &job.CreatedAt, &job.UpdatedAt, &job.Priority))
 	if err == nil {
 		job.Message, err = djRepo.mesageRepository.GetByID(messageID)
 	}
