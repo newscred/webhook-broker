@@ -55,6 +55,7 @@ type MessageRepository interface {
 	Create(message *data.Message) error
 	Get(channelID string, messageID string) (*data.Message, error)
 	GetByID(id string) (*data.Message, error)
+	GetByIDs(ids []string) ([]*data.Message, error)
 	SetDispatched(txContext context.Context, message *data.Message) error
 	GetMessagesNotDispatchedForCertainPeriod(delta time.Duration) []*data.Message
 	GetMessagesForChannel(channelID string, page *data.Pagination) ([]*data.Message, *data.Pagination, error)

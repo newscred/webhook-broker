@@ -62,6 +62,62 @@ func TestMessageGetByID(t *testing.T) {
 	})
 }
 
+func TestMessageGetByIDs(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
+		t.Parallel()
+		repo := getMessageRepository()
+		payload1, payload2 := samplePayload+"1", samplePayload+"2"
+		msg1, err := data.NewMessage(channel1, producer1, payload1, sampleContentType)
+		assert.NoError(t, err)
+		assert.Nil(t, repo.Create(msg1))
+		msg2, err := data.NewMessage(channel2, producer1, payload2, sampleContentType)
+		assert.NoError(t, err)
+		assert.Nil(t, repo.Create(msg2))
+
+		rMsgs, err := repo.GetByIDs([]string{msg1.ID.String(), msg2.ID.String(), msg1.ID.String(), "non-existing-id"})
+		assert.NoError(t, err)
+		assert.Equal(t, 2, len(rMsgs))
+		if rMsgs[0].ID != msg1.ID {
+			rMsgs[0], rMsgs[1] = rMsgs[1], rMsgs[0]
+		}
+
+		assert.Equal(t, channel1.ChannelID, rMsgs[0].BroadcastedTo.ChannelID)
+		assert.Equal(t, producer1.ProducerID, rMsgs[0].ProducedBy.ProducerID)
+		assert.Equal(t, payload1, rMsgs[0].Payload)
+		assert.Equal(t, sampleContentType, rMsgs[0].ContentType)
+
+		assert.Equal(t, channel2.ChannelID, rMsgs[1].BroadcastedTo.ChannelID)
+		assert.Equal(t, producer1.ProducerID, rMsgs[1].ProducedBy.ProducerID)
+		assert.Equal(t, payload2, rMsgs[1].Payload)
+		assert.Equal(t, sampleContentType, rMsgs[1].ContentType)
+	})
+	t.Run("Success Empty", func(t *testing.T) {
+		t.Parallel()
+		repo := getMessageRepository()
+		rMsgs, err := repo.GetByIDs([]string{})
+		assert.NoError(t, err)
+		assert.Equal(t, 0, len(rMsgs))
+	})
+	t.Run("Fail", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		oldLogger := log.Logger
+		log.Logger = log.Output(&buf)
+		defer func() { log.Logger = oldLogger }()
+		errString := "sample select error"
+		expectedErr := errors.New(errString)
+		db, mock, _ := sqlmock.New()
+		msgRepo := NewMessageRepository(db, NewChannelRepository(testDB), NewProducerRepository(testDB))
+		mock.ExpectQuery(messageSelectRowCommonQuery).WillReturnError(expectedErr)
+		mock.MatchExpectationsInOrder(true)
+		msgs, err := msgRepo.GetByIDs([]string{""})
+		assert.Equal(t, 0, len(msgs))
+		assert.NoError(t, mock.ExpectationsWereMet())
+		assert.Equal(t, err, expectedErr)
+		assert.Contains(t, buf.String(), errString)
+	})
+}
+
 func TestMessageGetCreate(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		t.Parallel()
@@ -236,7 +292,7 @@ func TestGetMessagesByChannel(t *testing.T) {
 		assert.NotNil(t, page)
 		assert.NotNil(t, page.Next)
 		assert.NotNil(t, page.Previous)
-		assert.Equal(t, 1, len(msgs))
+		assert.Equal(t, 2, len(msgs))
 		assert.Equal(t, msg.ID, msgs[0].ID)
 		msgs, page3, err := msgRepo.GetMessagesForChannel(channel2.ChannelID, &data.Pagination{Previous: page.Previous})
 		assert.Nil(t, err)
