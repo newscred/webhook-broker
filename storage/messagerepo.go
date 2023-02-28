@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -88,6 +89,34 @@ func (msgRepo *MessageDBRepository) getSingleMessage(query string, queryArgs fun
 // GetByID retrieves a message by its ID
 func (msgRepo *MessageDBRepository) GetByID(id string) (*data.Message, error) {
 	return msgRepo.getSingleMessage(messageSelectRowCommonQuery+" id like ?", args2SliceFnWrapper(id), true)
+}
+
+// GetByIDs retrieves messages by their IDs
+func (msgRepo *MessageDBRepository) GetByIDs(ids []string) ([]*data.Message, error) {
+	if len(ids) == 0 {
+		return []*data.Message{}, nil
+	}
+	messages := make([]*data.Message, 0, len(ids))
+	queryArgs := make([]interface{}, len(ids))
+	clauseArgs := make([]string, len(ids))
+	for i, id := range ids {
+		queryArgs[i] = id
+		clauseArgs[i] = "?"
+	}
+	scanArgs := func() []interface{} {
+		msg := &data.Message{}
+		msg.ProducedBy = &data.Producer{}
+		msg.BroadcastedTo = &data.Channel{}
+		messages = append(messages, msg)
+		return []interface{}{&msg.ID, &msg.MessageID, &msg.ProducedBy.ProducerID, &msg.BroadcastedTo.ChannelID, &msg.Payload, &msg.ContentType, &msg.Priority, &msg.Status, &msg.ReceivedAt, &msg.OutboxedAt, &msg.CreatedAt, &msg.UpdatedAt}
+	}
+	baseQuery := messageSelectRowCommonQuery + " id IN (" + strings.Join(clauseArgs, ", ") + ")"
+	err := queryRows(msgRepo.db, baseQuery, args2SliceFnWrapper(queryArgs...), scanArgs)
+	if err != nil {
+		log.Error().Err(err).Msg("error - could not get message list from IDs")
+	}
+	// TODO: set `ProducedBy` & `BroadcastedTo` using cached Producer & Channel
+	return messages, err
 }
 
 // SetDispatched sets the status of the message to dispatched within the transaction passed via txContext

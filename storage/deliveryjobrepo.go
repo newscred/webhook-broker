@@ -111,6 +111,24 @@ func (djRepo *DeliveryJobDBRepository) MarkDeadJobAsInflight(deliveryJob *data.D
 	return err
 }
 
+func (djRepo *DeliveryJobDBRepository) populateJobsWithMessage(jobs []*data.DeliveryJob) error {
+	messageIDs := make([]string, 0, len(jobs))
+	for _, job := range jobs {
+		messageIDs = append(messageIDs, job.Message.ID.String())
+	}
+	messages, err := djRepo.mesageRepository.GetByIDs(messageIDs)
+	if err == nil {
+		messageMap := make(map[string]*data.Message)
+		for _, message := range messages {
+			messageMap[message.ID.String()] = message
+		}
+		for _, job := range jobs {
+			job.Message = messageMap[job.Message.ID.String()]
+		}
+	}
+	return err
+}
+
 func (djRepo *DeliveryJobDBRepository) getJobs(baseQuery string, message *data.Message, consumer *data.Consumer, args []interface{}) (jobs []*data.DeliveryJob, pagination *data.Pagination, err error) {
 	jobs = make([]*data.DeliveryJob, 0)
 	pagination = &data.Pagination{}
@@ -129,11 +147,12 @@ func (djRepo *DeliveryJobDBRepository) getJobs(baseQuery string, message *data.M
 			} else {
 				job.Listener = consumer
 			}
-			if message == nil {
-				job.Message, _ = djRepo.mesageRepository.GetByID(job.Message.ID.String())
-			} else {
+			if message != nil {
 				job.Message = message
 			}
+		}
+		if message == nil {
+			err = djRepo.populateJobsWithMessage(jobs)
 		}
 	}
 	if err == nil {
