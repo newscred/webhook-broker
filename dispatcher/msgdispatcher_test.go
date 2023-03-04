@@ -300,7 +300,6 @@ func TestMessageDispatcherImplDispatch(t *testing.T) {
 		assert.Contains(t, buf.String(), expectedErr.Error())
 	})
 	t.Run("Success", func(t *testing.T) {
-		t.Parallel()
 		t.Cleanup(clearConsumerHandler)
 		var wg sync.WaitGroup
 		oldDeliverJob := deliverJob
