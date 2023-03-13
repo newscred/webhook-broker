@@ -157,10 +157,19 @@ var (
 		}
 	}
 
+	shouldEnqueueLongInflightJob = func(job *data.DeliveryJob, msgDispatcher *MessageDispatcherImpl) bool {
+		totalDuration := time.Duration(job.IncrementalTimeout)*time.Second + msgDispatcher.rationalDelay + msgDispatcher.stopTimeout
+		changeAllowedThreshold := time.Now().Add(-totalDuration)
+		return job.Listener.Type == data.PushConsumer || job.Listener.Type == data.PullConsumer && job.StatusChangedAt.Before(changeAllowedThreshold)
+	}
+
 	recoverJobsFromLongInflight = func(msgDispatcher *MessageDispatcherImpl) {
 		defer genericPanicRecoveryFunc()
 		jobs := msgDispatcher.djRepo.GetJobsInflightSince(msgDispatcher.stopTimeout + msgDispatcher.rationalDelay)
 		for _, job := range jobs {
+			if !shouldEnqueueLongInflightJob(job, msgDispatcher) {
+				continue
+			}
 			// Ignore max retry intentionally since we are recovering likely from a process crash during delivery.
 			err := inLockRun(msgDispatcher.lockRepo, job, func() error {
 				msgDispatcher.djRepo.MarkJobRetry(job, computeEarliestDelta(job.RetryAttemptCount+1, msgDispatcher.brokerConfig))

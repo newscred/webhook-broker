@@ -54,6 +54,7 @@ type DeliveryJob struct {
 	EarliestNextAttemptAt time.Time
 	RetryAttemptCount     uint
 	Priority              uint
+	IncrementalTimeout    uint // in seconds
 }
 
 // QuickFix fixes the object state automatically as much as possible

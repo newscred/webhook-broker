@@ -26,6 +26,7 @@ const (
 var (
 	errInvalidQueryParam        = errors.New("invalid query parameter")
 	errInvalidTransitionRequest = errors.New("invalid transition request")
+	errTimeoutWithInvalidState  = errors.New("timeout provided with invalid state")
 	errConsumerDoesNotExist     = errors.New("consumer could not be found")
 	errConsumerTokenNotMatching = errors.New("consumer token does not match")
 	errConsumerNotPullBased     = errors.New("consumer not pull based")
@@ -59,16 +60,18 @@ func newQueuedMessageModel(message *data.Message) *QeuedMessageModel {
 }
 
 type QueuedDeliveryJobModel struct {
-	ID       xid.ID
-	Priority uint
-	Message  *QeuedMessageModel
+	ID                 xid.ID
+	Priority           uint
+	IncrementalTimeout uint // in second
+	Message            *QeuedMessageModel
 }
 
 func newQueuedDeliveryJobModel(job *data.DeliveryJob) *QueuedDeliveryJobModel {
 	return &QueuedDeliveryJobModel{
-		ID:       job.ID,
-		Priority: job.Priority,
-		Message:  newQueuedMessageModel(job.Message),
+		ID:                 job.ID,
+		Priority:           job.Priority,
+		IncrementalTimeout: job.IncrementalTimeout,
+		Message:            newQueuedMessageModel(job.Message),
 	}
 }
 
@@ -181,11 +184,22 @@ func (controller *JobController) Post(w http.ResponseWriter, r *http.Request, pa
 		return
 	}
 
-	updateData := struct{ NextState string }{}
+	updateData := struct {
+		NextState          string
+		IncrementalTimeout uint
+	}{}
 	err := json.NewDecoder(r.Body).Decode(&updateData)
 	if err != nil {
 		writeErr(w, err)
 		return
+	}
+	// TODO: Guard Against Negative Number
+	if updateData.IncrementalTimeout != 0 {
+		if updateData.NextState != data.JobInflight.String() || job.Status == data.JobInflight {
+			writeStatus(w, http.StatusBadRequest, errTimeoutWithInvalidState)
+			return
+		}
+		job.IncrementalTimeout = updateData.IncrementalTimeout
 	}
 
 	if job.Status.String() == updateData.NextState {
