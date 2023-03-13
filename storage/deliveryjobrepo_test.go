@@ -459,3 +459,32 @@ func TestRequeueDeadJobsForConsumer(t *testing.T) {
 		assert.Equal(t, data.JobQueued, job.Status)
 	}
 }
+
+func TestUpdateJobTimeout(t *testing.T) {
+	djRepo := getDeliverJobRepository()
+	msgRepo := getMessageRepository()
+	message := getMessageForJob()
+	msgRepo.Create(message)
+	jobs := getDeliveryJobsInFixture(message)
+	err := djRepo.DispatchMessage(message, jobs...)
+	assert.Nil(t, err)
+	t.Run("IncreaseJobTimeout", func(t *testing.T) {
+		t.Parallel()
+		tJob := jobs[7]
+		dJob, err := djRepo.GetByID(tJob.ID.String())
+		assert.Nil(t, err)
+		assert.Equal(t, data.JobQueued, dJob.Status)
+		assert.Equal(t, uint(0), dJob.IncrementalTimeout)
+		oldTime := time.Now()
+
+		dJob.IncrementalTimeout = 100
+		err = djRepo.MarkJobInflight(dJob)
+		assert.Nil(t, err)
+		dJob, err = djRepo.GetByID(tJob.ID.String())
+		assert.Nil(t, err)
+		assert.Equal(t, data.JobInflight, dJob.Status)
+		assert.Equal(t, uint(100), dJob.IncrementalTimeout)
+		assert.GreaterOrEqual(t, dJob.UpdatedAt, oldTime)
+
+	})
+}

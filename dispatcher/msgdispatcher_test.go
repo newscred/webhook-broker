@@ -577,6 +577,90 @@ func TestJobWorkers(t *testing.T) {
 			}
 		}
 	})
+	t.Run("SuccessRecoverLongInflightWithTimeout", func(t *testing.T) {
+		dispatcher := NewMessageDispatcher(getCompleteDispatcherConfiguration(dataAccessor.GetMessageRepository(), dataAccessor.GetDeliveryJobRepository(), dataAccessor.GetConsumerRepository(), brokerConf, configuration, dataAccessor.GetLockRepository()))
+		impl := dispatcher.(*MessageDispatcherImpl)
+
+		var inflightPushJob *data.DeliveryJob = nil
+		var inflightPullJob *data.DeliveryJob = nil
+
+		var getJobs = func() {
+			for _, job := range jobs {
+				if job.Listener.Type == data.PushConsumer {
+					inflightPushJob = job
+				}
+				if job.Listener.Type == data.PullConsumer {
+					inflightPullJob = job
+				}
+			}
+		}
+		var resetJobs = func() {
+			// might be necessary to reset job states because of previous tests
+			inflightPushJob.RetryAttemptCount = 0
+			inflightPullJob.RetryAttemptCount = 0
+			_, err := db.Exec("UPDATE job SET status = ?, retryAttemptCount = ? WHERE id = ?", data.JobQueued, inflightPushJob.RetryAttemptCount, inflightPushJob.ID)
+			assert.Nil(t, err)
+			_, err = db.Exec("UPDATE job SET status = ?, retryAttemptCount = ? WHERE id = ?", data.JobQueued, inflightPullJob.RetryAttemptCount, inflightPullJob.ID)
+			assert.Nil(t, err)
+
+			inflightPullJob.Status = data.JobQueued
+			inflightPushJob.Status = data.JobQueued
+		}
+
+		getJobs()
+
+		var runRecoverLongInflightTest = func(t *testing.T, timeout uint, lastStatusChanged time.Duration, shouldRetryPushJob, shouldRetryPullJob bool) {
+			resetJobs()
+
+			pushJobRetryCount, pullJobRetryCount := 0, 0
+			inflightPushJob.IncrementalTimeout = timeout
+			inflightPullJob.IncrementalTimeout = timeout
+			err = dataAccessor.GetDeliveryJobRepository().MarkJobInflight(inflightPushJob)
+			assert.Nil(t, err)
+			err = dataAccessor.GetDeliveryJobRepository().MarkJobInflight(inflightPullJob)
+			assert.Nil(t, err)
+			db.Exec("UPDATE job SET statusChangedAt = ? WHERE id = ?", time.Now().Add(-lastStatusChanged), inflightPushJob.ID)
+			db.Exec("UPDATE job SET statusChangedAt = ? WHERE id = ?", time.Now().Add(-lastStatusChanged), inflightPullJob.ID)
+
+			recoverJobsFromLongInflight(impl)
+
+			nJob, err := msgDispatcher.djRepo.GetByID(inflightPushJob.ID.String())
+			assert.Nil(t, err)
+			if shouldRetryPushJob {
+				assert.Equal(t, data.JobQueued, nJob.Status)
+				pushJobRetryCount++
+			}
+			assert.Equal(t, uint(pushJobRetryCount), nJob.RetryAttemptCount)
+			inflightPushJob = nJob
+			nJob, err = msgDispatcher.djRepo.GetByID(inflightPullJob.ID.String())
+			assert.Nil(t, err)
+			if shouldRetryPullJob {
+				assert.Equal(t, data.JobQueued, nJob.Status)
+				pullJobRetryCount++
+			}
+			assert.Equal(t, uint(pullJobRetryCount), nJob.RetryAttemptCount)
+			inflightPullJob = nJob
+		}
+
+		cases := []struct {
+			name               string
+			jobTimeout         time.Duration
+			lastStatusChanged  time.Duration
+			shouldRetryPushJob bool
+			shouldRetryPullJob bool
+		}{
+			{name: "StatusChangedLongAgo", jobTimeout: 10 * 60, lastStatusChanged: time.Hour, shouldRetryPullJob: true, shouldRetryPushJob: true},
+			{name: "RequePushOnly", jobTimeout: 4.6 * 60, lastStatusChanged: 5 * time.Minute, shouldRetryPullJob: false, shouldRetryPushJob: true},
+			{name: "RequeBoth", jobTimeout: 10 * 60, lastStatusChanged: 11 * time.Minute, shouldRetryPullJob: true, shouldRetryPushJob: true},
+			{name: "RequeNone", jobTimeout: 10 * 60, lastStatusChanged: 10 * time.Second, shouldRetryPullJob: false, shouldRetryPushJob: false},
+		}
+
+		for _, test := range cases {
+			t.Run(test.name, func(t *testing.T) {
+				runRecoverLongInflightTest(t, uint(test.jobTimeout), test.lastStatusChanged, test.shouldRetryPushJob, test.shouldRetryPullJob)
+			})
+		}
+	})
 	t.Run("OnlyPushConsumerAquireqLockForRetryQueue", func(t *testing.T) {
 		dispatcher := NewMessageDispatcher(getCompleteDispatcherConfiguration(dataAccessor.GetMessageRepository(), dataAccessor.GetDeliveryJobRepository(), dataAccessor.GetConsumerRepository(), brokerConf, configuration, dataAccessor.GetLockRepository()))
 		impl := dispatcher.(*MessageDispatcherImpl)

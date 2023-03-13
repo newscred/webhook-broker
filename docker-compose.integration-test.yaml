@@ -27,7 +27,7 @@ services:
     build: .
     container_name: ibroker
     volumes:
-      - ./webhook-broker-dc.cfg:/webhook-broker.cfg
+      - ./webhook-broker-integration-test.cfg:/webhook-broker.cfg
     command: ["./webhook-broker", "-migrate", "./migration/sqls/"]
     depends_on:
       mysql8:
