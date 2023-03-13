@@ -1,0 +1,2 @@
+ALTER TABLE `job`
+ADD COLUMN `incrementalTimeout` INTEGER NOT NULL DEFAULT 0;

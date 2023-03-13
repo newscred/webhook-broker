@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	jobPropertyCount     = 10
-	jobCommonSelectQuery = "SELECT id, messageId, consumerId, status, dispatchReceivedAt, retryAttemptCount, statusChangedAt, earliestNextAttemptAt, createdAt, updatedAt, priority FROM job WHERE"
+	jobPropertyCount     = 11
+	jobCommonSelectQuery = "SELECT id, messageId, consumerId, status, dispatchReceivedAt, retryAttemptCount, statusChangedAt, earliestNextAttemptAt, createdAt, updatedAt, priority, incrementalTimeout FROM job WHERE"
 )
 
 // DeliveryJobDBRepository is the DeliveryJobRepository's RDBMS implementation
@@ -29,15 +29,15 @@ func (djRepo *DeliveryJobDBRepository) DispatchMessage(message *data.Message, de
 		err = ErrInvalidStateToSave
 	}
 	args := make([]interface{}, 0, len(deliveryJobs)*jobPropertyCount)
-	query := "INSERT INTO job (id, messageId, consumerId, dispatchReceivedAt, statusChangedAt, earliestNextAttemptAt, status, createdAt, updatedAt, priority) VALUES"
+	query := "INSERT INTO job (id, messageId, consumerId, dispatchReceivedAt, statusChangedAt, earliestNextAttemptAt, status, createdAt, updatedAt, priority, incrementalTimeout) VALUES"
 	if err == nil {
 		for _, job := range deliveryJobs {
 			if job == nil || !job.IsInValidState() || job.Message.ID != message.ID {
 				err = ErrInvalidStateToSave
 				break
 			}
-			args = append(args, job.ID, job.Message.ID, job.Listener.ID, job.DispatchReceivedAt, job.StatusChangedAt, job.EarliestNextAttemptAt, job.Status, job.CreatedAt, job.UpdatedAt, job.Priority)
-			query = query + " (?, ?, ?, ?, ?, ?, ?, ?, ?, ?),"
+			args = append(args, job.ID, job.Message.ID, job.Listener.ID, job.DispatchReceivedAt, job.StatusChangedAt, job.EarliestNextAttemptAt, job.Status, job.CreatedAt, job.UpdatedAt, job.Priority, job.IncrementalTimeout)
+			query = query + " (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),"
 		}
 	}
 	if err == nil {
@@ -58,7 +58,7 @@ func (djRepo *DeliveryJobDBRepository) DispatchMessage(message *data.Message, de
 
 func (djRepo *DeliveryJobDBRepository) updateJobStatus(deliveryJob *data.DeliveryJob, from data.JobStatus, to data.JobStatus) (err error) {
 	currentTime := time.Now()
-	err = transactionalSingleRowWriteExec(djRepo.db, emptyOps, "UPDATE job SET status = ?, statusChangedAt = ?, updatedAt = ? WHERE id like ? and status = ?", args2SliceFnWrapper(to, currentTime, currentTime, deliveryJob.ID, from))
+	err = transactionalSingleRowWriteExec(djRepo.db, emptyOps, "UPDATE job SET status = ?, incrementalTimeout = ?, statusChangedAt = ?, updatedAt = ? WHERE id like ? and status = ?", args2SliceFnWrapper(to, deliveryJob.IncrementalTimeout, currentTime, currentTime, deliveryJob.ID, from))
 	if err == nil {
 		deliveryJob.Status = to
 		deliveryJob.StatusChangedAt = currentTime
@@ -100,7 +100,7 @@ func (djRepo *DeliveryJobDBRepository) MarkJobRetry(deliveryJob *data.DeliveryJo
 // MarkDeadJobAsInflight increases the retry attempt count and sets the status of the job to Queued if the job's current status is Dead in the object and DB; else returns error
 func (djRepo *DeliveryJobDBRepository) MarkDeadJobAsInflight(deliveryJob *data.DeliveryJob) (err error) {
 	currentTime := time.Now()
-	err = transactionalSingleRowWriteExec(djRepo.db, emptyOps, "UPDATE job SET status = ?, statusChangedAt = ?, updatedAt = ?, earliestNextAttemptAt = ?, retryAttemptCount = ? WHERE id like ? and status = ?", args2SliceFnWrapper(data.JobInflight, currentTime, currentTime, currentTime, deliveryJob.RetryAttemptCount+1, deliveryJob.ID, data.JobDead))
+	err = transactionalSingleRowWriteExec(djRepo.db, emptyOps, "UPDATE job SET status = ?, incrementalTimeout = ?, statusChangedAt = ?, updatedAt = ?, earliestNextAttemptAt = ?, retryAttemptCount = ? WHERE id like ? and status = ?", args2SliceFnWrapper(data.JobInflight, deliveryJob.IncrementalTimeout, currentTime, currentTime, currentTime, deliveryJob.RetryAttemptCount+1, deliveryJob.ID, data.JobDead))
 	if err == nil {
 		deliveryJob.Status = data.JobInflight
 		deliveryJob.StatusChangedAt = currentTime
@@ -137,7 +137,7 @@ func (djRepo *DeliveryJobDBRepository) getJobs(baseQuery string, message *data.M
 		job.Message = &data.Message{}
 		job.Listener = &data.Consumer{}
 		jobs = append(jobs, job)
-		return []interface{}{&job.ID, &job.Message.ID, &job.Listener.ID, &job.Status, &job.DispatchReceivedAt, &job.RetryAttemptCount, &job.StatusChangedAt, &job.EarliestNextAttemptAt, &job.CreatedAt, &job.UpdatedAt, &job.Priority}
+		return []interface{}{&job.ID, &job.Message.ID, &job.Listener.ID, &job.Status, &job.DispatchReceivedAt, &job.RetryAttemptCount, &job.StatusChangedAt, &job.EarliestNextAttemptAt, &job.CreatedAt, &job.UpdatedAt, &job.Priority, &job.IncrementalTimeout}
 	}
 	err = queryRows(djRepo.db, baseQuery, args2SliceFnWrapper(args...), scanArgs)
 	if err == nil {
@@ -250,7 +250,7 @@ func (djRepo *DeliveryJobDBRepository) GetByID(id string) (job *data.DeliveryJob
 	var consumerID string
 	err = querySingleRow(djRepo.db, jobCommonSelectQuery+" id like ?", args2SliceFnWrapper(id),
 		args2SliceFnWrapper(&job.ID, &messageID, &consumerID, &job.Status, &job.DispatchReceivedAt, &job.RetryAttemptCount, &job.StatusChangedAt,
-			&job.EarliestNextAttemptAt, &job.CreatedAt, &job.UpdatedAt, &job.Priority))
+			&job.EarliestNextAttemptAt, &job.CreatedAt, &job.UpdatedAt, &job.Priority, &job.IncrementalTimeout))
 	if err == nil {
 		job.Message, err = djRepo.mesageRepository.GetByID(messageID)
 	}
