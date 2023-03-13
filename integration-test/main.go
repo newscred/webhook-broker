@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -17,7 +18,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"math"
 
 	"github.com/influxdata/tdigest"
 	"github.com/julienschmidt/httprouter"
@@ -62,7 +62,8 @@ type JobListResult struct {
 }
 
 type JobStateUpdateModel struct {
-	NextState string
+	NextState          string
+	IncrementalTimeout uint
 }
 
 var (
@@ -585,9 +586,12 @@ func testJobPullFlow() {
 	log.Println("Starting message broadcast for pull consumers", time.Now())
 	broadcastMessage(pullChannelID, step)
 
-	getQueuedJobs := func (channelID string, consumerID string) (queuedJobs JobListResult) {
-		url := brokerBaseURL + "/channel/" + channelID + "/consumer/" + consumerID + "/queued-jobs"
-		req, _ := http.NewRequest(http.MethodGet, url, nil)
+	getQueuedJobs := func(channelID string, consumerID string, limit int) (queuedJobs JobListResult) {
+		q_url := brokerBaseURL + "/channel/" + channelID + "/consumer/" + consumerID + "/queued-jobs"
+		req, _ := http.NewRequest(http.MethodGet, q_url, nil)
+		q := url.Values{}
+		q.Add("limit", strconv.Itoa(limit))
+		req.URL.RawQuery = q.Encode()
 		req.Header.Add(headerChannelToken, token)
 		req.Header.Add(headerConsumerToken, token)
 		resp, err := client.Do(req)
@@ -605,11 +609,11 @@ func testJobPullFlow() {
 		return
 	}
 
-	updateJobState := func (channelID string, consumerID string, jobID xid.ID, state string) (success bool) {
+	updateJobState := func(channelID string, consumerID string, jobID xid.ID, state string, timeout uint) (success bool) {
 		url := brokerBaseURL + "/channel/" + channelID + "/consumer/" + consumerID + "/job/" + jobID.String()
-		body := JobStateUpdateModel{NextState: state}
+		body := JobStateUpdateModel{NextState: state, IncrementalTimeout: timeout}
 		jsonBody, _ := json.Marshal(body)
- 		bodyReader := bytes.NewBuffer(jsonBody)
+		bodyReader := bytes.NewBuffer(jsonBody)
 		req, _ := http.NewRequest(http.MethodPost, url, bodyReader)
 		req.Header.Add(headerChannelToken, token)
 		req.Header.Add(headerConsumerToken, token)
@@ -636,7 +640,7 @@ func testJobPullFlow() {
 	for index := pushConsumerCount; index < pushConsumerCount+pullConsumerCount; index++ {
 		indexString := strconv.Itoa(index)
 		consumerID := consumerIDPrefix + indexString
-		data := getQueuedJobs(channelID, consumerID)
+		data := getQueuedJobs(channelID, consumerID, limit)
 		if len(data.Result) != limit {
 			log.Println("queued jobs count mismatch for consumer", consumerID)
 			os.Exit(18)
@@ -647,35 +651,49 @@ func testJobPullFlow() {
 	}
 	firstConsumerID := consumerIDPrefix + strconv.Itoa(pushConsumerCount)
 	lastConsumerID := consumerIDPrefix + strconv.Itoa(pushConsumerCount+pullConsumerCount-1)
+	longTimeout := 10 // in seconds
 	for _, jobID := range jobIDs {
-		success := updateJobState(channelID, lastConsumerID, jobID, JobInflightState)
+		success := updateJobState(channelID, lastConsumerID, jobID, JobInflightState, uint(longTimeout))
 		if !success {
 			log.Println("failed to update status from queued to inflight for job", jobID)
 			os.Exit(19)
 		}
 	}
 	time.Sleep(3 * time.Second)
-	data := getQueuedJobs(channelID, firstConsumerID)
+	data := getQueuedJobs(channelID, firstConsumerID, limit)
 	if len(data.Result) != limit {
 		log.Println("received queued-job count mismatch for consumer,", firstConsumerID, "after state update")
 		os.Exit(19)
 	}
-	data = getQueuedJobs(channelID, lastConsumerID)
+	data = getQueuedJobs(channelID, lastConsumerID, limit)
 	if len(data.Result) != int(math.Min(float64(limit), float64(step-limit))) {
 		log.Println("received queued-job count mismatch for consumer,", lastConsumerID, "after state update")
 		os.Exit(20)
 	}
 	firstJobID := jobIDs[0]
-	success := updateJobState(channelID, lastConsumerID, firstJobID, JobDeliveredState)
+	success := updateJobState(channelID, lastConsumerID, firstJobID, JobDeliveredState, 0)
 	if !success {
 		log.Println("failed to update status from inflight to delivered for job", firstJobID)
 		os.Exit(21)
 	}
 	time.Sleep(3 * time.Second)
-	success = updateJobState(channelID, lastConsumerID, firstJobID, JobInflightState)
+	success = updateJobState(channelID, lastConsumerID, firstJobID, JobInflightState, 0)
 	if success {
 		log.Println("wrongly updated status from delivered to inFlight for job", firstJobID)
 		os.Exit(21)
+	}
+	time.Sleep(7 * time.Second)
+	data = getQueuedJobs(channelID, lastConsumerID, step)
+	if len(data.Result) != step-limit {
+		log.Println("Job requeued earlier for consumer ", lastConsumerID, len(data.Result))
+		os.Exit(22)
+	}
+	time.Sleep(15 * time.Second)
+	data = getQueuedJobs(channelID, lastConsumerID, step)
+	// Should expect step - 1 jobs in queued, because one got delivered.
+	if len(data.Result) != step-1 {
+		log.Println("Long Inflight jobs did not get requeued for comumer ", lastConsumerID, " after timeout", len(data.Result))
+		os.Exit(23)
 	}
 	log.Println("pull consumers workflow testing successfully finished!")
 }

@@ -691,3 +691,189 @@ func TestJobControllerPost_Error(t *testing.T) {
 		assert.Equal(t, rr.Body.String(), errInvalidTransitionRequest.Error())
 	})
 }
+
+func TestJobControllerPost_Timeout_DifferentTime(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		current data.JobStatus
+		next    data.JobStatus
+		timeout uint
+	}{
+		{current: data.JobQueued, next: data.JobInflight, timeout: 10},
+		{current: data.JobQueued, next: data.JobInflight, timeout: 1000},
+		{current: data.JobQueued, next: data.JobInflight, timeout: 100000},
+	}
+	for _, test := range tests {
+		testName := "Success:202-Accepted Timeout Different Time " + strconv.FormatUint(uint64(test.timeout), 10) + " " + test.current.String() + " to " + test.next.String()
+		test := test
+		t.Run(testName, func(t *testing.T) {
+			t.Parallel()
+			job, err := setupTestJob()
+			assert.NoError(t, err)
+
+			jobController := NewJobController(channelRepo, consumerRepo, deliveryJobRepo)
+			testRouter := createTestRouter(jobController)
+			testURI := jobController.FormatAsRelativeLink(
+				httprouter.Param{Key: channelIDPathParamKey, Value: jobTestChannel.ChannelID},
+				httprouter.Param{Key: consumerIDPathParamKey, Value: jobTestPullConsumer.ConsumerID},
+				httprouter.Param{Key: jobIDPathParamKey, Value: job.ID.String()},
+			)
+			t.Log(testURI)
+
+			bodyString := "{\"NextState\": \"" + test.next.String() + "\",\"IncrementalTimeout\":" + strconv.Itoa(int(test.timeout)) + "}"
+			requestBody := ioutil.NopCloser(strings.NewReader(bodyString))
+			req, err := http.NewRequest(http.MethodPost, testURI, requestBody)
+			assert.NoError(t, err)
+
+			req.Header.Add(headerContentType, jobPostTestContentType)
+			req.Header.Add(headerChannelToken, jobTestChannel.Token)
+			req.Header.Add(headerConsumerToken, jobTestPullConsumer.Token)
+
+			rr := httptest.NewRecorder()
+			testRouter.ServeHTTP(rr, req)
+			assert.Equal(t, http.StatusAccepted, rr.Code)
+
+			updatedJob, err := deliveryJobRepo.GetByID(job.ID.String())
+			assert.NoError(t, err)
+			assert.Equal(t, test.next, updatedJob.Status)
+			assert.Equal(t, test.timeout, updatedJob.IncrementalTimeout)
+		})
+	}
+}
+
+func TestJobControllerPost_TimeoutValid(t *testing.T) {
+	t.Parallel()
+	job, err := setupTestJob()
+	assert.NoError(t, err)
+
+	jobController := NewJobController(channelRepo, consumerRepo, deliveryJobRepo)
+	testRouter := createTestRouter(jobController)
+	testURI := jobController.FormatAsRelativeLink(
+		httprouter.Param{Key: channelIDPathParamKey, Value: jobTestChannel.ChannelID},
+		httprouter.Param{Key: consumerIDPathParamKey, Value: jobTestPullConsumer.ConsumerID},
+		httprouter.Param{Key: jobIDPathParamKey, Value: job.ID.String()},
+	)
+	t.Log(testURI)
+	tests := []struct {
+		current          data.JobStatus
+		next             data.JobStatus
+		timeout          uint
+		expected_timeout uint
+	}{
+		{current: data.JobQueued, next: data.JobInflight, timeout: 10, expected_timeout: 10},
+		{current: data.JobInflight, next: data.JobInflight, expected_timeout: 10},
+		{current: data.JobInflight, next: data.JobDead, expected_timeout: 10},
+		{current: data.JobDead, next: data.JobInflight, timeout: 15, expected_timeout: 15},
+	}
+	for _, test := range tests {
+		testName := "Success:202-Accepted Timeout " + strconv.FormatUint(uint64(test.timeout), 10) + " " + test.current.String() + " to " + test.next.String()
+		test := test
+		t.Run(testName, func(t *testing.T) {
+
+			bodyString := "{\"NextState\": \"" + test.next.String() + "\",\"IncrementalTimeout\":" + strconv.FormatUint(uint64(test.timeout), 10) + "}"
+			requestBody := ioutil.NopCloser(strings.NewReader(bodyString))
+			req, err := http.NewRequest(http.MethodPost, testURI, requestBody)
+			assert.NoError(t, err)
+
+			req.Header.Add(headerContentType, jobPostTestContentType)
+			req.Header.Add(headerChannelToken, jobTestChannel.Token)
+			req.Header.Add(headerConsumerToken, jobTestPullConsumer.Token)
+
+			rr := httptest.NewRecorder()
+			testRouter.ServeHTTP(rr, req)
+			assert.Equal(t, http.StatusAccepted, rr.Code)
+
+			updatedJob, err := deliveryJobRepo.GetByID(job.ID.String())
+			assert.NoError(t, err)
+			assert.Equal(t, test.next, updatedJob.Status)
+			assert.Equal(t, test.expected_timeout, updatedJob.IncrementalTimeout)
+		})
+	}
+}
+
+func TestJobControllerPost_TransitionFailureTimeout(t *testing.T) {
+	t.Parallel()
+	job, err := setupTestJob()
+	assert.NoError(t, err)
+
+	jobController := NewJobController(channelRepo, consumerRepo, deliveryJobRepo)
+	testRouter := createTestRouter(jobController)
+	testURI := jobController.FormatAsRelativeLink(
+		httprouter.Param{Key: channelIDPathParamKey, Value: jobTestChannel.ChannelID},
+		httprouter.Param{Key: consumerIDPathParamKey, Value: jobTestPullConsumer.ConsumerID},
+		httprouter.Param{Key: jobIDPathParamKey, Value: job.ID.String()},
+	)
+	t.Log(testURI)
+
+	runInvalidTransitionTest := func(invalidNextState data.JobStatus, timeout uint) {
+		testName := "400 Bad Request " + job.Status.String() + " to " + invalidNextState.String()
+		t.Run(testName, func(t *testing.T) {
+			bodyString := "{\"NextState\": \"" + invalidNextState.String() + "\",\"IncrementalTimeout\":" + strconv.FormatUint(uint64(timeout), 10) + "}"
+			requestBody := ioutil.NopCloser(strings.NewReader(bodyString))
+			req, err := http.NewRequest(http.MethodPost, testURI, requestBody)
+			assert.NoError(t, err)
+
+			req.Header.Add(headerContentType, jobPostTestContentType)
+			req.Header.Add(headerChannelToken, jobTestChannel.Token)
+			req.Header.Add(headerConsumerToken, jobTestPullConsumer.Token)
+
+			rr := httptest.NewRecorder()
+			testRouter.ServeHTTP(rr, req)
+			assert.Equal(t, http.StatusBadRequest, rr.Code)
+			assert.Equal(t, rr.Body.String(), errTimeoutWithInvalidState.Error())
+
+			updatedJob, err := deliveryJobRepo.GetByID(job.ID.String())
+			assert.NoError(t, err)
+			assert.Equal(t, job.Status, updatedJob.Status)
+		})
+	}
+
+	invalidTransitions := []struct {
+		nextState data.JobStatus
+		timeout   uint
+	}{
+		{nextState: data.JobQueued, timeout: 10},
+	}
+	for _, trans := range invalidTransitions {
+		runInvalidTransitionTest(trans.nextState, trans.timeout)
+	}
+
+	job.IncrementalTimeout = 10
+	jobController.DeliveryJobRepo.MarkJobInflight(job)
+	invalidTransitions = []struct {
+		nextState data.JobStatus
+		timeout   uint
+	}{
+		{nextState: data.JobDelivered, timeout: 10},
+		{nextState: data.JobInflight, timeout: 10},
+		{nextState: data.JobDead, timeout: 10},
+		{nextState: data.JobDelivered, timeout: 10},
+	}
+	for _, invalidTransition := range invalidTransitions {
+		runInvalidTransitionTest(invalidTransition.nextState, invalidTransition.timeout)
+	}
+
+	jobController.DeliveryJobRepo.MarkJobDead(job)
+	invalidTransitions = []struct {
+		nextState data.JobStatus
+		timeout   uint
+	}{
+		{nextState: data.JobDead, timeout: 10},
+		{nextState: data.JobDelivered, timeout: 10},
+	}
+	for _, invalidTransition := range invalidTransitions {
+		runInvalidTransitionTest(invalidTransition.nextState, invalidTransition.timeout)
+	}
+
+	jobController.DeliveryJobRepo.MarkDeadJobAsInflight(job)
+	jobController.DeliveryJobRepo.MarkJobDelivered(job)
+	invalidTransitions = []struct {
+		nextState data.JobStatus
+		timeout   uint
+	}{
+		{nextState: data.JobDelivered, timeout: 10},
+	}
+	for _, invalidTransition := range invalidTransitions {
+		runInvalidTransitionTest(invalidTransition.nextState, invalidTransition.timeout)
+	}
+}
