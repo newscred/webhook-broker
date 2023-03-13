@@ -144,6 +144,9 @@ var (
 		defer genericPanicRecoveryFunc()
 		jobs := msgDispatcher.djRepo.GetJobsReadyForInflightSince(msgDispatcher.rationalDelay)
 		for _, job := range jobs {
+			if job.Listener.Type != data.PushConsumer {
+				continue
+			}
 			err := inLockRun(msgDispatcher.lockRepo, job, func() error {
 				queueJob(msgDispatcher, job)
 				return nil

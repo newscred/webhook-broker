@@ -140,6 +140,22 @@ func SetupTestFixture() {
 	wg.Wait()
 }
 
+func setupTestJob(consumer *data.Consumer) (*data.DeliveryJob, error) {
+	message, err := data.NewMessage(channel, producer, "payload", "type")
+	if err != nil {
+		log.Fatal()
+		return nil, err
+	}
+	dataAccessor.GetMessageRepository().Create(message)
+	job, err := data.NewDeliveryJob(message, consumer)
+	if err != nil {
+		log.Fatal()
+		return nil, err
+	}
+	dataAccessor.GetDeliveryJobRepository().DispatchMessage(message, job)
+	return job, nil
+}
+
 func getMockedBrokerConfig(workerEnabled ...interface{}) *configmocks.BrokerConfig {
 	mockedConfig := new(configmocks.BrokerConfig)
 	mockedConfig.On("GetMaxMessageQueueSize").Return(uint(100))
@@ -560,5 +576,46 @@ func TestJobWorkers(t *testing.T) {
 				break
 			}
 		}
+	})
+	t.Run("OnlyPushConsumerAquireqLockForRetryQueue", func(t *testing.T) {
+		dispatcher := NewMessageDispatcher(getCompleteDispatcherConfiguration(dataAccessor.GetMessageRepository(), dataAccessor.GetDeliveryJobRepository(), dataAccessor.GetConsumerRepository(), brokerConf, configuration, dataAccessor.GetLockRepository()))
+		impl := dispatcher.(*MessageDispatcherImpl)
+
+		_, err := db.Exec("UPDATE job SET status = ?", data.JobDelivered)
+		assert.Nil(t, err)
+		defer func() {
+			_, err := db.Exec("UPDATE job SET status = ?", data.JobQueued)
+			assert.Nil(t, err)
+		}()
+
+		pushConsumer := consumers[0]
+		pullConsumer := consumers[len(consumers)-1]
+
+		pushJob, err := setupTestJob(pushConsumer)
+		assert.Nil(t, err)
+		pullJob, err := setupTestJob(pullConsumer)
+		assert.Nil(t, err)
+		assert.Equal(t, data.PushConsumer, pushConsumer.Type)
+		assert.Equal(t, data.PullConsumer, pullConsumer.Type)
+
+		inLockCallCount := 0
+		oldInLockRun := inLockRun
+		inLockRun = func(lockRepo storage.LockRepository, lockable data.Lockable, run func() error) (err error) {
+			ret := oldInLockRun(lockRepo, lockable, run)
+			inLockCallCount++
+			return ret
+		}
+		defer func() { inLockRun = oldInLockRun }()
+
+		current_time := time.Now()
+		_, err = db.Exec("UPDATE job SET earliestNextAttemptAt = ? WHERE id = ?", current_time.Add(-110*time.Millisecond), pushJob.ID)
+		assert.Nil(t, err)
+		_, err = db.Exec("UPDATE job SET earliestNextAttemptAt = ? WHERE id = ?", current_time.Add(-110*time.Millisecond), pullJob.ID)
+		assert.Nil(t, err)
+
+		retryQueuedJobs(impl)
+
+		assert.Equal(t, 1, inLockCallCount)
+
 	})
 }
