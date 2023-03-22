@@ -7,8 +7,6 @@ replicaCount: 1
 image:
   repository: public.ecr.aws/optimizely/webhook-broker
   pullPolicy: Always
-  # Overrides the image tag whose default is the chart appVersion.
-  tag: "latest"
 
 imagePullSecrets: []
 nameOverride: ""
@@ -39,19 +37,19 @@ broker:
   initSeedData: |
     [initial-channels]
     sample-channel=Sample Channel
-    
+
     [initial-producers]
     sample-producer=Sample Producer
-    
+
     [initial-consumers]
     sample-consumer=http://sample-endpoint/webhook-receiver
-    
+
     [initial-channel-tokens]
     sample-channel=sample-channel-token
-    
+
     [initial-producer-tokens]
     sample-producer=sample-producer-token
-    
+
     [sample-consumer]
     token=sample-consumer-token
     channel=sample-channel
