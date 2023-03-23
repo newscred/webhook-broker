@@ -457,6 +457,7 @@ func TestRequeueDeadJobsForConsumer(t *testing.T) {
 		job, err := djRepo.GetByID(testJob.ID.String())
 		assert.Nil(t, err)
 		assert.Equal(t, data.JobQueued, job.Status)
+		assert.Equal(t, uint(0), job.RetryAttemptCount)
 	}
 }
 
