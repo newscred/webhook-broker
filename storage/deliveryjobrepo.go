@@ -215,7 +215,7 @@ func (djRepo *DeliveryJobDBRepository) GetJobsForMessage(message *data.Message, 
 func (djRepo *DeliveryJobDBRepository) RequeueDeadJobsForConsumer(consumer *data.Consumer) (err error) {
 	currentTime := time.Now()
 	err = transactionalWrites(djRepo.db, func(tx *sql.Tx) error {
-		return inTransactionExec(tx, emptyOps, "UPDATE job SET status = ?, statusChangedAt = ?, updatedAt = ? WHERE consumerId like ? and status = ?", args2SliceFnWrapper(data.JobQueued, currentTime, currentTime, consumer.ID, data.JobDead), 0)
+		return inTransactionExec(tx, emptyOps, "UPDATE job SET status = ?, statusChangedAt = ?, updatedAt = ?, retryAttemptCount = ? WHERE consumerId like ? and status = ?", args2SliceFnWrapper(data.JobQueued, currentTime, currentTime, 0, consumer.ID, data.JobDead), 0)
 	})
 	return err
 }
