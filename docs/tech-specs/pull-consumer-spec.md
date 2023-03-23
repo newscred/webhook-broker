@@ -5,7 +5,7 @@
 | _Version_     | 1                       |
 | _By_          | Bishwajit Bhattacharjee |
 | _Date_        | February 5, 2023        |
-| _Last Update_ | March 20, 2023          |
+| _Last Update_ | March 27, 2023          |
 
 ## Problem Statement / Goal
 
@@ -42,7 +42,7 @@ We can solve this problem with pull based consumers. With the support of Pull me
 
    The default timeout for a job is calculated as the sum of `stopTimeout` and `rationalDelay`, expressed in seconds. If a consumer is unable to complete the job within this time limit, the broker will requeue the job for retrying. However, different pull jobs may have varying timeout requirements, and therefore, a pull consumer can specify a different timeout value when moving a job from the _JobQueued_ or _JobDead_ status to _JobInflight_ status using the endpoint.
 
-   To specify a custom timeout, when a pull consumer moves a job from _JobQueued_/_JobDead_ to _JobInflight_ through the endpoint, it can optionally pass a field `IncrementalTimeout` in seconds. In that case, if the job is not complete within $stopTimeout + rationalDelay + incrementalTimeout$ seconds, the broker will assume that the consumer failed while executing the job and requeue the job for retrying later with increasing the retry count by one. A job's status can be _JobDead_ if the consumer, while processing the job, decides it cannot process any furthur.
+   To specify a custom timeout, when a pull consumer moves a job from _JobQueued_/_JobDead_ to _JobInflight_ through the endpoint, it can optionally pass a field `IncrementalTimeout` in seconds. In that case, if the job is not complete within $stopTimeout + rationalDelay + incrementalTimeout$ seconds, the broker will assume that the consumer failed while executing the job and requeue the job for retrying later with increasing the retry count by one. The job will be dead if it is retried more than maximum allowed retry count. A job's status can also be _JobDead_ if the consumer, while processing the job, decides it cannot process any furthur.
 
 ```mermaid
 ---

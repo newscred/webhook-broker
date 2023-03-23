@@ -144,15 +144,23 @@ var (
 		defer genericPanicRecoveryFunc()
 		jobs := msgDispatcher.djRepo.GetJobsReadyForInflightSince(msgDispatcher.rationalDelay)
 		for _, job := range jobs {
-			if job.Listener.Type != data.PushConsumer {
-				continue
-			}
-			err := inLockRun(msgDispatcher.lockRepo, job, func() error {
-				queueJob(msgDispatcher, job)
-				return nil
-			})
-			if err != nil {
-				log.Error().Err(err).Msg("error - could not retry job" + job.ID.String())
+			if job.Listener.Type == data.PullConsumer {
+				if job.RetryAttemptCount >= uint(msgDispatcher.brokerConfig.GetMaxRetry()) {
+					err := inLockRun(msgDispatcher.lockRepo, job, func() error {
+						return msgDispatcher.djRepo.MarkQueuedJobAsDead(job)
+					})
+					if err != nil {
+						log.Error().Err(err).Msg("error - could not mark job dead " + job.ID.String())
+					}
+				}
+			} else {
+				err := inLockRun(msgDispatcher.lockRepo, job, func() error {
+					queueJob(msgDispatcher, job)
+					return nil
+				})
+				if err != nil {
+					log.Error().Err(err).Msg("error - could not retry job" + job.ID.String())
+				}
 			}
 		}
 	}

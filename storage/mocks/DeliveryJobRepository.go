@@ -247,6 +247,20 @@ func (_m *DeliveryJobRepository) MarkJobRetry(deliveryJob *data.DeliveryJob, ear
 	return r0
 }
 
+// MarkQueuedJobAsDead provides a mock function with given fields: deliveryJob
+func (_m *DeliveryJobRepository) MarkQueuedJobAsDead(deliveryJob *data.DeliveryJob) error {
+	ret := _m.Called(deliveryJob)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*data.DeliveryJob) error); ok {
+		r0 = rf(deliveryJob)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // RequeueDeadJobsForConsumer provides a mock function with given fields: consumer
 func (_m *DeliveryJobRepository) RequeueDeadJobsForConsumer(consumer *data.Consumer) error {
 	ret := _m.Called(consumer)

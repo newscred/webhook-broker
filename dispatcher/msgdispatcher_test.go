@@ -661,7 +661,7 @@ func TestJobWorkers(t *testing.T) {
 			})
 		}
 	})
-	t.Run("OnlyPushConsumerAquireqLockForRetryQueue", func(t *testing.T) {
+	t.Run("ConsumerAquireLockForRetryQueueWhenNecessary", func(t *testing.T) {
 		dispatcher := NewMessageDispatcher(getCompleteDispatcherConfiguration(dataAccessor.GetMessageRepository(), dataAccessor.GetDeliveryJobRepository(), dataAccessor.GetConsumerRepository(), brokerConf, configuration, dataAccessor.GetLockRepository()))
 		impl := dispatcher.(*MessageDispatcherImpl)
 
@@ -692,14 +692,24 @@ func TestJobWorkers(t *testing.T) {
 		defer func() { inLockRun = oldInLockRun }()
 
 		current_time := time.Now()
-		_, err = db.Exec("UPDATE job SET earliestNextAttemptAt = ? WHERE id = ?", current_time.Add(-110*time.Millisecond), pushJob.ID)
+		_, err = db.Exec("UPDATE job SET status = ?, earliestNextAttemptAt = ?, retryAttemptCount = ? WHERE id = ?", data.JobQueued, current_time.Add(-110*time.Millisecond), 0, pushJob.ID)
 		assert.Nil(t, err)
-		_, err = db.Exec("UPDATE job SET earliestNextAttemptAt = ? WHERE id = ?", current_time.Add(-110*time.Millisecond), pullJob.ID)
+		_, err = db.Exec("UPDATE job SET status = ?, earliestNextAttemptAt = ?, retryAttemptCount = ? WHERE id = ?", data.JobQueued, current_time.Add(-110*time.Millisecond), 0, pullJob.ID)
+		assert.Nil(t, err)
+		retryQueuedJobs(impl)
+		assert.Equal(t, 1, inLockCallCount) // only got called for push job
+
+		current_time = time.Now()
+		_, err = db.Exec("UPDATE job SET status = ?, earliestNextAttemptAt = ?, retryAttemptCount = ? WHERE id = ?", data.JobQueued, current_time.Add(-110*time.Millisecond), msgDispatcher.brokerConfig.GetMaxRetry()+1, pushJob.ID)
+		assert.Nil(t, err)
+		_, err = db.Exec("UPDATE job SET status = ?, earliestNextAttemptAt = ?, retryAttemptCount = ? WHERE id = ?", data.JobQueued, current_time.Add(-110*time.Millisecond), msgDispatcher.brokerConfig.GetMaxRetry()+1, pullJob.ID)
 		assert.Nil(t, err)
 
 		retryQueuedJobs(impl)
 
-		assert.Equal(t, 1, inLockCallCount)
-
+		assert.Equal(t, 3, inLockCallCount) // got called for both job
+		updatedJob, err := impl.djRepo.GetByID(pullJob.ID.String())
+		assert.Nil(t, err)
+		assert.Equal(t, data.JobDead, updatedJob.Status)
 	})
 }
