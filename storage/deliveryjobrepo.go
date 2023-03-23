@@ -82,6 +82,10 @@ func (djRepo *DeliveryJobDBRepository) MarkJobDead(deliveryJob *data.DeliveryJob
 	return djRepo.updateJobStatus(deliveryJob, data.JobInflight, data.JobDead)
 }
 
+func (djRepo *DeliveryJobDBRepository) MarkQueuedJobAsDead(deliveryJob *data.DeliveryJob) error {
+	return djRepo.updateJobStatus(deliveryJob, data.JobQueued, data.JobDead)
+}
+
 // MarkJobRetry increases the retry attempt count and sets the status of the job to Queued if the job's current status is Inflight in the object and DB; else returns error
 func (djRepo *DeliveryJobDBRepository) MarkJobRetry(deliveryJob *data.DeliveryJob, earliestDelta time.Duration) (err error) {
 	currentTime := time.Now()
