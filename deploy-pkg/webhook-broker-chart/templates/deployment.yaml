@@ -33,6 +33,10 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 30"]
           command: ["/webhook-broker"]
           args: ["-migrate", "/migration/sqls/", "-config", "/app-config/webhook-broker.cfg"{{ if eq .Values.broker.configFileWatchMode "stop" }}, "-stop-on-conf-change"{{ end }}{{ if eq .Values.broker.configFileWatchMode "ignore" }}, "-do-not-watch-conf-change"{{ end }}]
           ports:
