@@ -9,6 +9,7 @@ on:
     branches: [ main ]
     paths:
     - 'deploy-pkg/webhook-broker-chart/**'
+  workflow_dispatch:
 
 permissions:
   id-token: write # This is required for requesting the JWT
