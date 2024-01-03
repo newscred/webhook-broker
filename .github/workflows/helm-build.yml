@@ -34,7 +34,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - 
+    -
       name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v1
       with:
@@ -49,7 +49,7 @@ jobs:
       run: helm plugin install https://github.com/hypnoglow/helm-s3.git
 
     - name: Init helm repo
-      run: helm s3 init s3://optimizely-helm-charts/public/stable
+      run: helm s3 init --ignore-if-exists s3://optimizely-helm-charts/public/stable
 
     - name: Setup optimizely-helm-charts Helm Repo
       run: helm repo add optimizely-helm-charts s3://optimizely-helm-charts/public/stable
