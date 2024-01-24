@@ -73,7 +73,7 @@ const (
 	`
 	errorConfig = `[rdbms]
 	asda sdads
-	connection-url=webhook_broker:zxc909zxc@tcp(mysql:3306)/webhook-broker?charset=utf8&parseTime=True
+	connection-url=webhook_broker:zxc909zxc@tcp(mysql:3306)/webhook-broker?charset=utf8mb4&collation=utf8mb4_0900_ai_ci&parseTime=True
 	`
 )
 
@@ -344,7 +344,7 @@ func TestGetConfigurationFromParseConfig_ValueError(t *testing.T) {
 		}
 		testConfig := `[rdbms]
 		dialect=mysql
-		connection-url=webhook_broker:zxc909zxc@tcp(mysql:3306)/webhook-broker?charset=utf8&parseTime=true
+		connection-url=webhook_broker:zxc909zxc@tcp(mysql:3306)/webhook-broker?charset=utf8mb4&collation=utf8mb4_0900_ai_ci&parseTime=true
 		`
 		config, err := GetConfigurationFromParseConfig(loadTestConfiguration(testConfig))
 		assert.Equal(t, EmptyConfigurationForError, config)
