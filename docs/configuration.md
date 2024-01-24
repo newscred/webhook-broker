@@ -9,7 +9,7 @@ This section has configuration for relational database management systems. Curre
 | Name | Default Value | Description|
 | -- | -- | -- |
 | dialect | `sqlite3` | Specified the DB driver to use; supported values `sqlite3` and `mysql` |
-| connection-url | webhook-broker.sqlite3 | The DB Connection URL; for MySQL please ensure to pass `charset=utf8&parseTime=true&multiStatements=true` via connection URL |
+| connection-url | webhook-broker.sqlite3 | The DB Connection URL; for MySQL please ensure to pass `charset=utf8mb4&parseTime=true&multiStatements=true` via connection URL |
 | connxn-max-idle-time-seconds | 0 | By default idle connections are not recycled ever; if you want them recycled, then specify a idle time to refresh them |
 | connxn-max-lifetime-seconds | 0 | By default connections are never cycled regardless of their age; this configuration specifies a TTL for connection before its recycled and refreshed. |
 | max-idle-connxns | 30 | Number of connections to keep open at all time |
