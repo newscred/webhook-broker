@@ -21,7 +21,7 @@ broker:
   port: 8080
   probeInitialDelay: 5
   probeInterval: 10
-  mysqlConnection: "webhook_broker:zxc909zxc@tcp(mysql:3306)/webhook-broker?charset=utf8mb4&parseTime=true&multiStatements=true"
+  mysqlConnection: "webhook_broker:zxc909zxc@tcp(mysql:3306)/webhook-broker?charset=utf8mb4&collation=utf8mb4_0900_ai_ci&parseTime=true&multiStatements=true"
   dbIdleConnections: 10
   dbMaxOpenConnections: 20
   maxQueueSize: 1000000
