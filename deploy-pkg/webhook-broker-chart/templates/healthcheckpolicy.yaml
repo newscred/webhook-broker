@@ -1,0 +1,24 @@
+{{- if and .Values.gatewayApi.enabled (eq .Values.provider "gcp") -}}
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: {{ include "webhook-broker-chart.fullname" . }}
+  labels:
+    {{- include "webhook-broker-chart.labels" . | nindent 4 }}
+spec:
+  default:
+    checkIntervalSec: {{ .Values.broker.probeInterval }}
+    timeoutSec: 5
+    unhealthyThreshold: {{ .Values.broker.probeFailureThreshold }}
+    logConfig:
+      enabled: true
+    config:
+      type: HTTP
+      httpHealthCheck:
+        requestPath: {{ .Values.gatewayApi.healthcheckPath }}
+        port: {{ .Values.broker.port }}
+  targetRef:
+    group: ""
+    kind: Service
+    name: {{ include "webhook-broker-chart.fullname" . }}
+{{- end }}

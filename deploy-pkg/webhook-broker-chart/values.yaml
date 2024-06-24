@@ -3,6 +3,8 @@
 # Declare variables to be passed into your templates.
 
 replicaCount: 1
+gcpProjectId: ''
+provider: aws
 
 image:
   repository: public.ecr.aws/optimizely/webhook-broker
@@ -21,6 +23,7 @@ broker:
   port: 8080
   probeInitialDelay: 5
   probeInterval: 10
+  probeFailureThreshold: 10
   mysqlConnection: "webhook_broker:zxc909zxc@tcp(mysql:3306)/webhook-broker?charset=utf8mb4&collation=utf8mb4_0900_ai_ci&parseTime=true&multiStatements=true"
   dbIdleConnections: 10
   dbMaxOpenConnections: 20
@@ -92,6 +95,18 @@ ingress:
   #  - secretName: chart-example-tls
   #    hosts:
   #      - chart-example.local
+
+gatewayApi:
+  enabled: false
+  gatewayName: cmp-services-internal
+  hostNames: []
+  annotations: {}
+  healthcheckPath: /_status
+  region: us-east1
+  connectionDrainingTimeoutSec: 30
+  loggingEnabled: true
+
+certificateMapEntries: []
 
 resources:
   limits:

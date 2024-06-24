@@ -1,0 +1,24 @@
+{{- if and .Values.gatewayApi.enabled (eq .Values.provider "gcp") -}}
+kind: HTTPRoute
+apiVersion: gateway.networking.k8s.io/v1beta1
+metadata:
+  name: {{ include "webhook-broker-chart.fullname" . }}
+  labels:
+    {{- include "webhook-broker-chart.labels" . | nindent 4 }}
+  {{- if .Values.gatewayApi.annotations }}
+  annotations:
+    {{- toYaml .Values.gatewayApi.annotations | nindent 4 }}
+  {{ end }}
+spec:
+  parentRefs:
+  - name: {{ .Values.gatewayApi.gatewayName }}
+    namespace: kube-system
+  hostnames:
+  {{- range .Values.gatewayApi.hostNames }}
+    - {{ . }}
+  {{- end }}
+  rules:
+  - backendRefs:
+    - name: {{ include "webhook-broker-chart.fullname" . }}
+      port: {{ .Values.service.port }}
+{{- end -}}
