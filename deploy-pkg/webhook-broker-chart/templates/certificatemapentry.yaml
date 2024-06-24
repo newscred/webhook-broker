@@ -1,0 +1,23 @@
+{{- if .Values.gatewayApi.enabled -}}
+{{ if and (eq .Values.gatewayApi.region "global") (eq .Values.provider "gcp") }}
+{{- $gcpProjectId := .Values.gcpProjectId -}}
+{{- $location := .Values.gatewayApi.region -}}
+{{- $fullName := include "webhook-broker-chart.fullname" . -}}
+{{ range .Values.certificateMapEntries }}
+apiVersion: certificatemanager.cnrm.cloud.google.com/v1beta1
+kind: CertificateManagerCertificateMapEntry
+metadata:
+  name: {{ $fullName }}-{{ .hostname }}
+spec:
+  description: Certificate map entry for {{ .hostname }}
+  hostname: {{ .hostname }}
+  projectRef:
+    external: {{ $gcpProjectId}}
+  certificatesRefs:
+    - external: projects/{{ $gcpProjectId }}/locations/{{ $location }}/certificates/{{ .certficateName }}
+  mapRef:
+    external: {{ .certificateMapName }}
+---
+{{ end }}
+{{ end }}
+{{- end -}}

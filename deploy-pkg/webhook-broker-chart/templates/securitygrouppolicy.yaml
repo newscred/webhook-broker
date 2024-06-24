@@ -1,4 +1,4 @@
-{{- if .Values.useEksSecurityGroupForPods -}}
+{{- if and .Values.useEksSecurityGroupForPods (eq .Values.provider "aws") -}}
 apiVersion: vpcresources.k8s.aws/v1beta1
 kind: SecurityGroupPolicy
 metadata:
