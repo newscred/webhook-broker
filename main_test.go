@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -80,6 +81,12 @@ var panicExit = func(code int) {
 
 func TestMainFunc(t *testing.T) {
 	os.Remove("./webhook-broker.sqlite3")
+	osRelease, err := os.ReadFile("/proc/sys/kernel/osrelease")
+	if err != nil {
+		log.Fatal().Err(err).Msg("Error reading /proc/sys/kernel/osrelease")
+	}
+	osReleaseStr := string(osRelease)
+	isWSL2 := strings.Contains(osReleaseStr, "microsoft") && strings.Contains(osReleaseStr, "-microsoft")
 	t.Run("GetAppErr", func(t *testing.T) {
 		oldExit := exit
 		oldArgs := os.Args
@@ -148,6 +155,9 @@ func TestMainFunc(t *testing.T) {
 		}()
 	})
 	t.Run("SuccessRunWithAutoRestartOnConfigChange", func(t *testing.T) {
+		if isWSL2 {
+			t.Skip("Skipping test on WSL2")
+		}
 		var buf bytes.Buffer
 		oldLogger := log.Logger
 		log.Logger = log.Output(&buf)
@@ -185,6 +195,9 @@ func TestMainFunc(t *testing.T) {
 		assert.NotNil(t, consumer)
 	})
 	t.Run("SuccessRunWithExitOnConfigChange", func(t *testing.T) {
+		if isWSL2 {
+			t.Skip("Skipping test on WSL2")
+		}
 		ioutil.WriteFile(configFilePath2, []byte(notificationInitialContent), 0644)
 		oldArgs := os.Args
 		os.Args = []string{"webhook-broker", "-migrate", "./migration/sqls/", "-config", configFilePath2, "-stop-on-conf-change"}
