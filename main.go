@@ -199,6 +199,10 @@ func main() {
 		exit(1)
 	}
 	log.Print("Configuration File (optional): " + inConfig.ConfigPath)
+	startWebhookBroker(inConfig)
+}
+
+func startWebhookBroker(inConfig *config.CLIConfig) {
 	hasConfigChange := true
 	var mutex sync.Mutex
 	var setHasConfigChange = func(newVal bool) {
