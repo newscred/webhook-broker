@@ -314,6 +314,11 @@ func TestParseArgs(t *testing.T) {
 		_, _, err := parseArgs("webhook-broker", []string{"-migrate1", "no such path"})
 		assert.NotNil(t, err)
 	})
+	t.Run("InvalidCommand", func(t *testing.T) {
+		t.Parallel()
+		_, _, err := parseArgs("webhook-broker", []string{"-command=hello"})
+		assert.NotNil(t, err)
+	})
 	t.Run("NonExistentMigrationSource", func(t *testing.T) {
 		t.Parallel()
 		_, _, err := parseArgs("webhook-broker", []string{"-migrate", "no such path"})
@@ -331,6 +336,7 @@ func TestParseArgs(t *testing.T) {
 		assert.Nil(t, err)
 		assert.True(t, cliConfig.IsMigrationEnabled())
 		assert.Equal(t, "file://"+absPath, cliConfig.MigrationSource)
+		assert.Equal(t, config.BrokerCMD, cliConfig.Command)
 	})
 	t.Run("ValidMigrationSourceRelative", func(t *testing.T) {
 		t.Parallel()

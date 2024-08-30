@@ -69,6 +69,7 @@ var (
 		flags.SetOutput(&buf)
 
 		var conf config.CLIConfig
+		commandString := flags.String("command", string(config.BrokerCMD), "What operation this process is supposed to do")
 		flags.StringVar(&conf.ConfigPath, "config", "", "Config file location")
 		flags.StringVar(&conf.MigrationSource, "migrate", "", "Migration source folder")
 		flags.BoolVar(&conf.StopOnConfigChange, "stop-on-conf-change", false, "Restart internally on -config change if this flag is absent")
@@ -77,6 +78,11 @@ var (
 		err = flags.Parse(args)
 		if err != nil {
 			return nil, buf.String(), err
+		}
+
+		err = conf.SetCommandIfValid(*commandString)
+		if err != nil {
+			return nil, "command error", err
 		}
 
 		if len(conf.MigrationSource) > 0 {
@@ -199,7 +205,12 @@ func main() {
 		exit(1)
 	}
 	log.Print("Configuration File (optional): " + inConfig.ConfigPath)
-	startWebhookBroker(inConfig)
+	if inConfig.Command == config.BrokerCMD {
+		// Start the webhook broker service
+		startWebhookBroker(inConfig)
+	} else {
+		// Call prune method
+	}
 }
 
 func startWebhookBroker(inConfig *config.CLIConfig) {
