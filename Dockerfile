@@ -23,6 +23,7 @@ ADD controllers ./controllers
 ADD migration ./migration
 ADD storage ./storage
 ADD dispatcher ./dispatcher
+ADD utils ./utils
 
 RUN make build
 RUN make test

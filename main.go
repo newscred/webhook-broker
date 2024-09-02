@@ -22,6 +22,7 @@ import (
 	"github.com/newscred/webhook-broker/dispatcher"
 	"github.com/newscred/webhook-broker/storage"
 	"github.com/newscred/webhook-broker/storage/data"
+	"github.com/newscred/webhook-broker/utils"
 	lumberjack "gopkg.in/natefinch/lumberjack.v2"
 )
 
@@ -229,7 +230,7 @@ func startWebhookBroker(inConfig *config.CLIConfig) {
 			log.Print("Restarting")
 			setHasConfigChange(true)
 		}
-		syscall.Kill(pid, syscall.SIGINT)
+		utils.NewProcessKiller().Kill(pid, syscall.SIGINT)
 	})
 	for hasConfigChange {
 		setHasConfigChange(false)
