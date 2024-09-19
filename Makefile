@@ -111,8 +111,8 @@ clean:
 	-rm -v webhook-broker
 
 itest-down:
-	- docker-compose -f docker-compose.integration-test.yaml down
+	- docker compose -f docker-compose.integration-test.yaml down
 
 itest: itest-down
-	docker-compose -f docker-compose.integration-test.yaml build
-	docker-compose -f docker-compose.integration-test.yaml up tester
+	docker compose -f docker-compose.integration-test.yaml build
+	docker compose -f docker-compose.integration-test.yaml up tester
