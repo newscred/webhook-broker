@@ -327,8 +327,8 @@ func writeJSON(w http.ResponseWriter, data interface{}) {
 		writeErr(w, err)
 		return
 	}
-	w.WriteHeader(200)
 	w.Header().Add("Content-Type", "application/json")
+	w.WriteHeader(200)
 	w.Write(buf.Bytes())
 }
 
