@@ -40,6 +40,7 @@ type DLQList struct {
 
 // MessageModel represents a single message
 type MessageModel struct {
+	ID           string
 	Payload      string
 	ContentType  string
 	ProducedBy   string
@@ -51,6 +52,7 @@ type MessageModel struct {
 
 func newMessageModel(message *data.Message, jobs ...*data.DeliveryJob) *MessageModel {
 	messageModel := &MessageModel{
+		ID:           message.MessageID,
 		Payload:      message.Payload,
 		ContentType:  message.ContentType,
 		ReceivedAt:   message.ReceivedAt,
