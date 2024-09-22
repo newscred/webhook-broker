@@ -23,6 +23,7 @@ const (
 	headerProducerToken       = "X-Broker-Producer-Token"
 	headerProducerID          = "X-Broker-Producer-ID"
 	headerMessageID           = "X-Broker-Message-ID"
+	headerLocation            = "Location"
 	defaultMessageContentType = "application/octet-stream"
 	messageIDLogFieldKey      = "messageId"
 )
@@ -71,7 +72,8 @@ func (broadcastController *BroadcastController) Post(w http.ResponseWriter, r *h
 	if err = broadcastController.MessageRepository.Create(message); err == nil {
 		logger.Info().Str(messageIDLogFieldKey, message.ID.String()).Msg("Message accepted for broadcast")
 		go broadcastController.Dispatcher.Dispatch(message)
-		writeStatus(w, http.StatusAccepted, nil)
+		w.Header().Add(headerLocation, "/channel/"+channel.ChannelID+"/message/"+message.MessageID)
+		writeStatus(w, http.StatusCreated, nil)
 	} else if err == storage.ErrDuplicateMessageIDForChannel {
 		logger.Error().Err(err).Str(messageIDLogFieldKey, message.ID.String()).Msg("message rejected because its duplicate id in channel")
 		writeStatus(w, http.StatusConflict, err)
