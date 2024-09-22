@@ -21,6 +21,7 @@ const (
 	headerContentType    = "Content-Type"
 	headerBrokerPriority = "X-Broker-Message-Priority"
 	headerConsumerToken  = "X-Broker-Consumer-Token"
+	headerMessageID      = "X-Broker-Message-ID"
 	headerRequestID      = "X-Request-ID"
 	requestIDLogFieldKey = "requestId"
 	jobIDLogFieldKey     = "jobId"
@@ -122,6 +123,7 @@ var callConsumer = func(httpClient *http.Client, requestID string, logger zerolo
 		req.Header.Set(headerBrokerPriority, strconv.Itoa(int(job.Priority)))
 		req.Header.Set(headerConsumerToken, job.Data.Listener.Token)
 		req.Header.Set(headerRequestID, requestID)
+		req.Header.Set(headerMessageID, job.Data.Message.MessageID)
 		var resp *http.Response
 		resp, err = httpClient.Do(req)
 		if err == nil {

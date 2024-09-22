@@ -334,11 +334,17 @@ func TestMessageDispatcherImplDispatch(t *testing.T) {
 				pushConsumerCount++
 			}
 		}
+
+		msg, _ := data.NewMessage(channel, producer, messagePayload, contentType)
+		err := dataAccessor.GetMessageRepository().Create(msg)
+		assert.Nil(t, err)
+
 		for index := 0; index < len(consumers); index++ {
 			consumerHandler["consumer-"+strconv.Itoa(index)] = func(s string, rw http.ResponseWriter, r *http.Request) {
 				// check content body and type
 				assert.Equal(t, contentType, r.Header.Get(headerContentType))
 				assert.Equal(t, consumerToken, r.Header.Get(headerConsumerToken))
+				assert.Equal(t, msg.MessageID, r.Header.Get(headerMessageID))
 				assert.Greater(t, len(r.Header.Get(headerRequestID)), 12)
 				body, err := ioutil.ReadAll(r.Body)
 				assert.Nil(t, err)
@@ -353,9 +359,6 @@ func TestMessageDispatcherImplDispatch(t *testing.T) {
 		wg.Add(pushConsumerCount)
 		brokerConf := getMockedBrokerConfig()
 		dispatcher := NewMessageDispatcher(getDispatcherConfiguration(dataAccessor.GetDeliveryJobRepository(), dataAccessor.GetConsumerRepository(), brokerConf, configuration, dataAccessor.GetLockRepository()))
-		msg, _ := data.NewMessage(channel, producer, messagePayload, contentType)
-		err := dataAccessor.GetMessageRepository().Create(msg)
-		assert.Nil(t, err)
 		dispatcher.Dispatch(msg)
 		wg.Wait()
 		jobs, _, err := dataAccessor.GetDeliveryJobRepository().GetJobsForMessage(msg, data.NewPagination(nil, nil))
