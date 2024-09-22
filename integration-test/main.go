@@ -318,7 +318,7 @@ func broadcastMessage(channelID string, sendCount int) (err error) {
 			log.Println("error broadcasting to consumers", err)
 		} else {
 			defer resp.Body.Close()
-			if resp.StatusCode != http.StatusAccepted {
+			if resp.StatusCode != http.StatusCreated {
 				respBody, _ := ioutil.ReadAll(resp.Body)
 				log.Println("error broadcasting message", resp.StatusCode, string(respBody))
 				err = errDuringCreation

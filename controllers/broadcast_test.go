@@ -192,7 +192,7 @@ func TestBroadcastControllerPost(t *testing.T) {
 		msgRepo.AssertExpectations(t)
 		mockDispatcher.AssertExpectations(t)
 	})
-	t.Run("Success:202-Accepted", func(t *testing.T) {
+	t.Run("Success:201-Created", func(t *testing.T) {
 		t.Parallel()
 		var buf bytes.Buffer
 		oldLogger := log.Logger
@@ -225,8 +225,10 @@ func TestBroadcastControllerPost(t *testing.T) {
 		rr := httptest.NewRecorder()
 		testRouter.ServeHTTP(rr, req)
 		wg.Wait()
-		assert.Equal(t, http.StatusAccepted, rr.Code)
+		assert.Equal(t, http.StatusCreated, rr.Code)
 		responseReqID := rr.Header().Get(headerRequestID)
+		location := rr.Header().Get(headerLocation)
+		assert.Contains(t, location, "/channel/"+consumerTestChannel.ChannelID+"/message/")
 		assert.GreaterOrEqual(t, len(responseReqID), 12)
 		assert.Contains(t, buf.String(), responseReqID)
 		assert.Contains(t, buf.String(), messageIDLogFieldKey)
@@ -288,7 +290,7 @@ func TestBroadcastControllerPost(t *testing.T) {
 		rr := httptest.NewRecorder()
 		testRouter.ServeHTTP(rr, req)
 		wg.Wait()
-		assert.Equal(t, http.StatusAccepted, rr.Code)
+		assert.Equal(t, http.StatusCreated, rr.Code)
 		msgRepo.AssertExpectations(t)
 		mockDispatcher.AssertExpectations(t)
 	})
@@ -317,7 +319,7 @@ func TestBroadcastControllerPost(t *testing.T) {
 		rr := httptest.NewRecorder()
 		testRouter.ServeHTTP(rr, req)
 		wg.Wait()
-		assert.Equal(t, http.StatusAccepted, rr.Code)
+		assert.Equal(t, http.StatusCreated, rr.Code)
 		msgRepo.AssertExpectations(t)
 		mockDispatcher.AssertExpectations(t)
 	})
@@ -350,7 +352,7 @@ func TestBroadcastControllerPost(t *testing.T) {
 		rr := httptest.NewRecorder()
 		testRouter.ServeHTTP(rr, req)
 		wg.Wait()
-		assert.Equal(t, http.StatusAccepted, rr.Code)
+		assert.Equal(t, http.StatusCreated, rr.Code)
 		responseReqID := rr.Header().Get(headerRequestID)
 		assert.Equal(t, reqID, responseReqID)
 		msgRepo.AssertExpectations(t)
