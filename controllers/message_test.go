@@ -52,7 +52,7 @@ func MessageTestSetup() {
 	jobs = make(map[*data.Message]*data.DeliveryJob, messagesCount)
 	djRepo = storage.NewDeliveryJobRepository(db, messageRepo, consumerRepo)
 	for index := 0; index < messagesCount; index++ {
-		messages[index], _ = data.NewMessage(messageChannel, messageProducer, messagePayload, messageContentType)
+		messages[index], _ = data.NewMessage(messageChannel, messageProducer, messagePayload, messageContentType, data.HeadersMap{})
 		messages[index].MessageID = messageIDPrefix + strconv.Itoa(index)
 		messageRepo.Create(messages[index])
 		jobs[messages[index]], _ = data.NewDeliveryJob(messages[index], dlqConsumer)

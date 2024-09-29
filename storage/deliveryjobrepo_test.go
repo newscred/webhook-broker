@@ -44,7 +44,7 @@ func getDeliverJobRepository() DeliveryJobRepository {
 }
 
 func getMessageForJob() *data.Message {
-	message, _ := data.NewMessage(channel1, producer1, samplePayload, sampleContentType)
+	message, _ := data.NewMessage(channel1, producer1, samplePayload, sampleContentType, data.HeadersMap{})
 	return message
 }
 

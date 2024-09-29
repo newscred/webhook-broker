@@ -139,49 +139,49 @@ func TestMessageGetChannelIDSafely(t *testing.T) {
 func TestNewMessage(t *testing.T) {
 	t.Run("Valid", func(t *testing.T) {
 		t.Parallel()
-		msg, err := NewMessage(getChannel(), getProducer(), "valid", "valid-ct")
+		msg, err := NewMessage(getChannel(), getProducer(), "valid", "valid-ct", HeadersMap{})
 		assert.Nil(t, err)
 		assert.Equal(t, "valid", msg.Payload)
 		assert.Equal(t, "valid-ct", msg.ContentType)
 	})
 	t.Run("NilChannel", func(t *testing.T) {
 		t.Parallel()
-		_, err := NewMessage(nil, getProducer(), "valid", "valid-ct")
+		_, err := NewMessage(nil, getProducer(), "valid", "valid-ct", HeadersMap{})
 		assert.NotNil(t, err)
 	})
 	t.Run("InvalidChannel", func(t *testing.T) {
 		t.Parallel()
 		channel := getChannel()
 		channel.ChannelID = ""
-		_, err := NewMessage(channel, getProducer(), "valid", "valid-ct")
+		_, err := NewMessage(channel, getProducer(), "valid", "valid-ct", HeadersMap{})
 		assert.NotNil(t, err)
 	})
 	t.Run("NilProducer", func(t *testing.T) {
 		t.Parallel()
-		_, err := NewMessage(getChannel(), nil, "valid", "valid-ct")
+		_, err := NewMessage(getChannel(), nil, "valid", "valid-ct", HeadersMap{})
 		assert.NotNil(t, err)
 	})
 	t.Run("InvalidProducer", func(t *testing.T) {
 		t.Parallel()
 		producer := getProducer()
 		producer.ProducerID = ""
-		_, err := NewMessage(getChannel(), producer, "valid", "valid-ct")
+		_, err := NewMessage(getChannel(), producer, "valid", "valid-ct", HeadersMap{})
 		assert.NotNil(t, err)
 	})
 	t.Run("EmptyPayload", func(t *testing.T) {
 		t.Parallel()
-		_, err := NewMessage(getChannel(), getProducer(), "", "valid-ct")
+		_, err := NewMessage(getChannel(), getProducer(), "", "valid-ct", HeadersMap{})
 		assert.NotNil(t, err)
 	})
 	t.Run("EmptyContentType", func(t *testing.T) {
 		t.Parallel()
-		_, err := NewMessage(getChannel(), getProducer(), "valid", "")
+		_, err := NewMessage(getChannel(), getProducer(), "valid", "", HeadersMap{})
 		assert.NotNil(t, err)
 	})
 }
 
 func TestMessageGetNewLockID(t *testing.T) {
-	msg, _ := NewMessage(getChannel(), getProducer(), "valid", "valid-ct")
+	msg, _ := NewMessage(getChannel(), getProducer(), "valid", "valid-ct", HeadersMap{})
 	lock, err := NewLock(msg)
 	assert.Nil(t, err)
 	assert.Equal(t, messageLockPrefix+msg.ID.String(), lock.LockID)
