@@ -48,7 +48,6 @@ type MessageModel struct {
 	DispatchedAt time.Time
 	Status       string
 	Jobs         []*DeliveryJobModel
-	Headers      data.HeadersMap
 }
 
 func newMessageModel(message *data.Message, jobs ...*data.DeliveryJob) *MessageModel {
@@ -60,7 +59,6 @@ func newMessageModel(message *data.Message, jobs ...*data.DeliveryJob) *MessageM
 		DispatchedAt: message.OutboxedAt,
 		Status:       message.Status.String(),
 		ProducedBy:   message.ProducedBy.Name,
-		Headers:      message.Headers,
 		Jobs:         make([]*DeliveryJobModel, 0, len(jobs)),
 	}
 	for _, job := range jobs {
