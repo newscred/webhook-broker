@@ -50,7 +50,7 @@ func JobTestSetup() {
 
 	for index := 0; index < 50; index++ {
 		indexString := strconv.Itoa(index)
-		message, err := data.NewMessage(jobTestChannel, jobTestProducer, "payload "+indexString, "type", data.HeadersMap{})
+		message, err := data.NewMessage(jobTestChannel, jobTestProducer, "payload "+indexString, "type")
 		if err != nil {
 			log.Fatal()
 		}
@@ -107,7 +107,7 @@ func randomPriority() uint {
 }
 
 func setupTestJob() (*data.DeliveryJob, error) {
-	message, err := data.NewMessage(jobTestChannel, jobTestProducer, "payload", "type", data.HeadersMap{})
+	message, err := data.NewMessage(jobTestChannel, jobTestProducer, "payload", "type")
 	if err != nil {
 		log.Fatal()
 		return nil, err
