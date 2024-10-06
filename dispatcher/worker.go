@@ -21,9 +21,7 @@ import (
 const (
 	headerContentType     = "Content-Type"
 	headerBrokerPriority  = "X-Broker-Message-Priority"
-	headerChannelID       = "X-Broker-Channel-ID"
 	headerConsumerToken   = "X-Broker-Consumer-Token"
-	headerConsumerID      = "X-Broker-Consumer-ID"
 	headerMessageID       = "X-Broker-Message-ID"
 	headerMetadataHeaders = "X-Broker-Metadata-Headers"
 	headerRequestID       = "X-Request-ID"
@@ -126,8 +124,6 @@ var callConsumer = func(httpClient *http.Client, requestID string, logger zerolo
 		message := job.Data.Message
 		req.Header.Set(headerContentType, message.ContentType)
 		req.Header.Set(headerBrokerPriority, strconv.Itoa(int(job.Priority)))
-		req.Header.Set(headerChannelID, job.Data.Message.BroadcastedTo.ChannelID)
-		req.Header.Set(headerConsumerID, job.Data.Listener.ConsumerID)
 		req.Header.Set(headerConsumerToken, job.Data.Listener.Token)
 		req.Header.Set(headerRequestID, requestID)
 		req.Header.Set(headerMessageID, message.MessageID)
