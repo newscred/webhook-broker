@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/rs/zerolog/hlog"
 
@@ -23,6 +24,7 @@ const (
 	headerProducerToken       = "X-Broker-Producer-Token"
 	headerProducerID          = "X-Broker-Producer-ID"
 	headerMessageID           = "X-Broker-Message-ID"
+	headerMetadataHeaders     = "X-Broker-Metadata-Headers"
 	headerLocation            = "Location"
 	defaultMessageContentType = "application/octet-stream"
 	messageIDLogFieldKey      = "messageId"
@@ -54,6 +56,17 @@ func (broadcastController *BroadcastController) Post(w http.ResponseWriter, r *h
 	if !valid {
 		return
 	}
+
+	headers := make(data.HeadersMap)
+	metadataHeaders := getMetadataHeaders(r)
+	if len(metadataHeaders) > 0 {
+		for _, key := range metadataHeaders {
+			if val := r.Header.Get(key); val != "" {
+				headers[key] = val
+			}
+		}
+	}
+
 	logger := hlog.FromRequest(r)
 	contentType := getContentType(r)
 	priority := getPriority(r)
@@ -63,7 +76,7 @@ func (broadcastController *BroadcastController) Post(w http.ResponseWriter, r *h
 		writeErr(w, errBodyCouldNotBeRead)
 		return
 	}
-	message, _ := data.NewMessage(channel, producer, string(body), contentType)
+	message, _ := data.NewMessage(channel, producer, string(body), contentType, headers)
 	incomingMsgID := r.Header.Get(headerMessageID)
 	if len(incomingMsgID) > 0 {
 		message.MessageID = incomingMsgID
@@ -127,6 +140,14 @@ func getContentType(r *http.Request) string {
 		contentType = defaultMessageContentType
 	}
 	return contentType
+}
+
+func getMetadataHeaders(r *http.Request) []string {
+	metadataHeadersValue := r.Header.Get(headerMetadataHeaders)
+	if metadataHeadersValue == "" {
+		return []string{}
+	}
+	return strings.Split(metadataHeadersValue, ",")
 }
 
 // GetPath returns the endpoint's path

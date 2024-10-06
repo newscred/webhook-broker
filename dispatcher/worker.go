@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -18,13 +19,14 @@ import (
 )
 
 const (
-	headerContentType    = "Content-Type"
-	headerBrokerPriority = "X-Broker-Message-Priority"
-	headerConsumerToken  = "X-Broker-Consumer-Token"
-	headerMessageID      = "X-Broker-Message-ID"
-	headerRequestID      = "X-Request-ID"
-	requestIDLogFieldKey = "requestId"
-	jobIDLogFieldKey     = "jobId"
+	headerContentType     = "Content-Type"
+	headerBrokerPriority  = "X-Broker-Message-Priority"
+	headerConsumerToken   = "X-Broker-Consumer-Token"
+	headerMessageID       = "X-Broker-Message-ID"
+	headerMetadataHeaders = "X-Broker-Metadata-Headers"
+	headerRequestID       = "X-Request-ID"
+	requestIDLogFieldKey  = "requestId"
+	jobIDLogFieldKey      = "jobId"
 )
 
 var (
@@ -119,11 +121,22 @@ var callConsumer = func(httpClient *http.Client, requestID string, logger zerolo
 	req, err = http.NewRequest(http.MethodPost, job.Data.Listener.CallbackURL, strings.NewReader(job.Data.Message.Payload))
 	if err == nil {
 		defer req.Body.Close()
-		req.Header.Set(headerContentType, job.Data.Message.ContentType)
+		message := job.Data.Message
+		req.Header.Set(headerContentType, message.ContentType)
 		req.Header.Set(headerBrokerPriority, strconv.Itoa(int(job.Priority)))
 		req.Header.Set(headerConsumerToken, job.Data.Listener.Token)
 		req.Header.Set(headerRequestID, requestID)
-		req.Header.Set(headerMessageID, job.Data.Message.MessageID)
+		req.Header.Set(headerMessageID, message.MessageID)
+		metadataHeaderNames := []string{}
+		for key, val := range message.Headers {
+			req.Header.Set(key, val)
+			metadataHeaderNames = append(metadataHeaderNames, key)
+		}
+		sort.Slice(metadataHeaderNames, func(i, j int) bool {
+			return metadataHeaderNames[i] < metadataHeaderNames[j]
+		})
+		req.Header.Add(headerMetadataHeaders, strings.Join(metadataHeaderNames, ","))
+
 		var resp *http.Response
 		resp, err = httpClient.Do(req)
 		if err == nil {

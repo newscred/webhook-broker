@@ -21,7 +21,7 @@ func TestDeliverJob_MarkDead(t *testing.T) {
 	contentType := "application/json"
 	brokerConf := getMockedBrokerConfig()
 	outerDispatcher := NewMessageDispatcher(getCompleteDispatcherConfiguration(dataAccessor.GetMessageRepository(), dataAccessor.GetDeliveryJobRepository(), dataAccessor.GetConsumerRepository(), brokerConf, configuration, dataAccessor.GetLockRepository()))
-	msg, _ := data.NewMessage(channel, producer, messagePayload, contentType)
+	msg, _ := data.NewMessage(channel, producer, messagePayload, contentType, data.HeadersMap{})
 	msg.ReceivedAt = msg.ReceivedAt.Add(-5 * time.Second)
 	err := dataAccessor.GetMessageRepository().Create(msg)
 	assert.Nil(t, err)
@@ -57,7 +57,7 @@ func TestDeliverJob_MarkOpFailed(t *testing.T) {
 	contentType := "application/json"
 	brokerConf := getMockedBrokerConfig()
 	outerDispatcher := NewMessageDispatcher(getCompleteDispatcherConfiguration(dataAccessor.GetMessageRepository(), dataAccessor.GetDeliveryJobRepository(), dataAccessor.GetConsumerRepository(), brokerConf, configuration, dataAccessor.GetLockRepository()))
-	msg, _ := data.NewMessage(channel, producer, messagePayload, contentType)
+	msg, _ := data.NewMessage(channel, producer, messagePayload, contentType, data.HeadersMap{})
 	msg.ReceivedAt = msg.ReceivedAt.Add(-5 * time.Second)
 	err := dataAccessor.GetMessageRepository().Create(msg)
 	assert.Nil(t, err)
@@ -94,7 +94,7 @@ func TestCallConsumerPanic(t *testing.T) {
 	contentType := "application/json"
 	brokerConf := getMockedBrokerConfig()
 	outerDispatcher := NewMessageDispatcher(getCompleteDispatcherConfiguration(dataAccessor.GetMessageRepository(), dataAccessor.GetDeliveryJobRepository(), dataAccessor.GetConsumerRepository(), brokerConf, configuration, dataAccessor.GetLockRepository()))
-	msg, _ := data.NewMessage(channel, producer, messagePayload, contentType)
+	msg, _ := data.NewMessage(channel, producer, messagePayload, contentType, data.HeadersMap{})
 	msg.ReceivedAt = msg.ReceivedAt.Add(-5 * time.Second)
 	err := dataAccessor.GetMessageRepository().Create(msg)
 	assert.Nil(t, err)
