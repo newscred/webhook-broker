@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -42,7 +43,17 @@ func writeToFile(filePath, content string) (err error) {
 }
 
 func TestCLIConfigPathChangeNotification(t *testing.T) {
+	osRelease, err := os.ReadFile("/proc/sys/kernel/osrelease")
+	if err != nil {
+		log.Fatal().Err(err).Msg("Error reading /proc/sys/kernel/osrelease")
+	}
+	osReleaseStr := string(osRelease)
+	isWSL2 := strings.Contains(osReleaseStr, "microsoft") && strings.Contains(osReleaseStr, "-microsoft")
+
 	t.Run("NotifiedOnFileChange", func(t *testing.T) {
+		if isWSL2 {
+			t.Skip("Skipping test on WSL2")
+		}
 		err := writeToFile(notificationFilePath, notificationInitialContent)
 		if err != nil {
 			log.Fatal().Err(err).Msg("could not write to file")
@@ -63,6 +74,9 @@ func TestCLIConfigPathChangeNotification(t *testing.T) {
 		wg.Wait()
 	})
 	t.Run("NoNotifyOnFileContentUnchanged", func(t *testing.T) {
+		if isWSL2 {
+			t.Skip("Skipping test on WSL2")
+		}
 		err := writeToFile(noChangeFilePath, notificationInitialContent)
 		if err != nil {
 			log.Fatal().Err(err).Msg("could not write to file")
@@ -83,6 +97,9 @@ func TestCLIConfigPathChangeNotification(t *testing.T) {
 		wg.Wait()
 	})
 	t.Run("NoNotifyOnFileTruncation", func(t *testing.T) {
+		if isWSL2 {
+			t.Skip("Skipping test on WSL2")
+		}
 		var buf bytes.Buffer
 		oldLogger := log.Logger
 		log.Logger = log.Output(&buf)
@@ -111,6 +128,9 @@ func TestCLIConfigPathChangeNotification(t *testing.T) {
 		assert.Contains(t, buf.String(), errTruncatedConfigFile.Error())
 	})
 	t.Run("NothingHappensOnFileRemoval", func(t *testing.T) {
+		if isWSL2 {
+			t.Skip("Skipping test on WSL2")
+		}
 		/*
 			Nothing will happen when the file is removed and the worker will stop,
 			this is primarily for code coverage nothing meaningful to assert other
@@ -137,6 +157,9 @@ func TestCLIConfigPathChangeNotification(t *testing.T) {
 		wg.Wait()
 	})
 	t.Run("NoFilePathTest", func(t *testing.T) {
+		if isWSL2 {
+			t.Skip("Skipping test on WSL2")
+		}
 		var buf bytes.Buffer
 		oldLogger := log.Logger
 		log.Logger = log.Output(&buf)
@@ -157,6 +180,9 @@ func TestCLIConfigPathChangeNotification(t *testing.T) {
 		assert.Contains(t, buf.String(), "could not find any file to watch")
 	})
 	t.Run("HashErrors", func(t *testing.T) {
+		if isWSL2 {
+			t.Skip("Skipping test on WSL2")
+		}
 		var buf bytes.Buffer
 		oldLogger := log.Logger
 		log.Logger = log.Output(&buf)

@@ -10,6 +10,7 @@ import (
 
 	"github.com/newscred/webhook-broker/storage/data"
 	storagemocks "github.com/newscred/webhook-broker/storage/mocks"
+	"github.com/newscred/webhook-broker/utils"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -85,7 +86,7 @@ func TestNotifyOnInterrupt(t *testing.T) {
 		<-stop
 		wg.Done()
 	}()
-	syscall.Kill(syscall.Getpid(), syscall.SIGTERM)
+	utils.NewProcessKiller().Kill(syscall.Getpid(), syscall.SIGTERM)
 	if waitTimeout(&wg, 100*time.Millisecond) {
 		t.Fail()
 	}

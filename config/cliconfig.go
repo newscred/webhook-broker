@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -21,16 +22,38 @@ var (
 	errTruncatedConfigFile = errors.New("truncated config file")
 )
 
+// CommandOption represents the command to be run by the CLI
+type CommandOption string
+
 // CLIConfig represents the Command Line Args config
 type CLIConfig struct {
 	ConfigPath             string
 	MigrationSource        string
 	StopOnConfigChange     bool
 	DoNotWatchConfigChange bool
+	Command                CommandOption
 	callbacks              []func()
 	watcherStarted         bool
 	watcherStarterMutex    sync.Mutex
 	watcher                *fsnotify.Watcher
+}
+
+const (
+	// BrokerCMD represents the broker command
+	BrokerCMD CommandOption = "broker"
+	// PruneCMD represents the prune command
+	PruneCMD CommandOption = "prune"
+)
+
+// SetCommandIfValid sets the command if it's valid
+func (conf *CLIConfig) SetCommandIfValid(command string) error {
+	switch CommandOption(command) {
+	case BrokerCMD, PruneCMD:
+		conf.Command = CommandOption(command)
+		return nil
+	default:
+		return fmt.Errorf("unknown command: %s", command)
+	}
 }
 
 // IsMigrationEnabled returns whether migration is enabled
