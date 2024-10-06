@@ -141,7 +141,7 @@ func SetupTestFixture() {
 }
 
 func setupTestJob(consumer *data.Consumer) (*data.DeliveryJob, error) {
-	message, err := data.NewMessage(channel, producer, "payload", "type")
+	message, err := data.NewMessage(channel, producer, "payload", "type", data.HeadersMap{})
 	if err != nil {
 		log.Fatal()
 		return nil, err
@@ -289,7 +289,7 @@ func TestMessageDispatcherImplDispatch(t *testing.T) {
 		lockRepo := new(storagemocks.LockRepository)
 		dispatcher := NewMessageDispatcher(getDispatcherConfiguration(mRepo, cRepo, mockBrokerConfig, mockConsumerConfig, lockRepo))
 		assert.NotNil(t, dispatcher)
-		msg, _ := data.NewMessage(channel, producer, "payload", "type")
+		msg, _ := data.NewMessage(channel, producer, "payload", "type", data.HeadersMap{})
 		msg.ReceivedAt = time.Time{}
 		dispatcher.Dispatch(msg)
 	})
@@ -307,7 +307,7 @@ func TestMessageDispatcherImplDispatch(t *testing.T) {
 		lockRepo := new(storagemocks.LockRepository)
 		dispatcher := NewMessageDispatcher(getDispatcherConfiguration(mRepo, cRepo, mockBrokerConfig, mockConsumerConfig, lockRepo))
 		assert.NotNil(t, dispatcher)
-		msg, _ := data.NewMessage(channel, producer, "payload", "type")
+		msg, _ := data.NewMessage(channel, producer, "payload", "type", data.HeadersMap{})
 		err := dataAccessor.GetMessageRepository().Create(msg)
 		assert.Nil(t, err)
 		expectedErr := errors.New("error on list call")
@@ -335,7 +335,7 @@ func TestMessageDispatcherImplDispatch(t *testing.T) {
 			}
 		}
 
-		msg, _ := data.NewMessage(channel, producer, messagePayload, contentType)
+		msg, _ := data.NewMessage(channel, producer, messagePayload, contentType, data.HeadersMap{})
 		err := dataAccessor.GetMessageRepository().Create(msg)
 		assert.Nil(t, err)
 
@@ -467,7 +467,7 @@ func TestRecoverMessagesNotYetDispatched(t *testing.T) {
 		contentType := "application/json"
 		brokerConf := getMockedBrokerConfig()
 		dispatcher := NewMessageDispatcher(getCompleteDispatcherConfiguration(dataAccessor.GetMessageRepository(), dataAccessor.GetDeliveryJobRepository(), dataAccessor.GetConsumerRepository(), brokerConf, configuration, dataAccessor.GetLockRepository()))
-		msg, _ := data.NewMessage(channel, producer, messagePayload, contentType)
+		msg, _ := data.NewMessage(channel, producer, messagePayload, contentType, data.HeadersMap{})
 		msg.ReceivedAt = msg.ReceivedAt.Add(-5 * time.Second)
 		err := dataAccessor.GetMessageRepository().Create(msg)
 		assert.Nil(t, err)
@@ -490,7 +490,7 @@ func TestRecoverMessagesNotYetDispatched(t *testing.T) {
 		mockLockRepo.On("TimeoutLocks", mock.Anything).Return(nil)
 		mockLockRepo.On("TryLock", mock.Anything).Return(expectedErr)
 		dispatcher := NewMessageDispatcher(getCompleteDispatcherConfiguration(dataAccessor.GetMessageRepository(), dataAccessor.GetDeliveryJobRepository(), dataAccessor.GetConsumerRepository(), brokerConf, configuration, mockLockRepo))
-		msg, _ := data.NewMessage(channel, producer, messagePayload, contentType)
+		msg, _ := data.NewMessage(channel, producer, messagePayload, contentType, data.HeadersMap{})
 		msg.ReceivedAt = msg.ReceivedAt.Add(-5 * time.Second)
 		err := dataAccessor.GetMessageRepository().Create(msg)
 		assert.Nil(t, err)
@@ -507,7 +507,7 @@ func TestJobWorkers(t *testing.T) {
 	contentType := "application/json"
 	brokerConf := getMockedBrokerConfig()
 	outerDispatcher := NewMessageDispatcher(getCompleteDispatcherConfiguration(dataAccessor.GetMessageRepository(), dataAccessor.GetDeliveryJobRepository(), dataAccessor.GetConsumerRepository(), brokerConf, configuration, dataAccessor.GetLockRepository()))
-	msg, _ := data.NewMessage(channel, producer, messagePayload, contentType)
+	msg, _ := data.NewMessage(channel, producer, messagePayload, contentType, data.HeadersMap{})
 	msg.ReceivedAt = msg.ReceivedAt.Add(-5 * time.Second)
 	err := dataAccessor.GetMessageRepository().Create(msg)
 	assert.Nil(t, err)

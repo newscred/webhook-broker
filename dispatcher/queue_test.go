@@ -17,7 +17,7 @@ func TestPriorityQueueBasic(t *testing.T) {
 
 	for _, priority := range priorities {
 		messagePayload := strconv.Itoa(priority)
-		msg, _ := data.NewMessage(channel, producer, messagePayload, "application/json")
+		msg, _ := data.NewMessage(channel, producer, messagePayload, "application/json", data.HeadersMap{})
 		dj := &data.DeliveryJob{Message: msg}
 		pq.Enqueue(&Job{dj, uint(priority)})
 	}
@@ -44,7 +44,7 @@ func stressPriorityQueue() {
 	for i := 0; i < MaxQueueSize; i++ {
 		priority := i % 3
 		messagePayload := strconv.Itoa(priority)
-		msg, _ := data.NewMessage(channel, producer, messagePayload, contentType)
+		msg, _ := data.NewMessage(channel, producer, messagePayload, contentType, data.HeadersMap{})
 		dj := &data.DeliveryJob{Message: msg}
 		pq.Enqueue(&Job{dj, uint(priority)})
 	}
