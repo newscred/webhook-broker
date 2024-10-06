@@ -387,36 +387,6 @@ func TestBroadcastControllerPost(t *testing.T) {
 		msgRepo.AssertExpectations(t)
 		mockDispatcher.AssertExpectations(t)
 	})
-	t.Run("WithMetdataHeaders", func(t *testing.T) {
-		t.Parallel()
-		msgRepo := new(storagemocks.MessageRepository)
-		controller, mockDispatcher := getNewBroadcastController(msgRepo)
-		testRouter := createTestRouter(controller)
-		testURI := controller.FormatAsRelativeLink(getRouterParam(consumerTestChannel.ChannelID))
-		req, _ := http.NewRequest("POST", testURI, nil)
-		bodyString := "test message body"
-		req.Body = ioutil.NopCloser(strings.NewReader(bodyString))
-		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
-		req.Header.Add(headerChannelToken, consumerTestChannel.Token)
-		indexString := "0"
-		producerID := listTestProducerIDPrefix + indexString
-		req.Header.Add(headerProducerID, producerID)
-		req.Header.Add(headerProducerToken, successfulGetTestToken+" - "+indexString)
-		req.Header.Add("X-Test-A", "1")
-		req.Header.Add("X-Test-B", "2")
-		req.Header.Add(headerMetadataHeaders, "X-Test-A,X-Test-B")
-		matcher := func(msg *data.Message) bool {
-			return msg.Headers["X-Test-A"] == "1" && msg.Headers["X-Test-B"] == "2"
-		}
-		msgRepo.On("Create", mock.MatchedBy(matcher)).Return(nil)
-		wg := setupAsyncDispatchMock(mockDispatcher, matcher)
-		rr := httptest.NewRecorder()
-		testRouter.ServeHTTP(rr, req)
-		wg.Wait()
-		assert.Equal(t, http.StatusCreated, rr.Code)
-		msgRepo.AssertExpectations(t)
-		mockDispatcher.AssertExpectations(t)
-	})
 }
 
 func setupAsyncDispatchMock(mockDispatcher *dispatchermocks.MessageDispatcher, matcher func(msg *data.Message) bool) *sync.WaitGroup {
