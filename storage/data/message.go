@@ -38,17 +38,23 @@ const (
 
 type HeadersMap map[string]string
 
-func (arr *HeadersMap) Scan(value interface{}) error {
+func (hmap *HeadersMap) Scan(value interface{}) error {
+	if value == nil {
+		*hmap = HeadersMap{}
+		return nil
+	}
 	bytes, ok := value.([]byte)
 	if !ok {
-		return errors.New("StringArray must be a byte array")
+		return errors.New("HeadersMap must be a byte array")
 	}
-	json.Unmarshal(bytes, arr)
+	if err := json.Unmarshal(bytes, hmap); err != nil {
+		return err
+	}
 	return nil
 }
 
-func (arr HeadersMap) Value() (driver.Value, error) {
-	return json.Marshal(arr)
+func (hmap HeadersMap) Value() (driver.Value, error) {
+	return json.Marshal(hmap)
 }
 
 // Message represents the main payload of the application to be delivered
