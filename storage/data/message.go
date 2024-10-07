@@ -1,6 +1,9 @@
 package data
 
 import (
+	"database/sql/driver"
+	"encoding/json"
+	"errors"
 	"strconv"
 	"time"
 
@@ -33,6 +36,27 @@ const (
 	MsgStatusDispatchedStr = "DISPATCHED"
 )
 
+type HeadersMap map[string]string
+
+func (hmap *HeadersMap) Scan(value interface{}) error {
+	if value == nil {
+		*hmap = HeadersMap{}
+		return nil
+	}
+	bytes, ok := value.([]byte)
+	if !ok {
+		return errors.New("HeadersMap must be a byte array")
+	}
+	if err := json.Unmarshal(bytes, hmap); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (hmap HeadersMap) Value() (driver.Value, error) {
+	return json.Marshal(hmap)
+}
+
 // Message represents the main payload of the application to be delivered
 type Message struct {
 	BasePaginateable
@@ -45,6 +69,7 @@ type Message struct {
 	ProducedBy    *Producer
 	ReceivedAt    time.Time
 	OutboxedAt    time.Time
+	Headers       HeadersMap
 }
 
 // QuickFix fixes the object state automatically as much as possible
@@ -114,8 +139,8 @@ func (message *Message) GetLockID() string {
 }
 
 // NewMessage creates and returns new instance of message
-func NewMessage(channel *Channel, producedBy *Producer, payload, contentType string) (*Message, error) {
-	msg := &Message{Payload: payload, ContentType: contentType, BroadcastedTo: channel, ProducedBy: producedBy}
+func NewMessage(channel *Channel, producedBy *Producer, payload, contentType string, headers HeadersMap) (*Message, error) {
+	msg := &Message{Payload: payload, ContentType: contentType, BroadcastedTo: channel, ProducedBy: producedBy, Headers: headers}
 	msg.QuickFix()
 	var err error
 	if !msg.IsInValidState() {

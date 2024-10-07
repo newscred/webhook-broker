@@ -43,7 +43,7 @@ func TestMessageGetByID(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		t.Parallel()
 		repo := getMessageRepository()
-		msg, err := data.NewMessage(channel1, producer1, samplePayload, sampleContentType)
+		msg, err := data.NewMessage(channel1, producer1, samplePayload, sampleContentType, data.HeadersMap{})
 		assert.Nil(t, err)
 		assert.Nil(t, repo.Create(msg))
 		rMsg, err := repo.GetByID(msg.ID.String())
@@ -67,10 +67,10 @@ func TestMessageGetByIDs(t *testing.T) {
 		t.Parallel()
 		repo := getMessageRepository()
 		payload1, payload2 := samplePayload+"1", samplePayload+"2"
-		msg1, err := data.NewMessage(channel1, producer1, payload1, sampleContentType)
+		msg1, err := data.NewMessage(channel1, producer1, payload1, sampleContentType, data.HeadersMap{})
 		assert.NoError(t, err)
 		assert.Nil(t, repo.Create(msg1))
-		msg2, err := data.NewMessage(channel2, producer1, payload2, sampleContentType)
+		msg2, err := data.NewMessage(channel2, producer1, payload2, sampleContentType, data.HeadersMap{})
 		assert.NoError(t, err)
 		assert.Nil(t, repo.Create(msg2))
 
@@ -122,7 +122,7 @@ func TestMessageGetCreate(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		t.Parallel()
 		repo := getMessageRepository()
-		msg, err := data.NewMessage(channel1, producer1, samplePayload, sampleContentType)
+		msg, err := data.NewMessage(channel1, producer1, samplePayload, sampleContentType, data.HeadersMap{})
 		assert.Nil(t, err)
 		_, err = repo.Get(channel1.ChannelID, msg.MessageID)
 		assert.NotNil(t, err)
@@ -145,7 +145,7 @@ func TestMessageGetCreate(t *testing.T) {
 	})
 	t.Run("InvalidMsgState", func(t *testing.T) {
 		t.Parallel()
-		msg, err := data.NewMessage(channel1, producer1, samplePayload, sampleContentType)
+		msg, err := data.NewMessage(channel1, producer1, samplePayload, sampleContentType, data.HeadersMap{})
 		assert.Nil(t, err)
 		msg.MessageID = ""
 		repo := getMessageRepository()
@@ -155,7 +155,7 @@ func TestMessageGetCreate(t *testing.T) {
 		t.Parallel()
 		channel, _ := data.NewChannel("testchannel4msgtest", "token")
 		channel.QuickFix()
-		msg, err := data.NewMessage(channel, producer1, samplePayload, sampleContentType)
+		msg, err := data.NewMessage(channel, producer1, samplePayload, sampleContentType, data.HeadersMap{})
 		assert.Nil(t, err)
 		repo := getMessageRepository()
 		err = repo.Create(msg)
@@ -168,7 +168,7 @@ func TestMessageGetCreate(t *testing.T) {
 		t.Parallel()
 		producer, _ := data.NewProducer("testproducer4invalidprodinmsgtest", "testtoken")
 		producer.QuickFix()
-		msg, err := data.NewMessage(channel1, producer, samplePayload, sampleContentType)
+		msg, err := data.NewMessage(channel1, producer, samplePayload, sampleContentType, data.HeadersMap{})
 		assert.Nil(t, err)
 		repo := getMessageRepository()
 		err = repo.Create(msg)
@@ -179,7 +179,7 @@ func TestMessageGetCreate(t *testing.T) {
 	})
 	t.Run("DuplicateMessage", func(t *testing.T) {
 		t.Parallel()
-		msg, err := data.NewMessage(channel1, producer1, samplePayload, sampleContentType)
+		msg, err := data.NewMessage(channel1, producer1, samplePayload, sampleContentType, data.HeadersMap{})
 		assert.Nil(t, err)
 		repo := getMessageRepository()
 		assert.Nil(t, repo.Create(msg))
@@ -190,7 +190,7 @@ func TestMessageGetCreate(t *testing.T) {
 	t.Run("ProducerReadErr", func(t *testing.T) {
 		t.Parallel()
 		expectedErr := errors.New("producer could not be read")
-		msg, err := data.NewMessage(channel1, producer1, samplePayload, sampleContentType)
+		msg, err := data.NewMessage(channel1, producer1, samplePayload, sampleContentType, data.HeadersMap{})
 		assert.Nil(t, err)
 		mockProducerRepository := new(MockProducerRepository)
 		repo := NewMessageRepository(testDB, NewChannelRepository(testDB), mockProducerRepository)
@@ -238,10 +238,10 @@ func TestGetMessagesNotDispatchedForCertainPeriod(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		t.Parallel()
 		msgRepo := getMessageRepository()
-		msg, err := data.NewMessage(channel1, producer1, samplePayload, sampleContentType)
+		msg, err := data.NewMessage(channel1, producer1, samplePayload, sampleContentType, data.HeadersMap{})
 		assert.Nil(t, err)
 		msg.ReceivedAt = msg.ReceivedAt.Add(-5 * time.Second)
-		msg2, err := data.NewMessage(channel1, producer1, samplePayload, sampleContentType)
+		msg2, err := data.NewMessage(channel1, producer1, samplePayload, sampleContentType, data.HeadersMap{})
 		err = msgRepo.Create(msg)
 		assert.Nil(t, err)
 		err = msgRepo.Create(msg2)
@@ -280,9 +280,9 @@ func TestGetMessagesByChannel(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		t.Parallel()
 		msgRepo := getMessageRepository()
-		msg, err := data.NewMessage(channel2, producer1, samplePayload, sampleContentType)
+		msg, err := data.NewMessage(channel2, producer1, samplePayload, sampleContentType, data.HeadersMap{})
 		assert.Nil(t, err)
-		msg2, err := data.NewMessage(channel1, producer1, samplePayload, sampleContentType)
+		msg2, err := data.NewMessage(channel1, producer1, samplePayload, sampleContentType, data.HeadersMap{})
 		err = msgRepo.Create(msg)
 		assert.Nil(t, err)
 		err = msgRepo.Create(msg2)

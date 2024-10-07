@@ -34,7 +34,7 @@ var (
 type ContextKey string
 
 const (
-	messageSelectRowCommonQuery            = "SELECT id, messageId, producerId, channelId, payload, contentType, priority, status, receivedAt, outboxedAt, createdAt, updatedAt FROM message WHERE"
+	messageSelectRowCommonQuery            = "SELECT id, messageId, producerId, channelId, payload, contentType, priority, status, receivedAt, outboxedAt, headers, createdAt, updatedAt FROM message WHERE"
 	txContextKey                ContextKey = "tx"
 )
 
@@ -48,8 +48,8 @@ func (msgRepo *MessageDBRepository) Create(message *data.Message) (err error) {
 		if msgErr == nil {
 			err = ErrDuplicateMessageIDForChannel
 		} else {
-			err = transactionalSingleRowWriteExec(msgRepo.db, emptyOps, "INSERT INTO message (id, channelId, producerId, messageId, payload, contentType, priority, status, receivedAt, outboxedAt, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-				args2SliceFnWrapper(message.ID, message.BroadcastedTo.ChannelID, message.ProducedBy.ProducerID, message.MessageID, message.Payload, message.ContentType, message.Priority, message.Status, message.ReceivedAt, message.OutboxedAt, message.CreatedAt, message.UpdatedAt))
+			err = transactionalSingleRowWriteExec(msgRepo.db, emptyOps, "INSERT INTO message (id, channelId, producerId, messageId, payload, contentType, priority, status, receivedAt, outboxedAt, headers, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+				args2SliceFnWrapper(message.ID, message.BroadcastedTo.ChannelID, message.ProducedBy.ProducerID, message.MessageID, message.Payload, message.ContentType, message.Priority, message.Status, message.ReceivedAt, message.OutboxedAt, message.Headers, message.CreatedAt, message.UpdatedAt))
 			err = normalizeDBError(err, mysqlErrorMap)
 		}
 	}
@@ -75,7 +75,7 @@ func (msgRepo *MessageDBRepository) getSingleMessage(query string, queryArgs fun
 	message = &data.Message{}
 	if err == nil {
 		err = querySingleRow(msgRepo.db, query, queryArgs,
-			args2SliceFnWrapper(&message.ID, &message.MessageID, &producerID, &channelID, &message.Payload, &message.ContentType, &message.Priority, &message.Status, &message.ReceivedAt, &message.OutboxedAt, &message.CreatedAt, &message.UpdatedAt))
+			args2SliceFnWrapper(&message.ID, &message.MessageID, &producerID, &channelID, &message.Payload, &message.ContentType, &message.Priority, &message.Status, &message.ReceivedAt, &message.OutboxedAt, &message.Headers, &message.CreatedAt, &message.UpdatedAt))
 	}
 	if err == nil {
 		message.ProducedBy, err = msgRepo.producerRepository.Get(producerID)
@@ -108,7 +108,7 @@ func (msgRepo *MessageDBRepository) GetByIDs(ids []string) ([]*data.Message, err
 		msg.ProducedBy = &data.Producer{}
 		msg.BroadcastedTo = &data.Channel{}
 		messages = append(messages, msg)
-		return []interface{}{&msg.ID, &msg.MessageID, &msg.ProducedBy.ProducerID, &msg.BroadcastedTo.ChannelID, &msg.Payload, &msg.ContentType, &msg.Priority, &msg.Status, &msg.ReceivedAt, &msg.OutboxedAt, &msg.CreatedAt, &msg.UpdatedAt}
+		return []interface{}{&msg.ID, &msg.MessageID, &msg.ProducedBy.ProducerID, &msg.BroadcastedTo.ChannelID, &msg.Payload, &msg.ContentType, &msg.Priority, &msg.Status, &msg.ReceivedAt, &msg.OutboxedAt, &msg.Headers, &msg.CreatedAt, &msg.UpdatedAt}
 	}
 	baseQuery := messageSelectRowCommonQuery + " id IN (" + strings.Join(clauseArgs, ", ") + ")"
 	err := queryRows(msgRepo.db, baseQuery, args2SliceFnWrapper(queryArgs...), scanArgs)
@@ -146,7 +146,7 @@ func (msgRepo *MessageDBRepository) getMessages(baseQuery string, args ...interf
 		msg.ProducedBy = &data.Producer{}
 		msg.BroadcastedTo = &data.Channel{}
 		pageMessages = append(pageMessages, msg)
-		return []interface{}{&msg.ID, &msg.MessageID, &msg.ProducedBy.ProducerID, &msg.BroadcastedTo.ChannelID, &msg.Payload, &msg.ContentType, &msg.Priority, &msg.Status, &msg.ReceivedAt, &msg.OutboxedAt, &msg.CreatedAt, &msg.UpdatedAt}
+		return []interface{}{&msg.ID, &msg.MessageID, &msg.ProducedBy.ProducerID, &msg.BroadcastedTo.ChannelID, &msg.Payload, &msg.ContentType, &msg.Priority, &msg.Status, &msg.ReceivedAt, &msg.OutboxedAt, &msg.Headers, &msg.CreatedAt, &msg.UpdatedAt}
 	}
 	err := queryRows(msgRepo.db, baseQuery, args2SliceFnWrapper(args...), scanArgs)
 	if err == nil {
