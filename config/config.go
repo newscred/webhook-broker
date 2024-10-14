@@ -86,7 +86,7 @@ func getUserHomeDirBasedDefaultConfigFileLocation() string {
 	return user.HomeDir + "/.webhook-broker/" + ConfigFilename
 }
 
-//Config represents the application configuration
+// Config represents the application configuration
 type Config struct {
 	DBDialect                 DBDialect
 	DBConnectionURL           string
@@ -115,6 +115,12 @@ type Config struct {
 	RationalDelay             time.Duration
 	RetryBackoffDelays        []time.Duration
 	LogLevel                  LogLevel
+	// Message pruning configuration
+	ExportPath              string
+	ExportNodeName          string
+	MessageRetentionDays    uint
+	RemoteExportDestination RemoteMessageDestination
+	RemoteExportURL         *url.URL
 }
 
 // GetLogLevel returns the log level as per the configuration
@@ -257,6 +263,36 @@ func (config *Config) IsRecoveryWorkersEnabled() bool {
 	return config.RecoveryWorkersEnabled
 }
 
+// IsPruningEnabled returns true if message pruning is enabled.
+func (config *Config) IsPruningEnabled() bool {
+	return len(config.ExportNodeName) > 0 && config.MessageRetentionDays > 0
+}
+
+// GetExportPath returns the local filesystem path where messages will be exported before being uploaded.
+func (config *Config) GetExportPath() string {
+	return config.ExportPath
+}
+
+// GetExportNodeName returns a prefix to be added to the exported file name.
+func (config *Config) GetExportNodeName() string {
+	return config.ExportNodeName
+}
+
+// GetMessageRetentionDays returns the number of days to retain messages for which all jobs have completed.
+func (config *Config) GetMessageRetentionDays() uint {
+	return config.MessageRetentionDays
+}
+
+// GetRemoteExportDestination returns the remote destination for exported messages (e.g., "s3" or "gcs").
+func (config *Config) GetRemoteExportDestination() RemoteMessageDestination {
+	return config.RemoteExportDestination
+}
+
+// GetRemoteExportURL returns the root URL for the remote export destination (e.g., S3 bucket URL or GCS bucket URL).
+func (config *Config) GetRemoteExportURL() *url.URL {
+	return config.RemoteExportURL
+}
+
 // func (config *Config) () {}
 
 // GetAutoConfiguration gets configuration from default config and system defined path chain of
@@ -291,6 +327,7 @@ func GetConfigurationFromParseConfig(cfg *ini.File) (*Config, error) {
 	setupSeedDataConfiguration(cfg, configuration)
 	setupConsumerConnectionConfiguration(cfg, configuration)
 	setupBrokerConfiguration(cfg, configuration)
+	setupMessagePruningConfiguration(cfg, configuration)
 	if validationErr := validateConfigurationState(configuration); validationErr != nil {
 		return EmptyConfigurationForError, validationErr
 	}
@@ -306,6 +343,22 @@ func validateConfigurationState(configuration *Config) error {
 	}
 	if len(configuration.HTTPListeningAddr) <= 0 {
 		configuration.HTTPListeningAddr = ":8080"
+	}
+	// Check pruning configuration validation state
+	if configuration.IsPruningEnabled() {
+		validDest := true
+		if len(configuration.GetRemoteExportDestination()) > 0 && configuration.GetRemoteExportDestination() != RemoteMessageDestinationGCS && configuration.GetRemoteExportDestination() != RemoteMessageDestinationS3 {
+			validDest = false
+		}
+		if !validDest {
+			return errors.New("remote export destination is not valid")
+		}
+		if len(configuration.GetRemoteExportDestination()) <= 0 && configuration.GetRemoteExportURL() != nil {
+			return errors.New("no remote destination set for remote export URL")
+		}
+		if len(configuration.GetRemoteExportDestination()) > 0 && configuration.GetRemoteExportURL() == nil {
+			return errors.New("missing valid remote export URL")
+		}
 	}
 	// Check Listener Address port is open
 	ln, netErr := net.Listen("tcp", configuration.HTTPListeningAddr)
@@ -420,6 +473,25 @@ func setupLogConfiguration(cfg *ini.File, configuration *Config) {
 		logLevel = Debug
 	}
 	configuration.LogLevel = logLevel
+}
+
+func setupMessagePruningConfiguration(cfg *ini.File, configuration *Config) {
+	pruneSection, err := cfg.GetSection("prune")
+	if err != nil {
+		return
+	}
+	configuration.ExportNodeName = pruneSection.Key("export-node-name").MustString("")
+	configuration.MessageRetentionDays = pruneSection.Key("message-retention-days").MustUint(0)
+	configuration.RemoteExportDestination = RemoteMessageDestination(pruneSection.Key("remote-export-destination").MustString(""))
+	remoteExportURLStr := pruneSection.Key("remote-export-url").MustString("")
+	if len(remoteExportURLStr) > 0 {
+		if remoteExportURL, err := url.Parse(remoteExportURLStr); err == nil {
+			if remoteExportURL.IsAbs() {
+				configuration.RemoteExportURL = remoteExportURL
+			}
+		}
+	}
+	configuration.ExportPath = pruneSection.Key("export-path").MustString("")
 }
 
 func setupSeedDataConfiguration(cfg *ini.File, configuration *Config) {
