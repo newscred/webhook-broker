@@ -329,6 +329,7 @@ func TestGetJobsForConsumer(t *testing.T) {
 	msgRepo := getMessageRepository()
 
 	message2 := getMessageForJob()
+	message2.Headers["x-count"] = "7"
 	msgRepo.Create(message2)
 	jobs2 := getDeliveryJobsInFixture(message2)
 	err := djRepo.DispatchMessage(message2, jobs2...)
@@ -360,6 +361,11 @@ func TestGetJobsForConsumer(t *testing.T) {
 			}
 			assert.Equal(t, job.Listener.ID, testJob.Listener.ID)
 			assert.Equal(t, data.JobInflight, job.Status)
+			if job.Message.ID == message2.ID {
+				assert.Equal(t, job.Message.Headers["x-count"], message2.Headers["x-count"])
+			} else {
+				assert.Equal(t, job.Message.Headers["x-count"], "")
+			}
 		}
 		assert.True(t, found)
 		rJobs, page2, err := djRepo.GetJobsForConsumer(testJob.Listener, data.JobInflight, &data.Pagination{Previous: page.Previous})

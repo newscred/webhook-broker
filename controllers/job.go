@@ -48,6 +48,7 @@ func NewJobsController(channelRepo storage.ChannelRepository, consumerRepo stora
 type QeuedMessageModel struct {
 	MessageID   string
 	Payload     string
+	Headers     data.HeadersMap
 	ContentType string
 }
 
@@ -55,6 +56,7 @@ func newQueuedMessageModel(message *data.Message) *QeuedMessageModel {
 	return &QeuedMessageModel{
 		MessageID:   message.MessageID,
 		Payload:     message.Payload,
+		Headers:     message.Headers,
 		ContentType: message.ContentType,
 	}
 }
