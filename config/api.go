@@ -38,6 +38,32 @@ type LogConfig interface {
 	IsCompressionEnabledOnLogBackups() bool
 }
 
+// RemoteMessageDestination represents the destination for exported messages.
+type RemoteMessageDestination string
+
+const (
+	// RemoteMessageDestinationS3 represents AWS S3 as the export destination.
+	RemoteMessageDestinationS3 RemoteMessageDestination = "s3"
+	// RemoteMessageDestinationGCS represents Google Cloud Storage as the export destination.
+	RemoteMessageDestinationGCS RemoteMessageDestination = "gcs"
+)
+
+// MessagePruningConfig provides the interface for configuring message pruning.
+type MessagePruningConfig interface {
+	// IsPruningEnabled returns true if message pruning is enabled.
+	IsPruningEnabled() bool
+	// GetExportPath returns the local filesystem path where messages will be exported before being uploaded.
+	GetExportPath() string
+	// GetExportNodeName returns a prefix to be added to the exported file name.
+	GetExportNodeName() string
+	// GetMessageRetentionDays returns the number of days to retain messages for which all jobs have completed.
+	GetMessageRetentionDays() uint
+	// GetRemoteExportDestination returns the remote destination for exported messages (e.g., "s3" or "gcs").
+	GetRemoteExportDestination() RemoteMessageDestination
+	// GetRemoteExportURL returns the root URL for the remote export destination (e.g., S3 bucket URL or GCS bucket URL).
+	GetRemoteExportURL() *url.URL
+}
+
 // SeedProducer represents the pre configured producer via configuration
 type SeedProducer struct {
 	// ID is the ID of the data

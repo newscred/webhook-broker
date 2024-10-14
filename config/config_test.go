@@ -449,6 +449,52 @@ func TestGetConfigurationFromParseConfig_ValueError(t *testing.T) {
 		err := pingMysql(db)
 		assert.Nil(t, err)
 	})
+	t.Run("PruningConfigWrongRemoteDestination", func(t *testing.T) {
+		t.Parallel()
+		testConfig := `[prune]
+		export-node-name=test-node
+		message-retention-days=1
+		remote-export-destination=invalid-destination
+		[http]
+		listener=:48091
+		`
+		config, err := GetConfigurationFromParseConfig(loadTestConfiguration(testConfig))
+		assert.Equal(t, EmptyConfigurationForError, config)
+		assert.NotNil(t, err)
+		assert.Equal(t, "remote export destination is not valid", err.Error())
+	})
+	t.Run("PruningConfigNoRemoteDestinationForURL", func(t *testing.T) {
+		t.Parallel()
+		testConfig := `[prune]
+		export-node-name=test-node
+		message-retention-days=1
+		remote-export-url=s3://my-bucket/prefix/
+		[http]
+		listener=:48092
+		`
+		config, err := GetConfigurationFromParseConfig(loadTestConfiguration(testConfig))
+		assert.Equal(t, EmptyConfigurationForError, config)
+		assert.NotNil(t, err)
+		assert.Equal(t, "no remote destination set for remote export URL", err.Error())
+	})
+	t.Run("PruningConfigNoRemoteURLForDestination", func(t *testing.T) {
+		t.Parallel()
+		testConfig := `[prune]
+		export-node-name=test-node
+		message-retention-days=1
+		remote-export-destination=s3
+		[http]
+		listener=:48093
+		`
+		config, err := GetConfigurationFromParseConfig(loadTestConfiguration(testConfig))
+		if err == nil {
+			t.Error("Should have failed for missing remote destination when remote saving is enabled")
+			t.Fail()
+		}
+		assert.Equal(t, EmptyConfigurationForError, config)
+		assert.NotNil(t, err)
+		assert.Equal(t, "missing valid remote export URL", err.Error())
+	})
 }
 
 func TestGetConfigurationFromCLIConfig(t *testing.T) {
@@ -494,6 +540,64 @@ func TestSeedDataDBDriverFuncs(t *testing.T) {
 	})
 }
 
+func TestSetupMessagePruningConfiguration(t *testing.T) {
+	t.Run("AllFieldsConfigured", func(t *testing.T) {
+		cfg := ini.Empty()
+		cfg.Section("prune").Key("export-node-name").SetValue("test-node")
+		cfg.Section("prune").Key("message-retention-days").SetValue("14")
+		cfg.Section("prune").Key("remote-export-destination").SetValue("s3")
+		cfg.Section("prune").Key("remote-export-url").SetValue("s3://my-bucket/prefix/")
+
+		configuration := &Config{}
+		setupMessagePruningConfiguration(cfg, configuration)
+
+		assert.Equal(t, "test-node", configuration.ExportNodeName)
+		assert.Equal(t, uint(14), configuration.MessageRetentionDays)
+		assert.Equal(t, RemoteMessageDestinationS3, configuration.RemoteExportDestination)
+		assert.Equal(t, "s3://my-bucket/prefix/", configuration.RemoteExportURL.String())
+	})
+
+	t.Run("OnlyRequiredFieldsConfigured", func(t *testing.T) {
+		cfg := ini.Empty()
+		cfg.Section("prune").Key("export-node-name").SetValue("test-node")
+		cfg.Section("prune").Key("message-retention-days").SetValue("7")
+
+		configuration := &Config{}
+		setupMessagePruningConfiguration(cfg, configuration)
+
+		assert.Equal(t, "test-node", configuration.ExportNodeName)
+		assert.Equal(t, uint(7), configuration.MessageRetentionDays)
+		assert.Equal(t, "", string(configuration.RemoteExportDestination))
+		assert.Nil(t, configuration.RemoteExportURL)
+	})
+
+	t.Run("InvalidRemoteURL", func(t *testing.T) {
+		cfg := ini.Empty()
+		cfg.Section("prune").Key("export-node-name").SetValue("test-node")
+		cfg.Section("prune").Key("message-retention-days").SetValue("1")
+		cfg.Section("prune").Key("remote-export-destination").SetValue("s3")
+		cfg.Section("prune").Key("remote-export-url").SetValue("invalid-url")
+
+		configuration := &Config{}
+		setupMessagePruningConfiguration(cfg, configuration)
+
+		// Assert that the RemoteExportURL is nil because of the invalid URL
+		assert.Nil(t, configuration.RemoteExportURL)
+	})
+
+	t.Run("DefaultsWhenSectionMissing", func(t *testing.T) {
+		cfg := ini.Empty()
+
+		configuration := &Config{}
+		setupMessagePruningConfiguration(cfg, configuration)
+
+		assert.Equal(t, "", configuration.ExportNodeName)
+		assert.Equal(t, uint(0), configuration.MessageRetentionDays)
+		assert.Equal(t, "", string(configuration.RemoteExportDestination))
+		assert.Nil(t, configuration.RemoteExportURL)
+	})
+}
+
 func TestGetVersion(t *testing.T) {
 	assert.NotEmpty(t, GetVersion())
 }
@@ -504,4 +608,5 @@ func TestConfigInterfaces(t *testing.T) {
 	var _ LogConfig = (*Config)(nil)
 	var _ SeedDataConfig = (*Config)(nil)
 	var _ ConsumerConnectionConfig = (*Config)(nil)
+	var _ MessagePruningConfig = (*Config)(nil)
 }

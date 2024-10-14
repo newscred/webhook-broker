@@ -32,6 +32,12 @@ recovery-workers-enabled=true
 token-header-name=X-Broker-Consumer-Token
 user-agent=Webhook Message Broker
 connection-timeout-in-seconds=30
+[prune]
+export-node-name=
+message-retention-days=0
+remote-export-destination=
+remote-export-url=
+export-path=
 [initial-channels]
 sample-channel=Sample Channel
 [initial-producers]

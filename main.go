@@ -210,7 +210,15 @@ func main() {
 		// Start the webhook broker service
 		startWebhookBroker(inConfig)
 	} else {
-		// Call prune method
+		pruneMessages(inConfig)
+	}
+}
+
+func pruneMessages(inConfig *config.CLIConfig) {
+	_, err := config.GetConfigurationFromCLIConfig(inConfig) // appConfig
+	if err != nil {
+		log.Error().Err(err).Msg("could not start http service")
+		exit(5)
 	}
 }
 
