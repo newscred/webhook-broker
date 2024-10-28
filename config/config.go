@@ -396,7 +396,7 @@ func validateConfigurationState(configuration *Config) error {
 		if endpointErr != nil {
 			typicalErr = endpointErr
 		} else if !retriggerEndpoint.IsAbs() {
-			typicalErr = errors.New("Retrigger Base Endpoint is not in absolute URL form")
+			typicalErr = errors.New("retrigger base endpoint is not in absolute URL form")
 		}
 	}
 	return typicalErr
