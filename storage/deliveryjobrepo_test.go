@@ -27,16 +27,52 @@ const (
 	messagePriority  = 5
 )
 
+type DeliveryJobSetupOptions struct {
+	ConsumerCount          int
+	ConsumerIDPrefix       string
+	ConsumerRepo           ConsumerRepository
+	IgnoreSettingConsumers bool
+}
+
+func (opt *DeliveryJobSetupOptions) GetConsumerCount() int {
+	if opt.ConsumerCount == 0 {
+		return 10
+	}
+	return opt.ConsumerCount
+}
+
+func (opt *DeliveryJobSetupOptions) GetConsumerIDPrefix() string {
+	if opt.ConsumerIDPrefix == "" {
+		return consumerIDPrefix
+	}
+	return opt.ConsumerIDPrefix
+}
+
+func (opt *DeliveryJobSetupOptions) GetConsumerRepo() ConsumerRepository {
+	if opt.ConsumerRepo == nil {
+		opt.ConsumerRepo = getConsumerRepo()
+	}
+	return opt.ConsumerRepo
+}
+
 func SetupForDeliveryJobTests() {
-	testConsumers := 10
+	SetupForDeliveryJobTestsWithOptions(&DeliveryJobSetupOptions{})
+}
+
+func SetupForDeliveryJobTestsWithOptions(options *DeliveryJobSetupOptions) []*data.Consumer {
+	testConsumers := options.GetConsumerCount()
 	consumerRepo := getConsumerRepo()
-	consumers = make([]*data.Consumer, 0, testConsumers)
+	internalConsumers := make([]*data.Consumer, 0, testConsumers)
 	for i := 0; i < testConsumers; i++ {
-		consumer, _ := data.NewConsumer(channel1, consumerIDPrefix+strconv.Itoa(i), successfulGetTestToken, callbackURL, "")
+		consumer, _ := data.NewConsumer(channel1, options.GetConsumerIDPrefix()+strconv.Itoa(i), successfulGetTestToken, callbackURL, "")
 		consumer.QuickFix()
 		consumerRepo.Store(consumer)
-		consumers = append(consumers, consumer)
+		internalConsumers = append(internalConsumers, consumer)
 	}
+	if !options.IgnoreSettingConsumers {
+		consumers = internalConsumers
+	}
+	return internalConsumers
 }
 
 func getDeliverJobRepository() DeliveryJobRepository {
@@ -55,6 +91,29 @@ func getDeliveryJobsInFixture(message *data.Message) (jobs []*data.DeliveryJob) 
 		jobs = append(jobs, job)
 	}
 	return jobs
+}
+
+func dispatchJobs(djRepo DeliveryJobRepository, message *data.Message, jobs []*data.DeliveryJob) error {
+	err := djRepo.DispatchMessage(message, jobs...)
+	if err != nil {
+		log.Error().Err(err).Msg("Error dispatching message")
+		return err
+	}
+	return nil
+}
+
+func markJobDelivered(djRepo DeliveryJobRepository, job *data.DeliveryJob) error {
+	err := djRepo.MarkJobInflight(job)
+	if err != nil {
+		log.Error().Err(err).Msg("Error marking job inflight")
+		return err
+	}
+	err = djRepo.MarkJobDelivered(job)
+	if err != nil {
+		log.Error().Err(err).Msg("Error marking job delivered")
+		return err
+	}
+	return nil
 }
 
 func TestDispatchMessage(t *testing.T) {
