@@ -75,6 +75,7 @@ const (
 	asda sdads
 	connection-url=webhook_broker:zxc909zxc@tcp(mysql:3306)/webhook-broker?charset=utf8mb4&collation=utf8mb4_0900_ai_ci&parseTime=True
 	`
+	retriggerErrorMsg = "retrigger base endpoint is not in absolute URL form"
 )
 
 var (
@@ -361,7 +362,7 @@ func TestGetConfigurationFromParseConfig_ValueError(t *testing.T) {
 		config, err := GetConfigurationFromParseConfig(loadTestConfiguration(testConfig))
 		assert.Equal(t, EmptyConfigurationForError, config)
 		assert.NotNil(t, err)
-		assert.NotEqual(t, err.Error(), "Retrigger Base Endpoint is not in absolute URL form")
+		assert.NotEqual(t, err.Error(), retriggerErrorMsg)
 	})
 	t.Run("RetriggerURLIsABlankString", func(t *testing.T) {
 		t.Parallel()
@@ -373,7 +374,7 @@ func TestGetConfigurationFromParseConfig_ValueError(t *testing.T) {
 		config, err := GetConfigurationFromParseConfig(loadTestConfiguration(testConfig))
 		assert.Equal(t, EmptyConfigurationForError, config)
 		assert.NotNil(t, err)
-		assert.Equal(t, err.Error(), "Retrigger Base Endpoint is not in absolute URL form")
+		assert.Equal(t, err.Error(), retriggerErrorMsg)
 	})
 	t.Run("RetriggerURLIsNotAAbsoluteURL", func(t *testing.T) {
 		t.Parallel()
@@ -385,7 +386,7 @@ func TestGetConfigurationFromParseConfig_ValueError(t *testing.T) {
 		config, err := GetConfigurationFromParseConfig(loadTestConfiguration(testConfig))
 		assert.Equal(t, EmptyConfigurationForError, config)
 		assert.NotNil(t, err)
-		assert.Equal(t, err.Error(), "Retrigger Base Endpoint is not in absolute URL form")
+		assert.Equal(t, err.Error(), retriggerErrorMsg)
 	})
 	t.Run("DBDialectNotSupported", func(t *testing.T) {
 		t.Parallel()
