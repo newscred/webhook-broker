@@ -19,13 +19,15 @@ import (
 )
 
 const (
-	samplePayload      = "some payload"
-	sampleContentType  = "a content type"
-	duplicateMessageID = "a-duplicate-message-id"
+	samplePayload            = "some payload"
+	sampleContentType        = "a content type"
+	duplicateMessageID       = "a-duplicate-message-id"
+	consumerIDPrefixForPrune = "test-consumer-for-prune-"
 )
 
 var (
-	producer1 *data.Producer
+	producer1       *data.Producer
+	channelForPrune *data.Channel
 )
 
 func SetupForMessageTests() {
@@ -33,6 +35,8 @@ func SetupForMessageTests() {
 	producer, _ := data.NewProducer("producer1-for-message", successfulGetTestToken)
 	producer.QuickFix()
 	producer1, _ = producerRepo.Store(producer)
+	channelRepo := NewChannelRepository(testDB)
+	channelForPrune = createTestChannel("channel-for-prune", "sampletoken", channelRepo)
 }
 
 func getMessageRepository() MessageRepository {
@@ -266,6 +270,59 @@ func TestGetMessagesNotDispatchedForCertainPeriod(t *testing.T) {
 		assert.Equal(t, 0, len(msgs))
 		assert.Nil(t, mock.ExpectationsWereMet())
 		assert.Contains(t, buf.String(), errString)
+	})
+}
+
+func TestGetMessagesFromBeforeDurationThatAreCompletelyDelivered(t *testing.T) {
+	SetupForDeliveryJobTestsWithOptions(&DeliveryJobSetupOptions{IgnoreSettingConsumers: true,
+		ConsumerCount: 2, ConsumerIDPrefix: consumerIDPrefixForPrune})
+	deliverJobRepo := getDeliverJobRepository()
+	msgRepo := getMessageRepository()
+	t.Run("Success", func(t *testing.T) {
+		t.Parallel()
+		msg, _ := data.NewMessage(channelForPrune, producer1, samplePayload, sampleContentType, data.HeadersMap{})
+		msg.ReceivedAt = msg.ReceivedAt.Add(-50 * time.Second)
+		msgRepo.Create(msg)
+		jobs := getDeliveryJobsInFixture(msg)
+		deliverJobRepo.DispatchMessage(msg, jobs...)
+		for index := range jobs {
+			markJobDelivered(deliverJobRepo, jobs[index])
+		}
+		pruneAbleMessages := msgRepo.GetMessagesFromBeforeDurationThatAreCompletelyDelivered(40*time.Second, 1000)
+		assert.Equal(t, 1, len(pruneAbleMessages))
+		assert.Equal(t, msg.MessageID, pruneAbleMessages[0].MessageID)
+		iterLength := 200
+		msgIds := make([]string, iterLength+1)
+		for i := 0; i < iterLength; i++ {
+			msg, _ = data.NewMessage(channelForPrune, producer1, samplePayload, sampleContentType, data.HeadersMap{})
+			msg.ReceivedAt = msg.ReceivedAt.Add(-50 * time.Second)
+			msgRepo.Create(msg)
+			deliverJobRepo.DispatchMessage(msg)
+			msgIds[i] = msg.MessageID
+		}
+		msgIds[iterLength] = pruneAbleMessages[0].MessageID
+		pruneAbleMessages = msgRepo.GetMessagesFromBeforeDurationThatAreCompletelyDelivered(40*time.Second, 1000)
+		assert.Equal(t, iterLength+1, len(pruneAbleMessages))
+		for index := range pruneAbleMessages {
+			assert.Contains(t, msgIds, pruneAbleMessages[index].MessageID)
+		}
+	})
+	t.Run("QueryError", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		oldLogger := log.Logger
+		log.Logger = log.Output(&buf)
+		defer func() { log.Logger = oldLogger }()
+		errString := "sample select error"
+		expectedErr := errors.New(errString)
+		db, mock, _ := sqlmock.New()
+		msgRepo := NewMessageRepository(db, NewChannelRepository(testDB), NewProducerRepository(testDB))
+		mock.ExpectQuery("SELECT").WillReturnError(expectedErr)
+		mock.MatchExpectationsInOrder(true)
+		msgs := msgRepo.GetMessagesFromBeforeDurationThatAreCompletelyDelivered(2*time.Second, 1000)
+		assert.Equal(t, 0, len(msgs))
+		assert.Contains(t, buf.String(), errString)
+		assert.Nil(t, mock.ExpectationsWereMet())
 	})
 }
 

@@ -36,6 +36,15 @@ type ContextKey string
 const (
 	messageSelectRowCommonQuery            = "SELECT id, messageId, producerId, channelId, payload, contentType, priority, status, receivedAt, outboxedAt, headers, createdAt, updatedAt FROM message WHERE"
 	txContextKey                ContextKey = "tx"
+	pruneMessageQuery           string     = `SELECT 
+		m.id, m.messageId, m.producerId, m.channelId, m.payload, m.contentType, m.priority, m.status, m.receivedAt, m.outboxedAt, m.headers, m.createdAt, m.updatedAt
+		FROM message m
+		WHERE m.status = ? AND m.receivedAt <= ? AND NOT EXISTS (
+			SELECT 1
+			FROM job j
+			WHERE j.messageId = m.id
+				AND j.status <> ?
+			) `
 )
 
 // Create creates a new message if message.MessageID does not already exist; please ensure QuickFix is called before repo is called
@@ -205,6 +214,43 @@ func (msgRepo *MessageDBRepository) GetMessagesForChannel(channelID string, page
 	}
 	baseQuery := messageSelectRowCommonQuery + " channelId like ?" + getPaginationQueryFragmentWithConfigurablePageSize(page, true, pageSizeWithOrder)
 	return msgRepo.getMessages(baseQuery, appendWithPaginationArgs(page, channelID)...)
+}
+
+// GetMessagesFromBeforeDurationThatAreCompletelyDelivered retrieves messages for which every job is in delivered status and the message was created before the `delta` period.
+// Maximum messages returned would be less than as specified by `absoluteMaxMessages` + 100
+func (msgRepo *MessageDBRepository) GetMessagesFromBeforeDurationThatAreCompletelyDelivered(delta time.Duration, absoluteMaxMessages int) []*data.Message {
+	messages := make([]*data.Message, 0)
+	if delta > 0 {
+		delta = -1 * delta
+	}
+	earliestReceivedAt := time.Now().Add(delta)
+	page := data.NewPagination(nil, nil)
+	more := true
+	baseQuery := pruneMessageQuery
+
+	for more {
+		query := baseQuery
+		// Pagination implemented manually since table alias is used in the SQL
+		if page.Next != nil {
+			query = query + "AND m.id < '" + page.Next.ID + "' AND m.createdAt <= ? " + string(largePageSizeWithOrder)
+		} else {
+			query = query + string(largePageSizeWithOrder)
+		}
+		pageMessages, pagination, err := msgRepo.getMessages(query, appendWithPaginationArgs(page, data.MsgStatusDispatched, earliestReceivedAt, data.JobDelivered)...)
+		if err == nil {
+			msgCount := len(pageMessages)
+			if msgCount <= 0 {
+				more = false
+			} else {
+				messages = append(messages, pageMessages...)
+				page.Next = pagination.Next
+			}
+		} else {
+			log.Error().Err(err).Msg("error - could get list messages that is delivered")
+			more = false
+		}
+	}
+	return messages
 }
 
 // NewMessageRepository creates a new instance of MessageRepository

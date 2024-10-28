@@ -24,6 +24,7 @@ ADD migration ./migration
 ADD storage ./storage
 ADD dispatcher ./dispatcher
 ADD utils ./utils
+ADD prune ./prune
 
 RUN make build
 RUN make test

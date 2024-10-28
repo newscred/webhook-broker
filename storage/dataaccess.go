@@ -59,6 +59,7 @@ type MessageRepository interface {
 	SetDispatched(txContext context.Context, message *data.Message) error
 	GetMessagesNotDispatchedForCertainPeriod(delta time.Duration) []*data.Message
 	GetMessagesForChannel(channelID string, page *data.Pagination) ([]*data.Message, *data.Pagination, error)
+	GetMessagesFromBeforeDurationThatAreCompletelyDelivered(delta time.Duration, absoluteMaxMessages int) []*data.Message
 }
 
 // DeliveryJobRepository allows storage operations over DeliveryJob

@@ -20,6 +20,7 @@ import (
 	"github.com/newscred/webhook-broker/config"
 	"github.com/newscred/webhook-broker/controllers"
 	"github.com/newscred/webhook-broker/dispatcher"
+	"github.com/newscred/webhook-broker/prune"
 	"github.com/newscred/webhook-broker/storage"
 	"github.com/newscred/webhook-broker/storage/data"
 	"github.com/newscred/webhook-broker/utils"
@@ -215,10 +216,22 @@ func main() {
 }
 
 func pruneMessages(inConfig *config.CLIConfig) {
-	_, err := config.GetConfigurationFromCLIConfig(inConfig) // appConfig
+	appConfig, err := config.GetConfigurationFromCLIConfig(inConfig) // appConfig
 	if err != nil {
-		log.Error().Err(err).Msg("could not start http service")
-		exit(5)
+		log.Error().Err(err).Msg("could not use app config")
+		exit(10)
+	}
+	setupLogger(appConfig)
+	migrationConfig := GetMigrationConfig(inConfig)
+	dataAccessor, err := storage.GetNewDataAccessor(appConfig, migrationConfig, appConfig)
+	if err != nil {
+		log.Error().Err(err).Msg("could not connect to data storage")
+		exit(11)
+	}
+	err = prune.PruneMessages(dataAccessor, appConfig)
+	if err != nil {
+		log.Error().Err(err).Msg("could not prune messages")
+		exit(12)
 	}
 }
 
