@@ -14,6 +14,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 	sqlite "github.com/mattn/go-sqlite3"
 	"github.com/newscred/webhook-broker/storage/data"
+	"github.com/newscred/webhook-broker/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -28,6 +29,7 @@ const (
 var (
 	producer1       *data.Producer
 	channelForPrune *data.Channel
+	pruneConsumers  []*data.Consumer
 )
 
 func SetupForMessageTests() {
@@ -37,6 +39,8 @@ func SetupForMessageTests() {
 	producer1, _ = producerRepo.Store(producer)
 	channelRepo := NewChannelRepository(testDB)
 	channelForPrune = createTestChannel("channel-for-prune", "sampletoken", channelRepo)
+	pruneConsumers = SetupForDeliveryJobTestsWithOptions(&DeliveryJobSetupOptions{IgnoreSettingConsumers: true,
+		ConsumerCount: 1, ConsumerIDPrefix: consumerIDPrefixForPrune, ConsumerChannel: channelForPrune})
 }
 
 func getMessageRepository() MessageRepository {
@@ -273,9 +277,16 @@ func TestGetMessagesNotDispatchedForCertainPeriod(t *testing.T) {
 	})
 }
 
+func getPruneDeliveryJobsInFixture(msg *data.Message) []*data.DeliveryJob {
+	jobs := make([]*data.DeliveryJob, 0, len(pruneConsumers))
+	for _, consumer := range pruneConsumers {
+		job, _ := data.NewDeliveryJob(msg, consumer)
+		jobs = append(jobs, job)
+	}
+	return jobs
+}
+
 func TestGetMessagesFromBeforeDurationThatAreCompletelyDelivered(t *testing.T) {
-	SetupForDeliveryJobTestsWithOptions(&DeliveryJobSetupOptions{IgnoreSettingConsumers: true,
-		ConsumerCount: 2, ConsumerIDPrefix: consumerIDPrefixForPrune})
 	deliverJobRepo := getDeliverJobRepository()
 	msgRepo := getMessageRepository()
 	t.Run("Success", func(t *testing.T) {
@@ -283,7 +294,7 @@ func TestGetMessagesFromBeforeDurationThatAreCompletelyDelivered(t *testing.T) {
 		msg, _ := data.NewMessage(channelForPrune, producer1, samplePayload, sampleContentType, data.HeadersMap{})
 		msg.ReceivedAt = msg.ReceivedAt.Add(-50 * time.Second)
 		msgRepo.Create(msg)
-		jobs := getDeliveryJobsInFixture(msg)
+		jobs := getPruneDeliveryJobsInFixture(msg)
 		deliverJobRepo.DispatchMessage(msg, jobs...)
 		for index := range jobs {
 			markJobDelivered(deliverJobRepo, jobs[index])
@@ -291,21 +302,29 @@ func TestGetMessagesFromBeforeDurationThatAreCompletelyDelivered(t *testing.T) {
 		pruneAbleMessages := msgRepo.GetMessagesFromBeforeDurationThatAreCompletelyDelivered(40*time.Second, 1000)
 		assert.Equal(t, 1, len(pruneAbleMessages))
 		assert.Equal(t, msg.MessageID, pruneAbleMessages[0].MessageID)
-		iterLength := 200
+		// create such that pagination query gets triggered
+		iterLength := 110
 		msgIds := make([]string, iterLength+1)
 		for i := 0; i < iterLength; i++ {
 			msg, _ = data.NewMessage(channelForPrune, producer1, samplePayload, sampleContentType, data.HeadersMap{})
 			msg.ReceivedAt = msg.ReceivedAt.Add(-50 * time.Second)
 			msgRepo.Create(msg)
-			deliverJobRepo.DispatchMessage(msg)
+			jobs = getPruneDeliveryJobsInFixture(msg)
+			deliverJobRepo.DispatchMessage(msg, jobs...)
+			for index := range jobs {
+				markJobDelivered(deliverJobRepo, jobs[index])
+			}
 			msgIds[i] = msg.MessageID
 		}
 		msgIds[iterLength] = pruneAbleMessages[0].MessageID
 		pruneAbleMessages = msgRepo.GetMessagesFromBeforeDurationThatAreCompletelyDelivered(40*time.Second, 1000)
+		// make sure every msg is returned
 		assert.Equal(t, iterLength+1, len(pruneAbleMessages))
 		for index := range pruneAbleMessages {
 			assert.Contains(t, msgIds, pruneAbleMessages[index].MessageID)
+			msgIds = utils.DeleteFromSlice(msgIds, utils.FindIndex(msgIds, pruneAbleMessages[index].MessageID))
 		}
+		assert.Equal(t, 0, len(msgIds))
 	})
 	t.Run("QueryError", func(t *testing.T) {
 		t.Parallel()
