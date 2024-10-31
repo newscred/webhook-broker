@@ -345,6 +345,31 @@ func TestGetMessagesFromBeforeDurationThatAreCompletelyDelivered(t *testing.T) {
 	})
 }
 
+func TestDeleteMessageJobs(t *testing.T) {
+	deliverJobRepo := getDeliverJobRepository()
+	msgRepo := getMessageRepository()
+	t.Run("Success", func(t *testing.T) {
+		t.Parallel()
+		msg, _ := data.NewMessage(channelForPrune, producer1, samplePayload, sampleContentType, data.HeadersMap{})
+		msg.ReceivedAt = msg.ReceivedAt.Add(-50 * time.Second)
+		msgRepo.Create(msg)
+		jobs := getPruneDeliveryJobsInFixture(msg)
+		deliverJobRepo.DispatchMessage(msg, jobs...)
+		for index := range jobs {
+			markJobDelivered(deliverJobRepo, jobs[index])
+		}
+		pruneAbleMessages := msgRepo.GetMessagesFromBeforeDurationThatAreCompletelyDelivered(40*time.Second, 1000)
+		assert.GreaterOrEqual(t, len(pruneAbleMessages), 1)
+		for index := range pruneAbleMessages {
+			d_jobs, _, err := deliverJobRepo.GetJobsForMessage(pruneAbleMessages[index], &data.Pagination{})
+			assert.Nil(t, err)
+			assert.Equal(t, 1, len(d_jobs))
+			assert.Nil(t, deliverJobRepo.DeleteJobsForMessage(pruneAbleMessages[index]))
+			assert.Nil(t, msgRepo.DeleteMessage(pruneAbleMessages[index]))
+		}
+	})
+}
+
 func TestGetMessagesByChannel(t *testing.T) {
 	t.Run("PaginationDeadlock", func(t *testing.T) {
 		t.Parallel()

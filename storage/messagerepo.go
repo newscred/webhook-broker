@@ -253,6 +253,13 @@ func (msgRepo *MessageDBRepository) GetMessagesFromBeforeDurationThatAreComplete
 	return messages
 }
 
+func (msgRepo *MessageDBRepository) DeleteMessage(message *data.Message) error {
+	err := transactionalWrites(msgRepo.db, func(tx *sql.Tx) error {
+		return inTransactionExec(tx, emptyOps, "DELETE FROM message WHERE id like ?", args2SliceFnWrapper(message.ID), 0)
+	})
+	return err
+}
+
 // NewMessageRepository creates a new instance of MessageRepository
 func NewMessageRepository(db *sql.DB, channelRepo ChannelRepository, producerRepo ProducerRepository) MessageRepository {
 	panicIfNoDBConnectionPool(db)

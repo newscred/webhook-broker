@@ -14,6 +14,24 @@ type DeliveryJobRepository struct {
 	mock.Mock
 }
 
+// DeleteJobsForMessage provides a mock function with given fields: message
+func (_m *DeliveryJobRepository) DeleteJobsForMessage(message *data.Message) error {
+	ret := _m.Called(message)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteJobsForMessage")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*data.Message) error); ok {
+		r0 = rf(message)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // DispatchMessage provides a mock function with given fields: message, deliveryJobs
 func (_m *DeliveryJobRepository) DispatchMessage(message *data.Message, deliveryJobs ...*data.DeliveryJob) error {
 	_va := make([]interface{}, len(deliveryJobs))

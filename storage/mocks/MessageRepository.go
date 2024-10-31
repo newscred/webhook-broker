@@ -34,6 +34,24 @@ func (_m *MessageRepository) Create(message *data.Message) error {
 	return r0
 }
 
+// DeleteMessage provides a mock function with given fields: message
+func (_m *MessageRepository) DeleteMessage(message *data.Message) error {
+	ret := _m.Called(message)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteMessage")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*data.Message) error); ok {
+		r0 = rf(message)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // Get provides a mock function with given fields: channelID, messageID
 func (_m *MessageRepository) Get(channelID string, messageID string) (*data.Message, error) {
 	ret := _m.Called(channelID, messageID)
