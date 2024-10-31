@@ -60,6 +60,7 @@ type MessageRepository interface {
 	GetMessagesNotDispatchedForCertainPeriod(delta time.Duration) []*data.Message
 	GetMessagesForChannel(channelID string, page *data.Pagination) ([]*data.Message, *data.Pagination, error)
 	GetMessagesFromBeforeDurationThatAreCompletelyDelivered(delta time.Duration, absoluteMaxMessages int) []*data.Message
+	DeleteMessage(message *data.Message) error
 }
 
 // DeliveryJobRepository allows storage operations over DeliveryJob
@@ -78,6 +79,7 @@ type DeliveryJobRepository interface {
 	GetByID(id string) (*data.DeliveryJob, error)
 	GetJobsInflightSince(delta time.Duration) []*data.DeliveryJob
 	GetJobsReadyForInflightSince(delta time.Duration) []*data.DeliveryJob
+	DeleteJobsForMessage(message *data.Message) error
 }
 
 // LockRepository allows storage operations over Lock

@@ -115,6 +115,13 @@ func (djRepo *DeliveryJobDBRepository) MarkDeadJobAsInflight(deliveryJob *data.D
 	return err
 }
 
+func (djRepo *DeliveryJobDBRepository) DeleteJobsForMessage(message *data.Message) error {
+	err := transactionalWrites(djRepo.db, func(tx *sql.Tx) error {
+		return inTransactionExec(tx, emptyOps, "DELETE FROM job WHERE messageId like ?", args2SliceFnWrapper(message.ID), 0)
+	})
+	return err
+}
+
 func (djRepo *DeliveryJobDBRepository) populateJobsWithMessage(jobs []*data.DeliveryJob) error {
 	messageIDs := make([]string, 0, len(jobs))
 	for _, job := range jobs {
