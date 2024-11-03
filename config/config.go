@@ -121,6 +121,8 @@ type Config struct {
 	MessageRetentionDays    uint
 	RemoteExportDestination RemoteMessageDestination
 	RemoteExportURL         *url.URL
+	RemoteFilePrefix        string
+	MaxArchiveFileSizeInMB  uint
 }
 
 // GetLogLevel returns the log level as per the configuration
@@ -291,6 +293,14 @@ func (config *Config) GetRemoteExportDestination() RemoteMessageDestination {
 // GetRemoteExportURL returns the root URL for the remote export destination (e.g., S3 bucket URL or GCS bucket URL).
 func (config *Config) GetRemoteExportURL() *url.URL {
 	return config.RemoteExportURL
+}
+
+func (config *Config) GetRemoteFilePrefix() string {
+	return config.RemoteFilePrefix
+}
+
+func (config *Config) GetMaxArchiveFileSizeInMB() uint {
+	return config.MaxArchiveFileSizeInMB
 }
 
 // func (config *Config) () {}
@@ -492,6 +502,8 @@ func setupMessagePruningConfiguration(cfg *ini.File, configuration *Config) {
 		}
 	}
 	configuration.ExportPath = pruneSection.Key("export-path").MustString("")
+	configuration.RemoteFilePrefix = pruneSection.Key("remote-file-prefix").MustString("")
+	configuration.MaxArchiveFileSizeInMB = pruneSection.Key("max-archive-file-size-in-mb").MustUint(100)
 }
 
 func setupSeedDataConfiguration(cfg *ini.File, configuration *Config) {

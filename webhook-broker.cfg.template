@@ -46,6 +46,24 @@ retry-backoff-delays-in-seconds=5,30,60
 # Whether to run recovery workers
 recovery-workers-enabled=true
 
+# Settings around pruning of messages already sent
+[prune]
+# Since there can be multiple webhook broker archiving to a single bucket, this is to distinguish which instance
+# this archive is coming from. A URL would look like - {remote-export-url or export-path}/{remote-file-prefix}/{export-node-name}/{datetime_of_prune_op}_{rotation_index}.jsonl
+export-node-name=
+# How many days to wait before the message is pruned if fully delivered
+message-retention-days=0
+# Whether remote destination is S3 or GCS
+remote-export-destination=
+# Connection string to the bucket in question
+remote-export-url=
+# Local file system path to export to
+export-path=
+# A prefix to add before the file is written 
+remote-file-prefix=
+# Maximum single file size in megabytes
+max-archive-file-size-in-mb=100
+
 # Generic consumer configuration such as - Token Header name, User Agent, Consumer connection timeout
 [consumer-connection]
 token-header-name=X-Broker-Consumer-Token
