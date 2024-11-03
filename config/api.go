@@ -62,6 +62,10 @@ type MessagePruningConfig interface {
 	GetRemoteExportDestination() RemoteMessageDestination
 	// GetRemoteExportURL returns the root URL for the remote export destination (e.g., S3 bucket URL or GCS bucket URL).
 	GetRemoteExportURL() *url.URL
+	// GetRemoteExportPrefix returns the prefix to be added to the exported file name when uploading to the remote destination.
+	GetRemoteFilePrefix() string
+	// GetMaxArchiveFileSizeInMB returns the maximum size of the exported file in MB before it is rotated to a new file
+	GetMaxArchiveFileSizeInMB() uint
 }
 
 // SeedProducer represents the pre configured producer via configuration

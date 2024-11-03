@@ -548,6 +548,8 @@ func TestSetupMessagePruningConfiguration(t *testing.T) {
 		cfg.Section("prune").Key("message-retention-days").SetValue("14")
 		cfg.Section("prune").Key("remote-export-destination").SetValue("s3")
 		cfg.Section("prune").Key("remote-export-url").SetValue("s3://my-bucket/prefix/")
+		cfg.Section("prune").Key("remote-file-prefix").SetValue("my-prefix")
+		cfg.Section("prune").Key("max-archive-file-size-in-mb").SetValue("200")
 
 		configuration := &Config{}
 		setupMessagePruningConfiguration(cfg, configuration)
@@ -556,6 +558,8 @@ func TestSetupMessagePruningConfiguration(t *testing.T) {
 		assert.Equal(t, uint(14), configuration.MessageRetentionDays)
 		assert.Equal(t, RemoteMessageDestinationS3, configuration.RemoteExportDestination)
 		assert.Equal(t, "s3://my-bucket/prefix/", configuration.RemoteExportURL.String())
+		assert.Equal(t, "my-prefix", configuration.RemoteFilePrefix)
+		assert.Equal(t, uint(200), configuration.MaxArchiveFileSizeInMB)
 	})
 
 	t.Run("OnlyRequiredFieldsConfigured", func(t *testing.T) {

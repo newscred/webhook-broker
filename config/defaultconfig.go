@@ -38,6 +38,8 @@ message-retention-days=0
 remote-export-destination=
 remote-export-url=
 export-path=
+remote-file-prefix=
+max-archive-file-size-in-mb=100
 [initial-channels]
 sample-channel=Sample Channel
 [initial-producers]
