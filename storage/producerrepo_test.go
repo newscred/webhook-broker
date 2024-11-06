@@ -14,7 +14,6 @@ import (
 
 const (
 	successfulGetTestProducerID      = "get-test"
-	successfulGetTestToken           = "sometokenforget"
 	nonExistingGetTestProducerID     = "get-test-ne"
 	successfulInsertTestProducerID   = "s-insert-test"
 	invalidStateUpdateTestProducerID = "i-update-test"

@@ -31,7 +31,7 @@ const (
 
 var (
 	channel1, channel2, channel3 *data.Channel // Used by messagerepo_test as well
-	callbackURL, relativeURL     *url.URL
+	relativeURL                  *url.URL
 )
 
 func getConsumerRepo() ConsumerRepository {
@@ -45,7 +45,9 @@ func SetupForConsumerTests() {
 	channel1 = createTestChannel("channel1-for-consumer", "sampletoken", channelRepo)
 	channel2 = createTestChannel("channel2-for-consumer", "sampletoken", channelRepo)
 	channel3 = createTestChannel("channel3-for-no-consumers", "sampletoken", channelRepo)
-	callbackURL = parseTestURL("https://imytech.net/")
+	if callbackURL == nil {
+		callbackURL = parseTestURL("https://imytech.net/")
+	}
 	relativeURL = parseTestURL("./test/")
 }
 

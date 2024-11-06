@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"errors"
 	"sort"
-	"strconv"
 	"testing"
 	"time"
 
@@ -23,65 +22,12 @@ var (
 )
 
 const (
-	consumerIDPrefix = "test-consumer-for-dj-"
-	messagePriority  = 5
+	messagePriority = 5
 )
 
-type DeliveryJobSetupOptions struct {
-	ConsumerCount          int
-	ConsumerIDPrefix       string
-	ConsumerRepo           ConsumerRepository
-	IgnoreSettingConsumers bool
-	ConsumerChannel        *data.Channel
-}
-
-func (opt *DeliveryJobSetupOptions) GetConsumerCount() int {
-	if opt.ConsumerCount == 0 {
-		return 10
-	}
-	return opt.ConsumerCount
-}
-
-func (opt *DeliveryJobSetupOptions) GetConsumerIDPrefix() string {
-	if opt.ConsumerIDPrefix == "" {
-		return consumerIDPrefix
-	}
-	return opt.ConsumerIDPrefix
-}
-
-func (opt *DeliveryJobSetupOptions) GetConsumerRepo() ConsumerRepository {
-	if opt.ConsumerRepo == nil {
-		opt.ConsumerRepo = getConsumerRepo()
-	}
-	return opt.ConsumerRepo
-}
-
-func (opt *DeliveryJobSetupOptions) GetConsumerChannel() *data.Channel {
-	if opt.ConsumerChannel == nil {
-		return channel1
-	}
-	return opt.ConsumerChannel
-}
-
 func SetupForDeliveryJobTests() {
-	SetupForDeliveryJobTestsWithOptions(&DeliveryJobSetupOptions{})
-}
-
-func SetupForDeliveryJobTestsWithOptions(options *DeliveryJobSetupOptions) []*data.Consumer {
-	testConsumers := options.GetConsumerCount()
-	consumerRepo := getConsumerRepo()
-	internalConsumers := make([]*data.Consumer, 0, testConsumers)
-	for i := 0; i < testConsumers; i++ {
-		consumer, _ := data.NewConsumer(options.GetConsumerChannel(), options.GetConsumerIDPrefix()+strconv.Itoa(i),
-			successfulGetTestToken, callbackURL, "")
-		consumer.QuickFix()
-		consumerRepo.Store(consumer)
-		internalConsumers = append(internalConsumers, consumer)
-	}
-	if !options.IgnoreSettingConsumers {
-		consumers = internalConsumers
-	}
-	return internalConsumers
+	consumerRepo := NewConsumerRepository(testDB, NewChannelRepository(testDB))
+	consumers = SetupForDeliveryJobTestsWithOptions(&DeliveryJobSetupOptions{ConsumerRepo: consumerRepo, ConsumerChannel: channel1})
 }
 
 func getDeliverJobRepository() DeliveryJobRepository {
