@@ -48,6 +48,9 @@ generate:
 	mockery --all --dir "./config/" --output "./config/mocks"
 	mockery --all --dir "./storage/" --output "./storage/mocks"
 	mockery --all --dir "./dispatcher/" --output "./dispatcher/mocks"
+	mockery --name Bucket --structname "MockBucket" --dir "./prune/" --output "./prune" --testonly --outpkg "prune"
+	mockery --name Writer --structname "MockWriter" --dir "./prune/" --output "./prune" --testonly --outpkg "prune"
+	mockery --name Reader --structname "MockReader" --dir "./prune/" --output "./prune" --testonly --outpkg "prune"
 	mockery --name ChannelRepository --structname "MockChannelRepository" --dir "./storage/" --output "./storage" --testonly --outpkg "storage"
 	mockery --name ProducerRepository --structname "MockProducerRepository" --dir "./storage/" --output "./storage" --testonly --outpkg "storage"
 

@@ -86,23 +86,30 @@ func SetupPruneableMessageFixture(dataAccessor DataAccessor, channel *data.Chann
 	pruneConsumers []*data.Consumer, lag int) (*data.Message, []*data.DeliveryJob) {
 	msg, _ := data.NewMessage(channel, producer, samplePayload, sampleContentType, data.HeadersMap{})
 	msg.ReceivedAt = msg.ReceivedAt.Add(time.Duration(-1*lag) * time.Second)
+	msg.QuickFix()
 	msgRepo := dataAccessor.GetMessageRepository()
-	msgRepo.Create(msg)
+	err := msgRepo.Create(msg)
+	if err != nil {
+		log.Error().Err(err).Msg("error creating message")
+	}
 	jobs := make([]*data.DeliveryJob, 0, len(pruneConsumers))
 	for _, consumer := range pruneConsumers {
 		job, _ := data.NewDeliveryJob(msg, consumer)
 		jobs = append(jobs, job)
 	}
 	deliverJobRepo := dataAccessor.GetDeliveryJobRepository()
-	deliverJobRepo.DispatchMessage(msg, jobs...)
+	err = deliverJobRepo.DispatchMessage(msg, jobs...)
+	if err != nil {
+		log.Error().Err(err).Msg("dispatching message failed")
+	}
 	for index := range jobs {
 		err := deliverJobRepo.MarkJobInflight(jobs[index])
 		if err != nil {
-			log.Error().Err(err).Msg("Error marking job inflight")
+			log.Error().Err(err).Msg("error marking job inflight")
 		}
 		err = deliverJobRepo.MarkJobDelivered(jobs[index])
 		if err != nil {
-			log.Error().Err(err).Msg("Error marking job delivered")
+			log.Error().Err(err).Msg("error marking job delivered")
 		}
 	}
 	return msg, jobs
