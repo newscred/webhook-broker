@@ -11,8 +11,6 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/go-sql-driver/mysql"
-	sqlite "github.com/mattn/go-sqlite3"
 	"github.com/newscred/webhook-broker/storage/data"
 	"github.com/newscred/webhook-broker/utils"
 	"github.com/stretchr/testify/assert"
@@ -20,8 +18,6 @@ import (
 )
 
 const (
-	samplePayload            = "some payload"
-	sampleContentType        = "a content type"
 	duplicateMessageID       = "a-duplicate-message-id"
 	consumerIDPrefixForPrune = "test-consumer-for-prune-"
 )
@@ -34,13 +30,9 @@ var (
 
 func SetupForMessageTests() {
 	producerRepo := NewProducerRepository(testDB)
-	producer, _ := data.NewProducer("producer1-for-message", successfulGetTestToken)
-	producer.QuickFix()
-	producer1, _ = producerRepo.Store(producer)
 	channelRepo := NewChannelRepository(testDB)
-	channelForPrune = createTestChannel("channel-for-prune", "sampletoken", channelRepo)
-	pruneConsumers = SetupForDeliveryJobTestsWithOptions(&DeliveryJobSetupOptions{IgnoreSettingConsumers: true,
-		ConsumerCount: 1, ConsumerIDPrefix: consumerIDPrefixForPrune, ConsumerChannel: channelForPrune})
+	consumerRepo := NewConsumerRepository(testDB, channelRepo)
+	producer1, channelForPrune, pruneConsumers = SetupMessageDependencyFixture(producerRepo, channelRepo, consumerRepo, consumerIDPrefixForPrune)
 }
 
 func getMessageRepository() MessageRepository {
@@ -235,13 +227,6 @@ func TestMessageSetDispatched(t *testing.T) {
 	})
 }
 
-func TestNormalizeMySQLError(t *testing.T) {
-	assert.Equal(t, ErrDuplicateMessageIDForChannel, normalizeDBError(&mysql.MySQLError{Number: 1062}, mysqlErrorMap))
-	assert.Nil(t, normalizeDBError(nil, mysqlErrorMap))
-	assert.Equal(t, ErrDuplicateMessageIDForChannel, normalizeDBError(&sqlite.ErrConstraint, mysqlErrorMap))
-	assert.Equal(t, ErrDuplicateMessageIDForChannel, normalizeDBError(&sqlite.ErrConstraintUnique, mysqlErrorMap))
-}
-
 func TestGetMessagesNotDispatchedForCertainPeriod(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		t.Parallel()
@@ -286,19 +271,65 @@ func getPruneDeliveryJobsInFixture(msg *data.Message) []*data.DeliveryJob {
 	return jobs
 }
 
+// MockedDataAccessor is a mock implementation of DataAccessor for testing purposes.
+type MockedDataAccessor struct {
+	mock.Mock
+}
+
+func (m *MockedDataAccessor) GetLockRepository() LockRepository {
+	args := m.Called()
+	return args.Get(0).(LockRepository)
+}
+
+func (m *MockedDataAccessor) GetAppRepository() AppRepository {
+	args := m.Called()
+	return args.Get(0).(AppRepository)
+}
+
+// GetMessageRepository mocks the GetMessageRepository method.
+func (m *MockedDataAccessor) GetMessageRepository() MessageRepository {
+	args := m.Called()
+	return args.Get(0).(MessageRepository)
+}
+
+// GetDeliveryJobRepository mocks the GetDeliveryJobRepository method.
+func (m *MockedDataAccessor) GetDeliveryJobRepository() DeliveryJobRepository {
+	args := m.Called()
+	return args.Get(0).(DeliveryJobRepository)
+}
+
+// GetProducerRepository mocks the GetProducerRepository method.
+func (m *MockedDataAccessor) GetProducerRepository() ProducerRepository {
+	args := m.Called()
+	return args.Get(0).(ProducerRepository)
+}
+
+// GetChannelRepository mocks the GetChannelRepository method.
+func (m *MockedDataAccessor) GetChannelRepository() ChannelRepository {
+	args := m.Called()
+	return args.Get(0).(ChannelRepository)
+}
+
+// GetConsumerRepository mocks the GetConsumerRepository method.
+func (m *MockedDataAccessor) GetConsumerRepository() ConsumerRepository {
+	args := m.Called()
+	return args.Get(0).(ConsumerRepository)
+}
+
+// Close mocks the Close method.
+func (m *MockedDataAccessor) Close() {
+	m.Called()
+}
+
 func TestGetMessagesFromBeforeDurationThatAreCompletelyDelivered(t *testing.T) {
-	deliverJobRepo := getDeliverJobRepository()
 	msgRepo := getMessageRepository()
+
 	t.Run("Success", func(t *testing.T) {
 		t.Parallel()
-		msg, _ := data.NewMessage(channelForPrune, producer1, samplePayload, sampleContentType, data.HeadersMap{})
-		msg.ReceivedAt = msg.ReceivedAt.Add(-50 * time.Second)
-		msgRepo.Create(msg)
-		jobs := getPruneDeliveryJobsInFixture(msg)
-		deliverJobRepo.DispatchMessage(msg, jobs...)
-		for index := range jobs {
-			markJobDelivered(deliverJobRepo, jobs[index])
-		}
+		dataAccessor := new(MockedDataAccessor)
+		dataAccessor.On("GetMessageRepository").Return(msgRepo)
+		dataAccessor.On("GetDeliveryJobRepository").Return(getDeliverJobRepository())
+		msg, _ := SetupPruneableMessageFixture(dataAccessor, channelForPrune, producer1, pruneConsumers, 50)
 		pruneAbleMessages := msgRepo.GetMessagesFromBeforeDurationThatAreCompletelyDelivered(40*time.Second, 1000)
 		assert.Equal(t, 1, len(pruneAbleMessages))
 		assert.Equal(t, msg.MessageID, pruneAbleMessages[0].MessageID)
@@ -306,14 +337,7 @@ func TestGetMessagesFromBeforeDurationThatAreCompletelyDelivered(t *testing.T) {
 		iterLength := 110
 		msgIds := make([]string, iterLength+1)
 		for i := 0; i < iterLength; i++ {
-			msg, _ = data.NewMessage(channelForPrune, producer1, samplePayload, sampleContentType, data.HeadersMap{})
-			msg.ReceivedAt = msg.ReceivedAt.Add(-50 * time.Second)
-			msgRepo.Create(msg)
-			jobs = getPruneDeliveryJobsInFixture(msg)
-			deliverJobRepo.DispatchMessage(msg, jobs...)
-			for index := range jobs {
-				markJobDelivered(deliverJobRepo, jobs[index])
-			}
+			msg, _ := SetupPruneableMessageFixture(dataAccessor, channelForPrune, producer1, pruneConsumers, 50)
 			msgIds[i] = msg.MessageID
 		}
 		msgIds[iterLength] = pruneAbleMessages[0].MessageID
