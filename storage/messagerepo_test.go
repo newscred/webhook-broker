@@ -349,6 +349,10 @@ func TestGetMessagesFromBeforeDurationThatAreCompletelyDelivered(t *testing.T) {
 			msgIds = utils.DeleteFromSlice(msgIds, utils.FindIndex(msgIds, pruneAbleMessages[index].MessageID))
 		}
 		assert.Equal(t, 0, len(msgIds))
+		pruneAbleMessages = msgRepo.GetMessagesFromBeforeDurationThatAreCompletelyDelivered(40*time.Second, 10)
+		// First page size is 100, so absolute max of 10 should return 100
+		assert.Equal(t, 100, len(pruneAbleMessages))
+
 	})
 	t.Run("QueryError", func(t *testing.T) {
 		t.Parallel()

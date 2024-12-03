@@ -228,22 +228,30 @@ func (msgRepo *MessageDBRepository) GetMessagesFromBeforeDurationThatAreComplete
 	more := true
 	baseQuery := pruneMessageQuery
 
+	log.Debug().Msg("Loading completed messages to archive")
+
 	for more {
 		query := baseQuery
 		// Pagination implemented manually since table alias is used in the SQL
 		if page.Next != nil {
+			log.Debug().Msgf("Loading messages to archive with Page %s, %s", page.Next.ID, page.Next.Timestamp)
 			query = query + "AND m.id < '" + page.Next.ID + "' AND m.createdAt <= ? " + string(largePageSizeWithOrder)
 		} else {
+			log.Debug().Msg("Loading messages to archive without Page")
 			query = query + string(largePageSizeWithOrder)
 		}
 		pageMessages, pagination, err := msgRepo.getMessages(query, appendWithPaginationArgs(page, data.MsgStatusDispatched, earliestReceivedAt, data.JobDelivered)...)
 		if err == nil {
 			msgCount := len(pageMessages)
+			log.Debug().Msgf("Loaded %d messages to archive", msgCount)
 			if msgCount <= 0 {
 				more = false
 			} else {
 				messages = append(messages, pageMessages...)
 				page.Next = pagination.Next
+				if len(messages) >= absoluteMaxMessages {
+					more = false
+				}
 			}
 		} else {
 			log.Error().Err(err).Msg("error - could get list messages that is delivered")
