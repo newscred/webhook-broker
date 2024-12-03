@@ -163,3 +163,21 @@ func TestPruneMessages(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Len(t, msgs, 0)
 }
+
+func TestArchiveDirector_Close(t *testing.T) {
+	t.Run("RemoteArchiveManagerNotNil", func(t *testing.T) {
+		pruneConfig := getMockedPruneConfig(t)
+		director, err := initArchiveDirector(pruneConfig)
+		assert.Nil(t, err)
+		director.Close()
+	})
+	t.Run("RemoteArchiveManagerNil", func(t *testing.T) {
+		pruneConfig := getMockedPruneConfig(t)
+		director, err := initArchiveDirector(pruneConfig)
+		director.RemoteArchiveManager = nil
+		assert.Nil(t, err)
+		director.Close()
+	})
+}
+
+

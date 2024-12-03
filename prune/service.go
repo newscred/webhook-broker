@@ -19,14 +19,25 @@ type ArchiveDirector struct {
 }
 
 func (director *ArchiveDirector) Close() {
-	err := director.RemoteArchiveManager.Close()
-	if err != nil {
-		log.Error().Err(err).Msg("failed to close remote archive manager")
+	if director.RemoteArchiveManager != nil {
+		err := director.RemoteArchiveManager.Close()
+		if err != nil {
+			log.Error().Err(err).Msg("failed to close remote archive manager")
+		}
 	}
-	err = director.LocalArchiveManager.Close()
+	err := director.LocalArchiveManager.Close()
 	if err != nil {
 		log.Error().Err(err).Msg("failed to close local archive manager")
 	}
+}
+
+func buildRemoteObjectName(pruneConfig config.MessagePruningConfig) string {
+	now := time.Now().UTC().Format("2006_01_02T15_04_05Z")
+	objectName := fmt.Sprintf("%s_%s.jsonl", pruneConfig.GetExportNodeName(), now)
+	if len(pruneConfig.GetRemoteFilePrefix()) > 0 {
+		objectName = fmt.Sprintf("%s/%s", pruneConfig.GetRemoteFilePrefix(), objectName)
+	}
+	return objectName
 }
 
 var (
@@ -39,6 +50,7 @@ var (
 		if err != nil {
 			return nil, fmt.Errorf("failed to open local archive file: %w", err)
 		}
+		log.Debug().Msgf("Local archive file opened: %s", dirPath)
 		return NewArchiveWriteManager(NewBlobBucket(fileBucket),
 			objectName, int64(pruneConfig.GetMaxArchiveFileSizeInMB())*1024*1024)
 	}
@@ -47,8 +59,7 @@ var (
 		if pruneConfig.GetRemoteExportURL() == nil {
 			return nil, nil
 		}
-		now := time.Now().UTC().Format("2006_01_02T15_04_05Z")
-		objectName := fmt.Sprintf("%s/%s_%s.jsonl", pruneConfig.GetRemoteFilePrefix(), pruneConfig.GetExportNodeName(), now)
+		objectName := buildRemoteObjectName(pruneConfig)
 		ctx := context.Background()
 		var bucket *blob.Bucket
 		var err error
@@ -64,10 +75,12 @@ var (
 		if err != nil {
 			return nil, err
 		}
+		log.Info().Msg("Local archive manager initialized")
 		remoteArchiveManager, err := initRemoteArchiveManager(config)
 		if err != nil {
 			return nil, err
 		}
+		log.Info().Msg("Remote archive manager initialized")
 		return &ArchiveDirector{
 			LocalArchiveManager:  localArchiveManager,
 			RemoteArchiveManager: remoteArchiveManager,
@@ -153,15 +166,19 @@ func PruneMessages(dataAccessor storage.DataAccessor, config config.MessagePruni
 		return err
 	}
 	defer archiveDirector.Close()
+	log.Debug().Msg("Writes initialized, now loading messages to archive")
 
 	for moreMessages {
+		log.Debug().Msg("Loading messages to archive")
 		// Get all messages that are completely delivered for a certain period
 		messages := dataAccessor.GetMessageRepository().GetMessagesFromBeforeDurationThatAreCompletelyDelivered(time.Duration(config.GetMessageRetentionDays()*24*60*60)*time.Second, 1000)
+		log.Debug().Msgf("Loaded %d messages to archive", len(messages))
 		if len(messages) == 0 {
 			log.Info().Msg("No messages to prune")
 			moreMessages = false
 			continue
 		}
+		log.Debug().Msg("Loading jobs to archive")
 		// Get jobs for each message and write to JSON stream
 		for _, message := range messages {
 			jobs, jobErr := getJobs(dataAccessor, message)
