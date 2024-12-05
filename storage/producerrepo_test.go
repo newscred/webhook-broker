@@ -279,3 +279,64 @@ func TestProducerGetList(t *testing.T) {
 		assert.Equal(t, 100, count)
 	})
 }
+
+func TestCachedProducerRepository(t *testing.T) {
+	// Create a mock delegate ProducerRepository
+	mockRepo := new(MockProducerRepository)
+
+	// Create a CachedProducerRepository with the mock delegate and a short TTL
+	cacheTTL := 1 * time.Second
+	cachedRepo := NewCachedProducerRepository(mockRepo, cacheTTL)
+
+	producer, _ := data.NewProducer("test-producer", "token")
+
+	// Test Get (cache miss)
+	mockRepo.On("Get", "test-producer").Return(producer, nil).Once()
+	retrievedProducer, err := cachedRepo.Get("test-producer")
+	assert.Nil(t, err)
+	assert.Equal(t, producer, retrievedProducer)
+	mockRepo.AssertExpectations(t)
+
+	// Test Get (cache hit)
+	retrievedProducer, err = cachedRepo.Get("test-producer")
+	assert.Nil(t, err)
+	assert.Equal(t, producer, retrievedProducer)
+	mockRepo.AssertExpectations(t) // Ensure delegate's Get is not called again
+
+	// Test Store (cache invalidation)
+	updatedProducer, _ := data.NewProducer("test-producer", "token")
+	updatedProducer.Name = "Updated Name"
+	mockRepo.On("Store", updatedProducer).Return(updatedProducer, nil).Once()
+	storedProducer, err := cachedRepo.Store(updatedProducer)
+	assert.Nil(t, err)
+	assert.Equal(t, updatedProducer, storedProducer)
+	mockRepo.AssertExpectations(t)
+
+	// Test Get (cache miss after store)
+	mockRepo.On("Get", "test-producer").Return(updatedProducer, nil).Once()
+	retrievedProducer, err = cachedRepo.Get("test-producer")
+	assert.Nil(t, err)
+	assert.Equal(t, updatedProducer, retrievedProducer)
+	mockRepo.AssertExpectations(t)
+
+	// Test GetList is delegated
+	mockProducers := []*data.Producer{{ProducerID: "producer1"}, {ProducerID: "producer2"}}
+	pagination := &data.Pagination{}
+	mockRepo.On("GetList", pagination).Return(mockProducers, pagination, nil).Once()
+	retrievedProducers, retrievedPagination, err := cachedRepo.GetList(pagination)
+
+	assert.Nil(t, err)
+	assert.Equal(t, mockProducers, retrievedProducers)
+	assert.Equal(t, pagination, retrievedPagination)
+
+	// Test cache expiry
+	time.Sleep(2 * cacheTTL) // Wait for the cache to expire
+
+	// Test Get (cache miss after expiry)
+	mockRepo.On("Get", "test-producer").Return(updatedProducer, nil).Once()
+	retrievedProducer, err = cachedRepo.Get("test-producer")
+	assert.Nil(t, err)
+	assert.Equal(t, updatedProducer, retrievedProducer)
+	mockRepo.AssertExpectations(t)
+
+}

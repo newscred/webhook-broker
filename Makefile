@@ -52,10 +52,11 @@ generate:
 	mockery --name Writer --structname "MockWriter" --dir "./prune/" --output "./prune" --testonly --outpkg "prune"
 	mockery --name Reader --structname "MockReader" --dir "./prune/" --output "./prune" --testonly --outpkg "prune"
 	mockery --name ChannelRepository --structname "MockChannelRepository" --dir "./storage/" --output "./storage" --testonly --outpkg "storage"
+	mockery --name ConsumerRepository --structname "MockConsumerRepository" --dir "./storage/" --output "./storage" --testonly --outpkg "storage"
 	mockery --name ProducerRepository --structname "MockProducerRepository" --dir "./storage/" --output "./storage" --testonly --outpkg "storage"
 
 dep-tools:
-	go install github.com/google/wire/cmd/wire@v0.5.0
+	go install github.com/google/wire/cmd/wire@v0.6.0
 ifneq ($(OS),Alpine Linux)
 	go install github.com/golang-migrate/migrate/v4/cmd/migrate@v4.15.2
 	go install github.com/vektra/mockery/v2@v2.46.3

@@ -2,6 +2,7 @@ package storage
 
 import (
 	"database/sql"
+	"sync"
 	"time"
 
 	"github.com/newscred/webhook-broker/storage/data"
@@ -78,8 +79,70 @@ func (repo *ProducerDBRepository) GetList(page *data.Pagination) ([]*data.Produc
 	return producers, pagination, err
 }
 
+type PseudoProducerRepository ProducerRepository
+
 // NewProducerRepository returns a new producer repository
-func NewProducerRepository(db *sql.DB) ProducerRepository {
+func NewProducerRepository(db *sql.DB) PseudoProducerRepository {
 	panicIfNoDBConnectionPool(db)
 	return &ProducerDBRepository{db: db}
+}
+
+// CachedProducerRepository is a decorator for ProducerRepository that caches producer data.
+type CachedProducerRepository struct {
+	delegate ProducerRepository
+	cache    *MemoryCache[string, *data.Producer]
+	mutex    sync.RWMutex
+}
+
+// NewCachedProducerRepository creates a new CachedProducerRepository.
+func NewCachedProducerRepository(delegate PseudoProducerRepository, ttl time.Duration) ProducerRepository {
+	return &CachedProducerRepository{
+		delegate: delegate,
+		cache:    NewMemoryCache[string, *data.Producer](ttl),
+	}
+}
+
+// Get retrieves a producer by ID, first checking the cache.
+func (repo *CachedProducerRepository) Get(producerID string) (*data.Producer, error) {
+	repo.mutex.RLock()
+	if item, ok := repo.cache.Get(producerID); ok {
+		repo.mutex.RUnlock()
+		return item, nil // Cache hit
+	}
+	repo.mutex.RUnlock()
+
+	// Cache miss; fetch from the underlying repository
+	producer, err := repo.delegate.Get(producerID)
+	if err != nil {
+		return nil, err
+	}
+
+	repo.mutex.Lock()
+	repo.cache.Set(producerID, producer) // Cache the producer
+	repo.mutex.Unlock()
+
+	return producer, nil
+}
+
+// Store delegates storing to the underlying repository and invalidates the cache.
+func (repo *CachedProducerRepository) Store(producer *data.Producer) (*data.Producer, error) {
+	producer, err := repo.delegate.Store(producer)
+	if err == nil {
+		repo.mutex.Lock()
+		repo.cache.Delete(producer.ProducerID)
+		repo.mutex.Unlock()
+	}
+	return producer, err
+}
+
+// GetList retrieves the list of producers based on pagination params supplied.
+// It delegates directly to the underlying repository as caching lists is more complex
+// and requires invalidation strategies that are beyond the scope of this simple example.
+func (repo *CachedProducerRepository) GetList(page *data.Pagination) ([]*data.Producer, *data.Pagination, error) {
+	return repo.delegate.GetList(page)
+}
+
+// Close closes the underlying cache.
+func (repo *CachedProducerRepository) Close() {
+	repo.cache.Close()
 }
