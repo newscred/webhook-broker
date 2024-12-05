@@ -3,6 +3,7 @@ package storage
 import (
 	"database/sql"
 	"time"
+	"sync"
 
 	"github.com/newscred/webhook-broker/storage/data"
 )
@@ -125,8 +126,104 @@ func (consumerRepo *ConsumerDBRepository) GetByID(id string) (consumer *data.Con
 	return consumerRepo.getSingleConsumer(consumerSelectRowCommonQuery+" id like ?", args2SliceFnWrapper(id), true)
 }
 
+type PseudoConsumerRepository ConsumerRepository
+
 // NewConsumerRepository initializes new consumer repository
-func NewConsumerRepository(db *sql.DB, channelRepo ChannelRepository) ConsumerRepository {
+func NewConsumerRepository(db *sql.DB, channelRepo ChannelRepository) PseudoConsumerRepository {
 	panicIfNoDBConnectionPool(db)
 	return &ConsumerDBRepository{db: db, channelRepository: channelRepo}
+}
+
+// CachedConsumerRepository is a decorator for ConsumerRepository that caches consumer data.
+type CachedConsumerRepository struct {
+	delegate ConsumerRepository
+	cache    *MemoryCache[string, *data.Consumer]
+	mutex    sync.RWMutex
+}
+
+// NewCachedConsumerRepository creates a new CachedConsumerRepository.
+func NewCachedConsumerRepository(delegate PseudoConsumerRepository, ttl time.Duration) ConsumerRepository {
+	return &CachedConsumerRepository{
+		delegate: delegate,
+		cache:    NewMemoryCache[string, *data.Consumer](ttl),
+	}
+}
+
+// Get retrieves a consumer by ID, first checking the cache.
+func (repo *CachedConsumerRepository) Get(channelID string, consumerID string) (*data.Consumer, error) {
+	cacheKey := channelID + ":" + consumerID  // Create a composite key
+	repo.mutex.RLock()
+	if item, ok := repo.cache.Get(cacheKey); ok {
+		repo.mutex.RUnlock()
+		return item, nil // Cache hit
+	}
+	repo.mutex.RUnlock()
+
+	// Cache miss; fetch from the underlying repository
+	consumer, err := repo.delegate.Get(channelID, consumerID)
+	if err != nil {
+		return nil, err
+	}
+
+	repo.mutex.Lock()
+	repo.cache.Set(cacheKey, consumer) // Cache the consumer
+	repo.mutex.Unlock()
+	return consumer, nil
+}
+
+
+// GetByID retrieves a consumer by its ID from the cache or underlying repository
+func (repo *CachedConsumerRepository) GetByID(id string) (*data.Consumer, error) {
+
+	repo.mutex.RLock()
+	if item, ok := repo.cache.Get(id); ok {
+		repo.mutex.RUnlock()
+		return item, nil //Cache Hit
+	}
+	repo.mutex.RUnlock()
+
+	consumer, err := repo.delegate.GetByID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	repo.mutex.Lock()
+	repo.cache.Set(id, consumer)
+	repo.mutex.Unlock()
+
+	return consumer, nil
+}
+
+
+// Store delegates storing to the underlying repository and invalidates the cache.
+func (repo *CachedConsumerRepository) Store(consumer *data.Consumer) (*data.Consumer, error) {
+	consumer, err := repo.delegate.Store(consumer)
+	if err == nil {
+		repo.mutex.Lock()
+		repo.cache.Delete(consumer.GetChannelIDSafely() + ":" + consumer.ConsumerID)
+		repo.cache.Delete(consumer.ID.String())
+		repo.mutex.Unlock()
+	}
+	return consumer, err
+}
+
+// Delete delegates deleting to the underlying repository and invalidates the cache.
+func (repo *CachedConsumerRepository) Delete(consumer *data.Consumer) error {
+	err := repo.delegate.Delete(consumer)
+	if err == nil {
+		repo.mutex.Lock()
+		repo.cache.Delete(consumer.GetChannelIDSafely() + ":" + consumer.ConsumerID)
+		repo.cache.Delete(consumer.ID.String())
+		repo.mutex.Unlock()
+	}
+	return err
+}
+
+// GetList retrieves the list of consumers based on pagination params supplied. It will return an error if both after and before are present at the same time.
+func (repo *CachedConsumerRepository) GetList(channelID string, page *data.Pagination) ([]*data.Consumer, *data.Pagination, error) {
+	return repo.delegate.GetList(channelID, page) // Delegate to the underlying repository
+}
+
+func (repo *CachedConsumerRepository) Close() {
+	repo.cache.Close()
 }

@@ -531,3 +531,148 @@ func TestConsumerGetList(t *testing.T) {
 		assert.GreaterOrEqual(t, 52, pushConsumerCount)
 	})
 }
+
+func TestCachedConsumerRepository(t *testing.T) {
+	mockRepo := new(MockConsumerRepository)
+	channel, _ := data.NewChannel("test-channel", "test-token")
+	consumer, _ := data.NewConsumer(channel, "test-consumer", "test-token", callbackURL, data.PushConsumerStr)
+
+	t.Run("GetCacheHit", func(t *testing.T) {
+		cachedRepo := NewCachedConsumerRepository(mockRepo, 5*time.Second)
+		mockRepo.On("Get", channel.ChannelID, consumer.ConsumerID).Return(consumer, nil).Once()
+
+		retrievedConsumer, err := cachedRepo.Get(channel.ChannelID, consumer.ConsumerID)
+		assert.Nil(t, err)
+		assert.Equal(t, consumer, retrievedConsumer)
+
+		retrievedConsumer, err = cachedRepo.Get(channel.ChannelID, consumer.ConsumerID)
+		assert.Nil(t, err)
+		assert.Equal(t, consumer, retrievedConsumer)
+
+		mockRepo.AssertExpectations(t) // Ensure delegate Get called only once
+	})
+
+	t.Run("GetCacheMiss", func(t *testing.T) {
+		cachedRepo := NewCachedConsumerRepository(mockRepo, 5*time.Second)
+		mockRepo.On("Get", channel.ChannelID, consumer.ConsumerID).Return(consumer, nil).Once()
+
+		retrievedConsumer, err := cachedRepo.Get(channel.ChannelID, consumer.ConsumerID)
+		assert.Nil(t, err)
+		assert.Equal(t, consumer, retrievedConsumer)
+
+		mockRepo.AssertExpectations(t)
+	})
+
+	t.Run("GetDelegateError", func(t *testing.T) {
+		cachedRepo := NewCachedConsumerRepository(mockRepo, 5*time.Second)
+
+		expectedError := assert.AnError
+		mockRepo.On("Get", channel.ChannelID, consumer.ConsumerID).Return(nil, expectedError).Once()
+
+		retrievedConsumer, err := cachedRepo.Get(channel.ChannelID, consumer.ConsumerID)
+
+		assert.Nil(t, retrievedConsumer)
+		assert.ErrorIs(t, err, expectedError)
+
+		mockRepo.AssertExpectations(t)
+
+	})
+
+	t.Run("GetByIDCacheHit", func(t *testing.T) {
+		cachedRepo := NewCachedConsumerRepository(mockRepo, 5*time.Second)
+		mockRepo.On("GetByID", consumer.ID.String()).Return(consumer, nil).Once()
+
+		retrievedConsumer, err := cachedRepo.GetByID(consumer.ID.String())
+
+		assert.Nil(t, err)
+		assert.Equal(t, consumer, retrievedConsumer)
+
+		retrievedConsumer, err = cachedRepo.GetByID(consumer.ID.String())
+		assert.Nil(t, err)
+		assert.Equal(t, consumer, retrievedConsumer)
+
+		mockRepo.AssertExpectations(t)
+	})
+
+	t.Run("GetByIDCacheMiss", func(t *testing.T) {
+		cachedRepo := NewCachedConsumerRepository(mockRepo, 5*time.Second)
+		mockRepo.On("GetByID", consumer.ID.String()).Return(consumer, nil).Once()
+		retrievedConsumer, err := cachedRepo.GetByID(consumer.ID.String())
+		assert.Nil(t, err)
+		assert.Equal(t, consumer, retrievedConsumer)
+		mockRepo.AssertExpectations(t)
+
+	})
+
+	t.Run("GetByIDDelegateError", func(t *testing.T) {
+		cachedRepo := NewCachedConsumerRepository(mockRepo, 5*time.Second)
+		expectedError := assert.AnError
+		mockRepo.On("GetByID", consumer.ID.String()).Return(nil, expectedError).Once()
+		retrievedConsumer, err := cachedRepo.GetByID(consumer.ID.String())
+		assert.Nil(t, retrievedConsumer)
+		assert.ErrorIs(t, err, expectedError)
+		mockRepo.AssertExpectations(t)
+	})
+
+	t.Run("StoreInvalidatesCache", func(t *testing.T) {
+		cachedRepo := NewCachedConsumerRepository(mockRepo, 5*time.Second)
+		mockRepo.On("Get", channel.ChannelID, consumer.ConsumerID).Return(consumer, nil).Once()
+		mockRepo.On("Store", consumer).Return(consumer, nil).Once()
+
+		// Prime the cache
+		_, err := cachedRepo.Get(channel.ChannelID, consumer.ConsumerID)
+		assert.Nil(t, err)
+
+		// Store should invalidate the cache
+		_, err = cachedRepo.Store(consumer)
+		assert.Nil(t, err)
+
+		mockRepo.On("Get", channel.ChannelID, consumer.ConsumerID).Return(consumer, nil).Once()
+		_, err = cachedRepo.Get(channel.ChannelID, consumer.ConsumerID)
+		assert.Nil(t, err)
+
+		mockRepo.On("GetByID", consumer.ID.String()).Return(consumer, nil).Once()
+		_, err = cachedRepo.GetByID(consumer.ID.String())
+		assert.Nil(t, err)
+		mockRepo.AssertExpectations(t) // Delegate Get should have been called twice
+	})
+
+	t.Run("DeleteInvalidatesCache", func(t *testing.T) {
+		cachedRepo := NewCachedConsumerRepository(mockRepo, 5*time.Second)
+
+		mockRepo.On("Get", channel.ChannelID, consumer.ConsumerID).Return(consumer, nil).Once()
+		mockRepo.On("Delete", consumer).Return(nil).Once()
+
+		// Prime the cache
+		_, err := cachedRepo.Get(channel.ChannelID, consumer.ConsumerID)
+		assert.Nil(t, err)
+
+		// Delete should invalidate the cache
+		err = cachedRepo.Delete(consumer)
+		assert.Nil(t, err)
+
+		mockRepo.On("Get", channel.ChannelID, consumer.ConsumerID).Return(consumer, nil).Once()
+		_, err = cachedRepo.Get(channel.ChannelID, consumer.ConsumerID)
+		assert.Nil(t, err)
+
+		mockRepo.On("GetByID", consumer.ID.String()).Return(consumer, nil).Once()
+		_, err = cachedRepo.GetByID(consumer.ID.String())
+		assert.Nil(t, err)
+
+		mockRepo.AssertExpectations(t)
+	})
+
+	t.Run("GetListDelegates", func(t *testing.T) {
+		cachedRepo := NewCachedConsumerRepository(mockRepo, 5*time.Second)
+
+		page := &data.Pagination{}
+		mockRepo.On("GetList", channel.ChannelID, page).Return([]*data.Consumer{consumer}, page, nil).Once()
+
+		retrievedConsumers, retrievedPage, err := cachedRepo.GetList(channel.ChannelID, page)
+		assert.Nil(t, err)
+		assert.Equal(t, []*data.Consumer{consumer}, retrievedConsumers)
+		assert.Equal(t, page, retrievedPage)
+
+		mockRepo.AssertExpectations(t)
+	})
+}

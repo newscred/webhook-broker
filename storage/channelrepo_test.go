@@ -285,3 +285,91 @@ func TestChannelGetList(t *testing.T) {
 		assert.Equal(t, 100, count)
 	})
 }
+
+func TestCachedChannelRepository(t *testing.T) {
+	// Create a mock delegate repository
+	mockRepo := new(MockChannelRepository)
+	channel, _ := data.NewChannel("test-channel", "test-token")
+	channel.QuickFix()
+
+	t.Run("CacheHit", func(t *testing.T) {
+		cachedRepo := NewCachedChannelRepository(mockRepo, 5*time.Second)
+
+		// Mock the delegate's Get method to return a channel
+		mockRepo.On("Get", channel.ChannelID).Return(channel, nil).Once()
+
+		// First call should fetch from delegate and cache it
+		retrievedChannel, err := cachedRepo.Get(channel.ChannelID)
+		assert.Nil(t, err)
+		assert.Equal(t, channel, retrievedChannel)
+
+		// Second call should hit the cache
+		retrievedChannel, err = cachedRepo.Get(channel.ChannelID)
+		assert.Nil(t, err)
+		assert.Equal(t, channel, retrievedChannel)
+
+		mockRepo.AssertExpectations(t) // Ensure the delegate's Get was called only once
+	})
+
+	t.Run("CacheMiss", func(t *testing.T) {
+		cachedRepo := NewCachedChannelRepository(mockRepo, 5*time.Second)
+
+		// Mock the delegate's Get method to return a channel
+		mockRepo.On("Get", channel.ChannelID).Return(channel, nil).Once()
+
+		// First call should be a cache miss and call the delegate
+		retrievedChannel, err := cachedRepo.Get(channel.ChannelID)
+		assert.Nil(t, err)
+		assert.Equal(t, channel, retrievedChannel)
+
+		mockRepo.AssertExpectations(t)
+	})
+
+	t.Run("DelegateError", func(t *testing.T) {
+		cachedRepo := NewCachedChannelRepository(mockRepo, 5*time.Second)
+
+		expectedError := assert.AnError
+		mockRepo.On("Get", channel.ChannelID).Return(nil, expectedError).Once()
+
+		retrievedChannel, err := cachedRepo.Get(channel.ChannelID)
+		assert.Nil(t, retrievedChannel)
+		assert.ErrorIs(t, err, expectedError)
+		mockRepo.AssertExpectations(t)
+
+	})
+
+	t.Run("StoreInvalidatesCache", func(t *testing.T) {
+		cachedRepo := NewCachedChannelRepository(mockRepo, 5*time.Second)
+
+		mockRepo.On("Get", channel.ChannelID).Return(channel, nil).Once()
+		mockRepo.On("Store", channel).Return(channel, nil).Once()
+
+		// Prime the cache
+		_, err := cachedRepo.Get(channel.ChannelID)
+		assert.Nil(t, err)
+
+		// Store should invalidate the cache
+		_, err = cachedRepo.Store(channel)
+		assert.Nil(t, err)
+
+		mockRepo.On("Get", channel.ChannelID).Return(channel, nil).Once()
+		_, err = cachedRepo.Get(channel.ChannelID)
+		assert.Nil(t, err)
+
+		mockRepo.AssertExpectations(t) // Delegate get should have been called twice
+	})
+
+	t.Run("GetListDelegates", func(t *testing.T) {
+		cachedRepo := NewCachedChannelRepository(mockRepo, 5*time.Second)
+
+		page := &data.Pagination{}
+		mockRepo.On("GetList", page).Return([]*data.Channel{channel}, page, nil).Once()
+
+		retrievedChannels, retrievedPage, err := cachedRepo.GetList(page)
+		assert.Nil(t, err)
+		assert.Equal(t, []*data.Channel{channel}, retrievedChannels)
+		assert.Equal(t, page, retrievedPage)
+
+		mockRepo.AssertExpectations(t)
+	})
+}
