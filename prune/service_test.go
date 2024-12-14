@@ -125,21 +125,30 @@ func TestPruneMessages(t *testing.T) {
 		assert.Nil(t, err)
 		assert.Len(t, msgs, 1)
 	})
-	t.Run("JobDeleteError", func(t *testing.T) {
-		mockedDJRepo := new(storagemocks.DeliveryJobRepository)
-		msgs, _, _ := dataAccessor.GetMessageRepository().GetMessagesForChannel(channel.ChannelID, &data.Pagination{})
-		jobs, page, err := dataAccessor.GetDeliveryJobRepository().GetJobsForMessage(msgs[0], &data.Pagination{})
-		emptyJobs := make([]*data.DeliveryJob, 0)
-		mockedDJRepo.On("GetJobsForMessage", mock.MatchedBy(anyMatcher), mock.MatchedBy(anyMatcher)).Return(jobs, page, err).Times(1)
-		mockedDJRepo.On("GetJobsForMessage", mock.MatchedBy(anyMatcher), mock.MatchedBy(anyMatcher)).Return(emptyJobs, page, err)
-		mockedDJRepo.On("DeleteJobsForMessage", mock.MatchedBy(anyMatcher)).Return(assert.AnError)
-		mockDataAccessor := createMockDataAccessorWrapper(dataAccessor, nil, mockedDJRepo)
-		err = PruneMessages(mockDataAccessor, getMockedPruneConfig(t))
-		assert.Equal(t, assert.AnError, err)
-	})
 	t.Run("MessageDeleteError", func(t *testing.T) {
+		messageIDMatcher := func (msgs []*data.Message) func(interface{}) bool {
+			expectedIDs := make(map[string]bool)
+			for _, msg := range msgs {
+				expectedIDs[msg.ID.String()] = true
+			}
+			return func(arg interface{}) bool {
+				ids, ok := arg.([]string)
+				if !ok {
+					return false
+				}
+				if len(ids) != len(msgs) {
+					return false
+				}
+				for _, id := range ids {
+					if _, found := expectedIDs[id]; !found {
+						return false
+					}
+				}
+				return true
+			}
+		}
 		mockedMsgRepo := new(storagemocks.MessageRepository)
-		mockedMsgRepo.On("DeleteMessage", mock.MatchedBy(anyMatcher)).Return(assert.AnError)
+		mockedMsgRepo.On("DeleteMessagesAndJobs", mock.MatchedBy(anyMatcher), mock.MatchedBy(messageIDMatcher(msgs))).Return(assert.AnError)
 		mockedMsgRepo.On("GetMessagesFromBeforeDurationThatAreCompletelyDelivered", time.Duration(retentionInDays*24*60*60)*time.Second, 1000).Return(msgs).Times(1)
 		mockDataAccessor := createMockDataAccessorWrapper(dataAccessor, mockedMsgRepo, nil)
 		err = PruneMessages(mockDataAccessor, getMockedPruneConfig(t))
@@ -179,5 +188,3 @@ func TestArchiveDirector_Close(t *testing.T) {
 		director.Close()
 	})
 }
-
-

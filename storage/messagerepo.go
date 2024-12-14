@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -266,6 +267,58 @@ func (msgRepo *MessageDBRepository) DeleteMessage(message *data.Message) error {
 		return inTransactionExec(tx, emptyOps, "DELETE FROM message WHERE id like ?", args2SliceFnWrapper(message.ID), 0)
 	})
 	return err
+}
+
+func (msgRepo *MessageDBRepository) DeleteMessagesAndJobs(ctx context.Context, messageIDs []string) error {
+	if len(messageIDs) == 0 {
+		return nil // Nothing to delete
+	}
+
+	batchSize := 100
+	err := transactionalWrites(msgRepo.db, func(tx *sql.Tx) error {
+		for i := 0; i < len(messageIDs); i += batchSize {
+			end := min(i+batchSize, len(messageIDs))
+			batch := messageIDs[i:end]
+
+			// Delete jobs first
+			queryJobs := fmt.Sprintf("DELETE FROM job WHERE messageId IN (%s)", placeholders(len(batch)))
+			argsJobs := make([]interface{}, len(batch))
+			for j, id := range batch {
+				argsJobs[j] = id
+			}
+			_, err := tx.ExecContext(ctx, queryJobs, argsJobs...)
+			if err != nil {
+				return fmt.Errorf("failed to delete jobs: %w", err)
+			}
+
+			// Delete messages
+			queryMessages := fmt.Sprintf("DELETE FROM message WHERE id IN (%s)", placeholders(len(batch)))
+			argsMessages := make([]interface{}, len(batch))
+			for j, id := range batch {
+				argsMessages[j] = id
+			}
+			_, err = tx.ExecContext(ctx, queryMessages, argsMessages...)
+			if err != nil {
+				return fmt.Errorf("failed to delete messages: %w", err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to delete batch of messages and jobs: %w", err)
+	}
+	return nil
+}
+
+func placeholders(n int) string {
+	return strings.Repeat("?,", n-1) + "?"
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // NewMessageRepository creates a new instance of MessageRepository

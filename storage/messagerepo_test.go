@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -441,5 +442,113 @@ func TestGetMessagesByChannel(t *testing.T) {
 		msgRepo := getMessageRepository()
 		_, _, err := msgRepo.GetMessagesForChannel(channel2.ChannelID+"NONE", data.NewPagination(nil, nil))
 		assert.Equal(t, sql.ErrNoRows, err)
+	})
+}
+
+func TestMessageDBRepository_DeleteMessagesAndJobs(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("an error '%s' was not expected when opening a stub database connection", err)
+	}
+	defer db.Close()
+
+	// Mock Channel and Producer Repositories (needed for MessageDBRepository creation)
+	mockChannelRepo := new(MockChannelRepository)
+	mockProducerRepo := new(MockProducerRepository)
+
+	msgRepo := NewMessageRepository(db, mockChannelRepo, mockProducerRepo).(*MessageDBRepository)
+
+	t.Run("Success", func(t *testing.T) {
+		messageIDs := []string{"messageID1", "messageID2", "messageID3"}
+		mock.ExpectBegin()
+		// Mock the delete queries
+		mock.ExpectExec("DELETE FROM job WHERE messageId IN \\(\\?,\\?,\\?\\)").
+			WithArgs(messageIDs[0], messageIDs[1], messageIDs[2]).
+			WillReturnResult(sqlmock.NewResult(3, 3)) // 3 rows affected
+
+		mock.ExpectExec("DELETE FROM message WHERE id IN \\(\\?,\\?,\\?\\)").
+			WithArgs(messageIDs[0], messageIDs[1], messageIDs[2]).
+			WillReturnResult(sqlmock.NewResult(3, 3)) // 3 rows affected
+		mock.ExpectCommit()
+
+		err := msgRepo.DeleteMessagesAndJobs(context.Background(), messageIDs)
+		assert.NoError(t, err)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("Empty IDs", func(t *testing.T) {
+		err := msgRepo.DeleteMessagesAndJobs(context.Background(), []string{})
+		assert.NoError(t, err)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("Error deleting jobs", func(t *testing.T) {
+		messageIDs := []string{"messageID1", "messageID2", "messageID3"}
+		// Mock the delete queries to return an error
+		mock.ExpectBegin()
+		mock.ExpectExec("DELETE FROM job WHERE messageId IN \\(\\?,\\?,\\?\\)").
+			WithArgs(messageIDs[0], messageIDs[1], messageIDs[2]).
+			WillReturnError(errors.New("failed to delete jobs"))
+		mock.ExpectRollback()
+
+		err := msgRepo.DeleteMessagesAndJobs(context.Background(), messageIDs)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to delete jobs")
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("Error deleting messages", func(t *testing.T) {
+		messageIDs := []string{"messageID1", "messageID2", "messageID3"}
+		// Mock successful job deletion, then message deletion error
+		mock.ExpectBegin()
+		mock.ExpectExec("DELETE FROM job WHERE messageId IN \\(\\?,\\?,\\?\\)").
+			WithArgs(messageIDs[0], messageIDs[1], messageIDs[2]).
+			WillReturnResult(sqlmock.NewResult(3, 3))
+
+		mock.ExpectExec("DELETE FROM message WHERE id IN \\(\\?,\\?,\\?\\)").
+			WithArgs(messageIDs[0], messageIDs[1], messageIDs[2]).
+			WillReturnError(errors.New("failed to delete messages"))
+		mock.ExpectRollback()
+
+		err := msgRepo.DeleteMessagesAndJobs(context.Background(), messageIDs)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to delete messages")
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("Batching", func(t *testing.T) {
+		generateMessageIDs := func(count int) []string {
+			messageIDs := make([]string, count)
+			for i := 0; i < count; i++ {
+				messageIDs[i] = fmt.Sprintf("messageID%d", i+1)
+			}
+			return messageIDs
+		}
+		messageIDs := generateMessageIDs(110)
+		// Simulate batching by mocking multiple delete executions
+
+		// Mock the delete queries for the first batch (100 messages)
+		mock.ExpectBegin()
+		mock.ExpectExec("DELETE FROM job WHERE messageId IN"). //Explicitly list placeholders for 100 args
+									WithArgs(messageIDs[0], messageIDs[1], messageIDs[2], messageIDs[3], messageIDs[4], messageIDs[5], messageIDs[6], messageIDs[7], messageIDs[8], messageIDs[9], messageIDs[10], messageIDs[11], messageIDs[12], messageIDs[13], messageIDs[14], messageIDs[15], messageIDs[16], messageIDs[17], messageIDs[18], messageIDs[19], messageIDs[20], messageIDs[21], messageIDs[22], messageIDs[23], messageIDs[24], messageIDs[25], messageIDs[26], messageIDs[27], messageIDs[28], messageIDs[29], messageIDs[30], messageIDs[31], messageIDs[32], messageIDs[33], messageIDs[34], messageIDs[35], messageIDs[36], messageIDs[37], messageIDs[38], messageIDs[39], messageIDs[40], messageIDs[41], messageIDs[42], messageIDs[43], messageIDs[44], messageIDs[45], messageIDs[46], messageIDs[47], messageIDs[48], messageIDs[49], messageIDs[50], messageIDs[51], messageIDs[52], messageIDs[53], messageIDs[54], messageIDs[55], messageIDs[56], messageIDs[57], messageIDs[58], messageIDs[59], messageIDs[60], messageIDs[61], messageIDs[62], messageIDs[63], messageIDs[64], messageIDs[65], messageIDs[66], messageIDs[67], messageIDs[68], messageIDs[69], messageIDs[70], messageIDs[71], messageIDs[72], messageIDs[73], messageIDs[74], messageIDs[75], messageIDs[76], messageIDs[77], messageIDs[78], messageIDs[79], messageIDs[80], messageIDs[81], messageIDs[82], messageIDs[83], messageIDs[84], messageIDs[85], messageIDs[86], messageIDs[87], messageIDs[88], messageIDs[89], messageIDs[90], messageIDs[91], messageIDs[92], messageIDs[93], messageIDs[94], messageIDs[95], messageIDs[96], messageIDs[97], messageIDs[98], messageIDs[99]).
+									WillReturnResult(sqlmock.NewResult(100, 100))
+
+		mock.ExpectExec("DELETE FROM message WHERE id IN"). //Explicitly list placeholders for 100 args
+									WithArgs(messageIDs[0], messageIDs[1], messageIDs[2], messageIDs[3], messageIDs[4], messageIDs[5], messageIDs[6], messageIDs[7], messageIDs[8], messageIDs[9], messageIDs[10], messageIDs[11], messageIDs[12], messageIDs[13], messageIDs[14], messageIDs[15], messageIDs[16], messageIDs[17], messageIDs[18], messageIDs[19], messageIDs[20], messageIDs[21], messageIDs[22], messageIDs[23], messageIDs[24], messageIDs[25], messageIDs[26], messageIDs[27], messageIDs[28], messageIDs[29], messageIDs[30], messageIDs[31], messageIDs[32], messageIDs[33], messageIDs[34], messageIDs[35], messageIDs[36], messageIDs[37], messageIDs[38], messageIDs[39], messageIDs[40], messageIDs[41], messageIDs[42], messageIDs[43], messageIDs[44], messageIDs[45], messageIDs[46], messageIDs[47], messageIDs[48], messageIDs[49], messageIDs[50], messageIDs[51], messageIDs[52], messageIDs[53], messageIDs[54], messageIDs[55], messageIDs[56], messageIDs[57], messageIDs[58], messageIDs[59], messageIDs[60], messageIDs[61], messageIDs[62], messageIDs[63], messageIDs[64], messageIDs[65], messageIDs[66], messageIDs[67], messageIDs[68], messageIDs[69], messageIDs[70], messageIDs[71], messageIDs[72], messageIDs[73], messageIDs[74], messageIDs[75], messageIDs[76], messageIDs[77], messageIDs[78], messageIDs[79], messageIDs[80], messageIDs[81], messageIDs[82], messageIDs[83], messageIDs[84], messageIDs[85], messageIDs[86], messageIDs[87], messageIDs[88], messageIDs[89], messageIDs[90], messageIDs[91], messageIDs[92], messageIDs[93], messageIDs[94], messageIDs[95], messageIDs[96], messageIDs[97], messageIDs[98], messageIDs[99]).
+									WillReturnResult(sqlmock.NewResult(100, 100))
+
+		mock.ExpectExec("DELETE FROM job WHERE messageId IN"). //Explicitly list placeholders for 10 args
+									WithArgs(messageIDs[100], messageIDs[101], messageIDs[102], messageIDs[103], messageIDs[104], messageIDs[105], messageIDs[106], messageIDs[107], messageIDs[108], messageIDs[109]). // Pass string slice directly
+									WillReturnResult(sqlmock.NewResult(10, 10))
+
+		mock.ExpectExec("DELETE FROM message WHERE id IN"). //Explicitly list placeholders for 10 args
+									WithArgs(messageIDs[100], messageIDs[101], messageIDs[102], messageIDs[103], messageIDs[104], messageIDs[105], messageIDs[106], messageIDs[107], messageIDs[108], messageIDs[109]). // Pass string slice directly
+									WillReturnResult(sqlmock.NewResult(10, 10))
+		mock.ExpectCommit()
+
+		err := msgRepo.DeleteMessagesAndJobs(context.Background(), messageIDs)
+		assert.NoError(t, err)
+		assert.NoError(t, mock.ExpectationsWereMet())
+
 	})
 }
