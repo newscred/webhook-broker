@@ -52,6 +52,24 @@ func (_m *MessageRepository) DeleteMessage(message *data.Message) error {
 	return r0
 }
 
+// DeleteMessagesAndJobs provides a mock function with given fields: ctx, messageIDs
+func (_m *MessageRepository) DeleteMessagesAndJobs(ctx context.Context, messageIDs []string) error {
+	ret := _m.Called(ctx, messageIDs)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteMessagesAndJobs")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, []string) error); ok {
+		r0 = rf(ctx, messageIDs)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // Get provides a mock function with given fields: channelID, messageID
 func (_m *MessageRepository) Get(channelID string, messageID string) (*data.Message, error) {
 	ret := _m.Called(channelID, messageID)

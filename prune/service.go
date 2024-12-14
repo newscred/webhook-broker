@@ -168,6 +168,7 @@ func PruneMessages(dataAccessor storage.DataAccessor, config config.MessagePruni
 	defer archiveDirector.Close()
 	log.Debug().Msg("Writes initialized, now loading messages to archive")
 
+	messageIDsToDelete := []string{}
 	for moreMessages {
 		log.Debug().Msg("Loading messages to archive")
 		// Get all messages that are completely delivered for a certain period
@@ -195,13 +196,16 @@ func PruneMessages(dataAccessor storage.DataAccessor, config config.MessagePruni
 				moreMessages = false
 				break
 			}
-			// Delete the message and its jobs
-			err = deleteArchivedMessageAndJobs(dataAccessor, message)
+			messageIDsToDelete = append(messageIDsToDelete, message.ID.String())
+		}
+
+		if len(messageIDsToDelete) > 0 {
+			err = dataAccessor.GetMessageRepository().DeleteMessagesAndJobs(context.Background(), messageIDsToDelete)
 			if err != nil {
-				log.Error().Err(err).Msgf("failed to delete message %s", message.ID)
-				moreMessages = false
-				break
+				log.Error().Err(err).Msg("failed to delete messages in batch")
+				return err
 			}
+			messageIDsToDelete = []string{}
 		}
 	}
 	return err

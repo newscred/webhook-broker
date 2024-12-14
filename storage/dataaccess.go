@@ -61,6 +61,7 @@ type MessageRepository interface {
 	GetMessagesForChannel(channelID string, page *data.Pagination) ([]*data.Message, *data.Pagination, error)
 	GetMessagesFromBeforeDurationThatAreCompletelyDelivered(delta time.Duration, absoluteMaxMessages int) []*data.Message
 	DeleteMessage(message *data.Message) error
+	DeleteMessagesAndJobs(ctx context.Context, messageIDs []string) error
 }
 
 // DeliveryJobRepository allows storage operations over DeliveryJob
