@@ -1,6 +1,7 @@
 package data
 
 import (
+	"fmt"
 	"net/url"
 	"testing"
 
@@ -140,4 +141,63 @@ func TestGetChannelIDSafely(t *testing.T) {
 	channel.QuickFix()
 	consumer.ConsumingFrom = channel
 	assert.Equal(t, someID, consumer.GetChannelIDSafely())
+}
+
+func TestConsumerType_String(t *testing.T) {
+	tests := []struct {
+		name         string
+		consumerType ConsumerType
+		want         string
+	}{
+		{
+			name:         "PullConsumer",
+			consumerType: PullConsumer,
+			want:         PullConsumerStr,
+		},
+		{
+			name:         "PushConsumer",
+			consumerType: PushConsumer,
+			want:         PushConsumerStr,
+		},
+		{
+			name:         "UnknownType",
+			consumerType: ConsumerType(100), // An unknown type
+			want:         PushConsumerStr,   // Should default to PushConsumerStr
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.consumerType.String(); got != tt.want {
+				t.Errorf("ConsumerType.String() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetConsumerTypeFromString(t *testing.T) {
+	testCases := []struct {
+		name                 string
+		inputString          string
+		expectedConsumerType ConsumerType
+		expectedError        error
+	}{
+		{"PullConsumer", PullConsumerStr, PullConsumer, nil},
+		{"PushConsumer", PushConsumerStr, PushConsumer, nil},
+		{"EmptyConsumer", "", PushConsumer, nil},
+		{"WrongConsumerType", "wrongType", PushConsumer, fmt.Errorf("invalid consumerType: wrongType")},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			consumerType, err := getConsumerTypeFromString(testCase.inputString)
+
+			assert.Equal(t, testCase.expectedConsumerType, consumerType)
+
+			if testCase.expectedError != nil {
+				assert.EqualError(t, err, testCase.expectedError.Error())
+			} else {
+				assert.Nil(t, err)
+			}
+		})
+	}
 }
