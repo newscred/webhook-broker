@@ -162,7 +162,7 @@ func (repo *CachedConsumerRepository) Get(channelID string, consumerID string) (
 	// Cache miss; fetch from the underlying repository
 	consumer, err := repo.delegate.Get(channelID, consumerID)
 	if err != nil {
-		return nil, err
+		return consumer, err
 	}
 
 	repo.mutex.Lock()
