@@ -61,6 +61,20 @@ This section contains configuration pertaining to the broker app attempting to d
 | user-agent | Webhook Message Broker | The `User-Agent` header value when connecting to consumer |
 | connection-timeout-in-seconds | 30 | Maximum time to provided consumers to finish the processing of the job. Anything more than 30 please consider using something like SQS, RabbitMQ etc. since maintaining long HTTP connection is risky. |
 
+## Section - Prune Configuration: `[prune]`
+
+This section configures the pruning of delivered messages.  Pruning can target either a local filesystem or a remote cloud storage service.
+
+| Name | Default Value | Description |
+|---|---|---|
+| `export-node-name` |  _(empty)_ | A unique identifier for this Webhook Broker instance. Used to distinguish archives when multiple brokers write to the same location.  Included as part of the archive filename in remote storage scenarios. The resulting path looks like: `{remote-export-url or export-path}/{remote-file-prefix}/{export-node-name}/{datetime_of_prune_op}_{rotation_index}.jsonl` |
+| `message-retention-days` | 0 | Number of days to retain messages after they are successfully delivered. Messages are pruned after this period. A value of 0 means messages are pruned immediately after successful delivery. |
+| `remote-export-destination` | _(empty)_ | Specifies the remote storage service to use. Supported values (if any) are not specified in the provided context.  Leave empty if exporting to the local filesystem. |
+| `remote-export-url` | _(empty)_ | The connection string or URL for the remote storage location (e.g., a cloud storage bucket).  Used when exporting to a remote location. |
+| `export-path` | _(empty)_ | The local filesystem path where archived messages are written. Used when exporting locally. |
+| `remote-file-prefix` | _(empty)_ | An optional prefix added to the archived filenames in remote storage. |
+| `max-archive-file-size-in-mb` | 100 | The maximum size of a single archive file in megabytes.  When this size is reached, a new archive file is created. |
+
 ## Sections  for Seed Dataset
 
 For seed data of the application there are 5 fixed sections and a dynamic section per consumer configured. When Webhook Broker is used for System to System communication or ESB, channels would be relatively be within fixed channels. The sections are:
