@@ -63,13 +63,13 @@ This section contains configuration pertaining to the broker app attempting to d
 
 ## Section - Prune Configuration: `[prune]`
 
-This section configures the pruning of delivered messages.  Pruning can target either a local filesystem or a remote cloud storage service.
+This section configures the pruning of delivered messages.  Pruning can target a local filesystem and optionally a remote cloud storage service.
 
 | Name | Default Value | Description |
 |---|---|---|
-| `export-node-name` |  _(empty)_ | A unique identifier for this Webhook Broker instance. Used to distinguish archives when multiple brokers write to the same location.  Included as part of the archive filename in remote storage scenarios. The resulting path looks like: `{remote-export-url or export-path}/{remote-file-prefix}/{export-node-name}/{datetime_of_prune_op}_{rotation_index}.jsonl` |
-| `message-retention-days` | 0 | Number of days to retain messages after they are successfully delivered. Messages are pruned after this period. A value of 0 means messages are pruned immediately after successful delivery. |
-| `remote-export-destination` | _(empty)_ | Specifies the remote storage service to use. Supported values (if any) are not specified in the provided context.  Leave empty if exporting to the local filesystem. |
+| `export-node-name` |  _(empty)_ | A unique identifier for this Webhook Broker instance. Used to distinguish archives when multiple brokers write to the same location.  Included as part of the archive filename in remote storage scenarios. The resulting path looks like: `{remote-export-url or export-path}/{remote-file-prefix}/{export-node-name}_{datetime_of_prune_op}.jsonl`. Empty node name means pruning is disabled |
+| `message-retention-days` | 0 | Number of days to retain messages after they are successfully delivered. Messages are pruned after this period. A value of 0 means pruning is disabled. |
+| `remote-export-destination` | _(empty)_ | Specifies the remote storage service to use. Supported values are `s3` and `gcs`.  Leave empty if exporting to the local filesystem only. |
 | `remote-export-url` | _(empty)_ | The connection string or URL for the remote storage location (e.g., a cloud storage bucket).  Used when exporting to a remote location. |
 | `export-path` | _(empty)_ | The local filesystem path where archived messages are written. Used when exporting locally. |
 | `remote-file-prefix` | _(empty)_ | An optional prefix added to the archived filenames in remote storage. |
