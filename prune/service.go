@@ -114,14 +114,6 @@ var (
 
 		return nil
 	}
-	deleteArchivedMessageAndJobs = func(dataAccessor storage.DataAccessor, message *data.Message) error {
-		// Delete the message and its jobs
-		if err := dataAccessor.GetDeliveryJobRepository().DeleteJobsForMessage(message); err == nil {
-			return dataAccessor.GetMessageRepository().DeleteMessage(message)
-		} else {
-			return err
-		}
-	}
 
 	getJobs = func(dataAccessor storage.DataAccessor, message *data.Message) ([]*data.DeliveryJob, error) {
 		jobs := make([]*data.DeliveryJob, 0, 100)

@@ -228,6 +228,11 @@ func TestMainFunc(t *testing.T) {
 			assert.Contains(t, output, "-migrate")
 		}
 		os.Args = []string{"webhook-broker", "-h"}
+		defer func() {
+			exit = oldExit
+			os.Args = oldArgs
+			consolePrintln = oldConsole
+		}()
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
@@ -237,11 +242,6 @@ func TestMainFunc(t *testing.T) {
 				}
 			}()
 			main()
-		}()
-		defer func() {
-			exit = oldExit
-			os.Args = oldArgs
-			consolePrintln = oldConsole
 		}()
 	})
 	t.Run("ParseError", func(t *testing.T) {
@@ -249,6 +249,10 @@ func TestMainFunc(t *testing.T) {
 		oldArgs := os.Args
 		exit = panicExit
 		os.Args = []string{"webhook-broker", "-migrate1=test"}
+		defer func() {
+			exit = oldExit
+			os.Args = oldArgs
+		}()
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
@@ -259,16 +263,16 @@ func TestMainFunc(t *testing.T) {
 			}()
 			main()
 		}()
-		defer func() {
-			exit = oldExit
-			os.Args = oldArgs
-		}()
 	})
 	t.Run("NoWatcher", func(t *testing.T) {
 		oldExit := exit
 		oldArgs := os.Args
 		exit = panicExit
 		os.Args = []string{"webhook-broker", "-do-not-watch-conf-change"}
+		defer func() {
+			exit = oldExit
+			os.Args = oldArgs
+		}()
 		inConfig, _, cliCfgErr := parseArgs(os.Args[0], os.Args[1:])
 		assert.Nil(t, cliCfgErr)
 		assert.True(t, inConfig.DoNotWatchConfigChange)
@@ -276,10 +280,6 @@ func TestMainFunc(t *testing.T) {
 			t.FailNow()
 		})
 		assert.False(t, inConfig.IsConfigWatcherStarted())
-		defer func() {
-			exit = oldExit
-			os.Args = oldArgs
-		}()
 	})
 	t.Run("ConfError", func(t *testing.T) {
 		ln, netErr := net.Listen("tcp", ":8080")
@@ -289,6 +289,10 @@ func TestMainFunc(t *testing.T) {
 			oldArgs := os.Args
 			exit = panicExit
 			os.Args = []string{"webhook-broker"}
+			defer func() {
+				exit = oldExit
+				os.Args = oldArgs
+			}()
 			func() {
 				defer func() {
 					if r := recover(); r != nil {
@@ -299,11 +303,18 @@ func TestMainFunc(t *testing.T) {
 				}()
 				main()
 			}()
-			defer func() {
-				exit = oldExit
-				os.Args = oldArgs
-			}()
 		}
+	})
+	t.Run("RunPruneMessages", func(t *testing.T) {
+		oldExit := exit
+		oldArgs := os.Args
+		exit = panicExit
+		os.Args = []string{"webhook-broker", "-command", "prune", "-config", configFilePath}
+		defer func() {
+			exit = oldExit
+			os.Args = oldArgs
+		}()
+		main()
 	})
 }
 

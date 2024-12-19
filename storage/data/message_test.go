@@ -1,6 +1,8 @@
 package data
 
 import (
+	"database/sql/driver"
+	"reflect"
 	"testing"
 	"time"
 
@@ -192,4 +194,84 @@ func TestMessageString(t *testing.T) {
 	assert.Equal(t, MsgStatusDispatchedStr, MsgStatusDispatched.String())
 	var status MsgStatus
 	assert.Equal(t, "0", status.String())
+}
+
+func TestHeadersMap_Scan(t *testing.T) {
+	tests := []struct {
+		name    string
+		value   interface{}
+		want    HeadersMap
+		wantErr bool
+	}{
+		{
+			name:    "NilValue",
+			value:   nil,
+			want:    HeadersMap{},
+			wantErr: false,
+		},
+		{
+			name:    "ValidJSON",
+			value:   []byte(`{"key1": "value1", "key2": "value2"}`),
+			want:    HeadersMap{"key1": "value1", "key2": "value2"},
+			wantErr: false,
+		},
+		{
+			name:    "InvalidJSON",
+			value:   []byte(`{"key1": "value1", "key2": "value2"`), // Missing closing brace
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name:    "NonByteArray",
+			value:   "not a byte array",
+			want:    nil,
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			hmap := &HeadersMap{}
+			if err := hmap.Scan(tt.value); (err != nil) != tt.wantErr {
+				t.Errorf("HeadersMap.Scan() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr && !reflect.DeepEqual(*hmap, tt.want) {
+				t.Errorf("HeadersMap.Scan() = %v, want %v", *hmap, tt.want)
+			}
+		})
+	}
+}
+
+func TestHeadersMap_Value(t *testing.T) {
+	tests := []struct {
+		name    string
+		hmap    HeadersMap
+		want    driver.Value
+		wantErr bool
+	}{
+		{
+			name:    "EmptyMap",
+			hmap:    HeadersMap{},
+			want:    []byte(`{}`),
+			wantErr: false,
+		},
+		{
+			name:    "NonEmptyMap",
+			hmap:    HeadersMap{"key1": "value1", "key2": "value2"},
+			want:    []byte(`{"key1":"value1","key2":"value2"}`),
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := tt.hmap.Value()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("HeadersMap.Value() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("HeadersMap.Value() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }
