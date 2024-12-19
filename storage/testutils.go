@@ -102,7 +102,7 @@ func SetupPruneableMessageFixture(dataAccessor DataAccessor, channel *data.Chann
 		if err == nil {
 			for index := range jobs {
 				errMsg = "error marking job inflight"
-				err := deliverJobRepo.MarkJobInflight(jobs[index])
+				err = deliverJobRepo.MarkJobInflight(jobs[index])
 				if err == nil {
 					errMsg = "error marking job delivered"
 					err = deliverJobRepo.MarkJobDelivered(jobs[index])
