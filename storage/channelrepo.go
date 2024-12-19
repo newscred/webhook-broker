@@ -37,7 +37,7 @@ func (repo *CachedChannelRepository) Get(channelID string) (*data.Channel, error
 	// Cache miss; fetch from the underlying repository
 	channel, err := repo.delegate.Get(channelID)
 	if err != nil {
-		return nil, err
+		return channel, err
 	}
 
 	repo.mutex.Lock()
