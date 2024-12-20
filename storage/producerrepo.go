@@ -114,7 +114,7 @@ func (repo *CachedProducerRepository) Get(producerID string) (*data.Producer, er
 	// Cache miss; fetch from the underlying repository
 	producer, err := repo.delegate.Get(producerID)
 	if err != nil {
-		return nil, err
+		return producer, err
 	}
 
 	repo.mutex.Lock()
