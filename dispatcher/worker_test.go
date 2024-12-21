@@ -3,6 +3,8 @@ package dispatcher
 import (
 	"bytes"
 	"errors"
+	"strings"
+	"strconv"
 	"net/http"
 	"testing"
 	"time"
@@ -40,7 +42,7 @@ func TestDeliverJob_MarkDead(t *testing.T) {
 		callConsumer = oldCallConsumer
 	}()
 	expectedErr := errors.New("Expected error")
-	callConsumer = func(httpClient *http.Client, requestID string, logger zerolog.Logger, job *Job) (err error) {
+	callConsumer = func(worker *Worker, requestID string, logger zerolog.Logger, job *Job) (err error) {
 		return expectedErr
 	}
 	deliverJob(worker, NewJob(inflightJob))
@@ -112,7 +114,7 @@ func TestCallConsumerPanic(t *testing.T) {
 	defer func() {
 		callConsumer = oldCallConsumer
 	}()
-	callConsumer = func(httpClient *http.Client, requestID string, logger zerolog.Logger, job *Job) (err error) {
+	callConsumer = func(worker *Worker, requestID string, logger zerolog.Logger, job *Job) (err error) {
 		panic("test panic")
 	}
 	deliverJob(worker, NewJob(inflightJob))
@@ -120,4 +122,30 @@ func TestCallConsumerPanic(t *testing.T) {
 	assert.Contains(t, buf.String(), "panic in executeJob")
 	assert.Contains(t, buf.String(), inflightJob.ID.String())
 
+}
+
+func TestCallConsumer(t *testing.T) {
+	worker := Worker{
+		consumerConnectionConfig: configuration,
+		brokerConfig:             getMockedBrokerConfig(),
+		httpClient:               createHTTPClient(configuration),
+	}
+	job, err := setupTestJob(consumers[0])
+	assert.Nil(t, err)
+	t.Run("Success", func(t *testing.T) {
+		t.Cleanup(clearConsumerHandler)
+		consumerHandler[strings.ReplaceAll(consumers[0].ConsumerID, consumerIDPrefix, "consumer-")] = func(s string, rw http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, job.Message.ContentType, r.Header.Get(headerContentType))
+			assert.Equal(t, strconv.Itoa(int(NewJob(job).Priority)), r.Header.Get(headerBrokerPriority))
+			assert.Equal(t, channel.ChannelID, r.Header.Get(headerChannelID))
+			assert.Equal(t, consumers[0].ConsumerID, r.Header.Get(headerConsumerID))
+			assert.Equal(t, consumers[0].Token, r.Header.Get(configuration.GetTokenRequestHeaderName()))
+			assert.Equal(t, configuration.GetUserAgent(), r.Header.Get(headerUserAgent))
+			assert.NotNil(t, r.Header.Get(headerRequestID))
+			assert.Equal(t, job.Message.MessageID, r.Header.Get(headerMessageID))
+			rw.WriteHeader(http.StatusNoContent)
+		}
+		err := callConsumer(&worker, "test-request", log.Logger, NewJob(job))
+		assert.Nil(t, err)
+	})
 }
