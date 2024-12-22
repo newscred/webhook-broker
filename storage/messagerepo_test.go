@@ -24,9 +24,10 @@ const (
 )
 
 var (
-	producer1       *data.Producer
-	channelForPrune *data.Channel
-	pruneConsumers  []*data.Consumer
+	producer1             *data.Producer
+	channelForPrune       *data.Channel
+	channelForStatusCount *data.Channel
+	pruneConsumers        []*data.Consumer
 )
 
 func SetupForMessageTests() {
@@ -36,8 +37,64 @@ func SetupForMessageTests() {
 	producer1, channelForPrune, pruneConsumers = SetupMessageDependencyFixture(producerRepo, channelRepo, consumerRepo, consumerIDPrefixForPrune)
 }
 
+func setupMsgStatusCount(channelRepo PseudoChannelRepository) (*data.Message, *data.Message) {
+	msgRepo := getMessageRepository()
+	channelForStatusCount, _ = data.NewChannel("channel-for-status-count", "sampletoken")
+	var err error
+	if channelForStatusCount, err = channelRepo.Store(channelForStatusCount); err != nil {
+		log.Fatal().Err(err)
+	}
+	msg, err := data.NewMessage(channelForStatusCount, producer1, samplePayload, sampleContentType, data.HeadersMap{})
+	if err != nil {
+		log.Fatal().Err(err)
+	}
+	err = msgRepo.Create(msg)
+	if err != nil {
+		log.Fatal().Err(err)
+	}
+	firstMsg := msg
+	tx, _ := testDB.Begin()
+	txCompleted := false
+	defer func() {
+		if !txCompleted {
+			tx.Rollback()
+		}
+	}()
+	dispatchContext := context.WithValue(context.Background(), txContextKey, tx)
+	err = msgRepo.SetDispatched(dispatchContext, msg)
+	if err != nil {
+		log.Fatal().Err(err)
+	} else {
+		tx.Commit()
+		txCompleted = true
+	}
+	msg, err = data.NewMessage(channelForStatusCount, producer1, samplePayload, sampleContentType, data.HeadersMap{})
+	if err != nil {
+		log.Fatal().Err(err)
+	}
+	err = msgRepo.Create(msg)
+	if err != nil {
+		log.Fatal().Err(err)
+	}
+	return firstMsg, msg
+}
+
 func getMessageRepository() MessageRepository {
 	return NewMessageRepository(testDB, NewChannelRepository(testDB), NewProducerRepository(testDB))
+}
+
+func TestGetMessageStatusCountsByChannel(t *testing.T) {
+	msg1, msg2 := setupMsgStatusCount(NewChannelRepository(testDB))
+	msgRepo := getMessageRepository()
+	defer func() {
+		msgRepo.DeleteMessage(msg1)
+		msgRepo.DeleteMessage(msg2)
+	}()
+	counts, err := msgRepo.GetMessageStatusCountsByChannel(channelForStatusCount.ChannelID)
+	assert.Nil(t, err)
+	assert.Equal(t, 2, len(counts))
+	assert.Equal(t, 1, counts[0].Count)
+	assert.Equal(t, 1, counts[1].Count)
 }
 
 func TestMessageGetByID(t *testing.T) {
@@ -418,6 +475,13 @@ func TestGetMessagesByChannel(t *testing.T) {
 		err = msgRepo.Create(msg2)
 		assert.Nil(t, err)
 		msgs, page, err := msgRepo.GetMessagesForChannel(channel2.ChannelID, data.NewPagination(nil, nil))
+		assert.Nil(t, err)
+		assert.NotNil(t, page)
+		assert.NotNil(t, page.Next)
+		assert.NotNil(t, page.Previous)
+		assert.Equal(t, 2, len(msgs))
+		assert.Equal(t, msg.ID, msgs[0].ID)
+		msgs, page, err = msgRepo.GetMessagesForChannel(channel2.ChannelID, data.NewPagination(nil, nil), msgs[0].Status)
 		assert.Nil(t, err)
 		assert.NotNil(t, page)
 		assert.NotNil(t, page.Next)
