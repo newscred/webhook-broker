@@ -1,6 +1,7 @@
 package data
 
 import (
+	"fmt"
 	"strconv"
 	"time"
 )
@@ -21,6 +22,27 @@ func (status JobStatus) String() string {
 	default:
 		return strconv.Itoa(int(status))
 	}
+}
+
+func (status JobStatus) GetValue() int {
+	return int(status)
+}
+
+// Status represents a generic status with string conversion.
+type Status[T ~int] interface {
+	String() string
+	// GetValue returns the underlying status value.  This is necessary
+	// since the String() method might perform formatting.
+	GetValue() T
+}
+
+type StatusCount[T ~int] struct {
+	Status T   `json:"status"`
+	Count  int `json:"count"`
+}
+
+func (sc StatusCount[T]) String() string {
+	return fmt.Sprint(sc.Status, ": ", sc.Count)
 }
 
 const (

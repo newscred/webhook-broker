@@ -160,9 +160,46 @@ func (_m *MessageRepository) GetByIDs(ids []string) ([]*data.Message, error) {
 	return r0, r1
 }
 
-// GetMessagesForChannel provides a mock function with given fields: channelID, page
-func (_m *MessageRepository) GetMessagesForChannel(channelID string, page *data.Pagination) ([]*data.Message, *data.Pagination, error) {
-	ret := _m.Called(channelID, page)
+// GetMessageStatusCountsByChannel provides a mock function with given fields: channelID
+func (_m *MessageRepository) GetMessageStatusCountsByChannel(channelID string) ([]*data.StatusCount[data.MsgStatus], error) {
+	ret := _m.Called(channelID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetMessageStatusCountsByChannel")
+	}
+
+	var r0 []*data.StatusCount[data.MsgStatus]
+	var r1 error
+	if rf, ok := ret.Get(0).(func(string) ([]*data.StatusCount[data.MsgStatus], error)); ok {
+		return rf(channelID)
+	}
+	if rf, ok := ret.Get(0).(func(string) []*data.StatusCount[data.MsgStatus]); ok {
+		r0 = rf(channelID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*data.StatusCount[data.MsgStatus])
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(string) error); ok {
+		r1 = rf(channelID)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// GetMessagesForChannel provides a mock function with given fields: channelID, page, statusFilters
+func (_m *MessageRepository) GetMessagesForChannel(channelID string, page *data.Pagination, statusFilters ...data.MsgStatus) ([]*data.Message, *data.Pagination, error) {
+	_va := make([]interface{}, len(statusFilters))
+	for _i := range statusFilters {
+		_va[_i] = statusFilters[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, channelID, page)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetMessagesForChannel")
@@ -171,27 +208,27 @@ func (_m *MessageRepository) GetMessagesForChannel(channelID string, page *data.
 	var r0 []*data.Message
 	var r1 *data.Pagination
 	var r2 error
-	if rf, ok := ret.Get(0).(func(string, *data.Pagination) ([]*data.Message, *data.Pagination, error)); ok {
-		return rf(channelID, page)
+	if rf, ok := ret.Get(0).(func(string, *data.Pagination, ...data.MsgStatus) ([]*data.Message, *data.Pagination, error)); ok {
+		return rf(channelID, page, statusFilters...)
 	}
-	if rf, ok := ret.Get(0).(func(string, *data.Pagination) []*data.Message); ok {
-		r0 = rf(channelID, page)
+	if rf, ok := ret.Get(0).(func(string, *data.Pagination, ...data.MsgStatus) []*data.Message); ok {
+		r0 = rf(channelID, page, statusFilters...)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]*data.Message)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(string, *data.Pagination) *data.Pagination); ok {
-		r1 = rf(channelID, page)
+	if rf, ok := ret.Get(1).(func(string, *data.Pagination, ...data.MsgStatus) *data.Pagination); ok {
+		r1 = rf(channelID, page, statusFilters...)
 	} else {
 		if ret.Get(1) != nil {
 			r1 = ret.Get(1).(*data.Pagination)
 		}
 	}
 
-	if rf, ok := ret.Get(2).(func(string, *data.Pagination) error); ok {
-		r2 = rf(channelID, page)
+	if rf, ok := ret.Get(2).(func(string, *data.Pagination, ...data.MsgStatus) error); ok {
+		r2 = rf(channelID, page, statusFilters...)
 	} else {
 		r2 = ret.Error(2)
 	}
