@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -203,9 +204,16 @@ func (msgRepo *MessageDBRepository) GetMessagesNotDispatchedForCertainPeriod(del
 }
 
 // GetMessagesForChannel retrieves messages broadcasted to a specific channel
-func (msgRepo *MessageDBRepository) GetMessagesForChannel(channelID string, page *data.Pagination) ([]*data.Message, *data.Pagination, error) {
+func (msgRepo *MessageDBRepository) GetMessagesForChannel(channelID string, page *data.Pagination, statusFilters ...data.MsgStatus) ([]*data.Message, *data.Pagination, error) {
 	nilMessages := make([]*data.Message, 0)
 	defaultEmptyPagination := &data.Pagination{}
+	statusFilterStrings := func(statusFilters []data.MsgStatus) []string {
+		result := make([]string, len(statusFilters))
+		for i, status := range statusFilters {
+			result[i] = strconv.Itoa(int(status))
+		}
+		return result
+	}
 	if page == nil || (page.Next != nil && page.Previous != nil) {
 		return nilMessages, defaultEmptyPagination, ErrPaginationDeadlock
 	}
@@ -213,7 +221,12 @@ func (msgRepo *MessageDBRepository) GetMessagesForChannel(channelID string, page
 	if err != nil {
 		return nilMessages, defaultEmptyPagination, err
 	}
-	baseQuery := messageSelectRowCommonQuery + " channelId like ?" + getPaginationQueryFragmentWithConfigurablePageSize(page, true, pageSizeWithOrder)
+	statusFilterQueryString := ""
+	if len(statusFilters) > 0 {
+		statusFilterQueryString = " AND status IN (" + strings.Join(statusFilterStrings(statusFilters), ",") + ")"
+	}
+
+	baseQuery := messageSelectRowCommonQuery + " channelId like ?" + statusFilterQueryString + getPaginationQueryFragmentWithConfigurablePageSize(page, true, pageSizeWithOrder)
 	return msgRepo.getMessages(baseQuery, appendWithPaginationArgs(page, channelID)...)
 }
 
@@ -267,6 +280,18 @@ func (msgRepo *MessageDBRepository) DeleteMessage(message *data.Message) error {
 		return inTransactionExec(tx, emptyOps, "DELETE FROM message WHERE id like ?", args2SliceFnWrapper(message.ID), 0)
 	})
 	return err
+}
+
+func (msgRepo *MessageDBRepository) GetMessageStatusCountsByChannel(channelID string) ([]*data.StatusCount[data.MsgStatus], error) {
+	result := make([]*data.StatusCount[data.MsgStatus], 0)
+	query := "SELECT status, count(id) FROM message WHERE channelId like ? GROUP BY status"
+	scanStatusCount := func() []interface{} {
+		statusCount := &data.StatusCount[data.MsgStatus]{}
+		result = append(result, statusCount)
+		return []interface{}{&statusCount.Status, &statusCount.Count}
+	}
+	err := queryRows(msgRepo.db, query, args2SliceFnWrapper(channelID), scanStatusCount)
+	return result, err
 }
 
 func (msgRepo *MessageDBRepository) DeleteMessagesAndJobs(ctx context.Context, messageIDs []string) error {

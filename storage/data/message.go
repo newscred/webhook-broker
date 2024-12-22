@@ -24,6 +24,10 @@ func (status MsgStatus) String() string {
 	}
 }
 
+func (status MsgStatus) GetValue() int {
+	return int(status)
+}
+
 const (
 	messageLockPrefix = "msg-"
 	// MsgStatusAcknowledged represents the state after receiving the message but before it is dispatched
