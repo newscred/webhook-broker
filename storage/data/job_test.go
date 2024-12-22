@@ -158,3 +158,46 @@ func TestDJString(t *testing.T) {
 	assert.Equal(t, JobQueuedStr, JobQueued.String())
 	assert.Equal(t, "1", JobStatus(1).String())
 }
+
+func TestGenericStatus(t *testing.T) {
+	t.Run("JobStatus", func(t *testing.T) {
+		status := JobStatus(JobQueued)
+		assert.Equal(t, JobQueuedStr, status.String())
+		assert.Equal(t, int(JobQueued), status.GetValue())
+
+		status = JobStatus(JobInflight)
+		assert.Equal(t, JobInflightStr, status.String())
+		assert.Equal(t, int(JobInflight), status.GetValue())
+
+		// and so on for other JobStatuses
+
+		status = JobStatus(1234) // Unknown status
+		assert.Equal(t, "1234", status.String())
+		assert.Equal(t, 1234, status.GetValue())
+
+		sc := StatusCount[JobStatus]{Status: status, Count: 5}
+		assert.Equal(t, 5, sc.Count)
+		assert.Equal(t, status, sc.Status)
+	})
+
+	t.Run("MsgStatus", func(t *testing.T) {
+		status := MsgStatus(MsgStatusAcknowledged)
+		assert.Equal(t, MsgStatusAcknowledgedStr, status.String())
+		assert.Equal(t, int(MsgStatusAcknowledged), status.GetValue())
+
+		status = MsgStatus(MsgStatusDispatched)
+		assert.Equal(t, MsgStatusDispatchedStr, status.String())
+		assert.Equal(t, int(MsgStatusDispatched), status.GetValue())
+
+		// and so on for other MsgStatuses
+
+		status = MsgStatus(5678) // Unknown status
+		assert.Equal(t, "5678", status.String())
+		assert.Equal(t, 5678, status.GetValue())
+
+		sc := StatusCount[MsgStatus]{Status: status, Count: 10}
+		assert.Equal(t, 10, sc.Count)
+		assert.Equal(t, status, sc.Status)
+	})
+
+}

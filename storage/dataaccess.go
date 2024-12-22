@@ -58,10 +58,11 @@ type MessageRepository interface {
 	GetByIDs(ids []string) ([]*data.Message, error)
 	SetDispatched(txContext context.Context, message *data.Message) error
 	GetMessagesNotDispatchedForCertainPeriod(delta time.Duration) []*data.Message
-	GetMessagesForChannel(channelID string, page *data.Pagination) ([]*data.Message, *data.Pagination, error)
+	GetMessagesForChannel(channelID string, page *data.Pagination, statusFilters ...data.MsgStatus) ([]*data.Message, *data.Pagination, error)
 	GetMessagesFromBeforeDurationThatAreCompletelyDelivered(delta time.Duration, absoluteMaxMessages int) []*data.Message
 	DeleteMessage(message *data.Message) error
 	DeleteMessagesAndJobs(ctx context.Context, messageIDs []string) error
+	GetMessageStatusCountsByChannel(channelID string) ([]*data.StatusCount[data.MsgStatus], error)
 }
 
 // DeliveryJobRepository allows storage operations over DeliveryJob
@@ -81,6 +82,7 @@ type DeliveryJobRepository interface {
 	GetJobsInflightSince(delta time.Duration) []*data.DeliveryJob
 	GetJobsReadyForInflightSince(delta time.Duration) []*data.DeliveryJob
 	DeleteJobsForMessage(message *data.Message) error
+	GetJobStatusCountsGroupedByConsumer() (map[Channel_ID]map[Consumer_ID][]*data.StatusCount[data.JobStatus], error)
 }
 
 // LockRepository allows storage operations over Lock

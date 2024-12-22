@@ -4,6 +4,7 @@ package mocks
 
 import (
 	data "github.com/newscred/webhook-broker/storage/data"
+	storage "github.com/newscred/webhook-broker/storage"
 	mock "github.com/stretchr/testify/mock"
 
 	time "time"
@@ -80,6 +81,36 @@ func (_m *DeliveryJobRepository) GetByID(id string) (*data.DeliveryJob, error) {
 
 	if rf, ok := ret.Get(1).(func(string) error); ok {
 		r1 = rf(id)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// GetJobStatusCountsGroupedByConsumer provides a mock function with given fields:
+func (_m *DeliveryJobRepository) GetJobStatusCountsGroupedByConsumer() (map[storage.Channel_ID]map[storage.Consumer_ID][]*data.StatusCount[data.JobStatus], error) {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetJobStatusCountsGroupedByConsumer")
+	}
+
+	var r0 map[storage.Channel_ID]map[storage.Consumer_ID][]*data.StatusCount[data.JobStatus]
+	var r1 error
+	if rf, ok := ret.Get(0).(func() (map[storage.Channel_ID]map[storage.Consumer_ID][]*data.StatusCount[data.JobStatus], error)); ok {
+		return rf()
+	}
+	if rf, ok := ret.Get(0).(func() map[storage.Channel_ID]map[storage.Consumer_ID][]*data.StatusCount[data.JobStatus]); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(map[storage.Channel_ID]map[storage.Consumer_ID][]*data.StatusCount[data.JobStatus])
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
 	} else {
 		r1 = ret.Error(1)
 	}

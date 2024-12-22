@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"slices"
 	"sort"
 	"testing"
 	"time"
@@ -508,4 +509,45 @@ func TestUpdateJobTimeout(t *testing.T) {
 		assert.GreaterOrEqual(t, dJob.UpdatedAt, oldTime)
 
 	})
+}
+
+func TestGetJobStatusCountsGroupedByConsumer(t *testing.T) {
+	djRepo := getDeliverJobRepository()
+	result, err := djRepo.GetJobStatusCountsGroupedByConsumer()
+	assert.Nil(t, err)
+	assert.Equal(t, 1, len(result))
+	// The following is an output from a sample run
+	// This is predictable since consumer ids are in alphabetical order in IDs
+	// Also since this is the last test and not parallel the state after the
+	// the package tests are executed should be same
+	// `map[channel1-for-consumer:
+	// 	map[ctjsidj3occ10ad6kjq0:[QUEUED: 9 INFLIGHT: 1]
+	// 		ctjsidj3occ10ad6kjqg:[QUEUED: 9 INFLIGHT: 1]
+	// 		ctjsidj3occ10ad6kjr0:[QUEUED: 9 DEAD: 1]
+	// 		ctjsidj3occ10ad6kjrg:[QUEUED: 9 DELIVERED: 1]
+	// 		ctjsidj3occ10ad6kjs0:[QUEUED: 10]
+	// 		ctjsidj3occ10ad6kjsg:[QUEUED: 8 INFLIGHT: 2]
+	// 		ctjsidj3occ10ad6kjt0:[QUEUED: 10]
+	// 		ctjsidj3occ10ad6kjtg:[QUEUED: 9 INFLIGHT: 1]
+	// 		ctjsidj3occ10ad6kju0:[QUEUED: 10]
+	// 		ctjsidj3occ10ad6kjug:[QUEUED: 10]]]`
+	channelID := Channel_ID(`channel1-for-consumer`)
+	assert.Equal(t, 10, len(result[channelID]))
+	consumerIds := make([]Consumer_ID, 0, len(result[channelID]))
+	for consumerID := range result[channelID] {
+		consumerIds = append(consumerIds, consumerID)
+	}
+	slices.Sort(consumerIds)
+	assert.Equal(t, data.JobQueued, result[channelID][consumerIds[0]][0].Status)
+	assert.Equal(t, 9, result[channelID][consumerIds[0]][0].Count)
+	assert.Equal(t, data.JobInflight, result[channelID][consumerIds[0]][1].Status)
+	assert.Equal(t, 1, result[channelID][consumerIds[0]][1].Count)
+	assert.Equal(t, data.JobQueued, result[channelID][consumerIds[1]][0].Status)
+	assert.Equal(t, 9, result[channelID][consumerIds[1]][0].Count)
+	assert.Equal(t, data.JobDead, result[channelID][consumerIds[2]][1].Status)
+	assert.Equal(t, 1, result[channelID][consumerIds[2]][1].Count)
+	assert.Equal(t, data.JobDelivered, result[channelID][consumerIds[3]][1].Status)
+	assert.Equal(t, 1, result[channelID][consumerIds[3]][1].Count)
+	assert.Equal(t, 10, result[channelID][consumerIds[4]][0].Count)
+	assert.Equal(t, data.JobQueued, result[channelID][consumerIds[4]][0].Status)
 }

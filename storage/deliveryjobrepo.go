@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -269,6 +270,49 @@ func (djRepo *DeliveryJobDBRepository) GetByID(id string) (job *data.DeliveryJob
 		job.Listener, err = djRepo.consumerRepository.GetByID(consumerID)
 	}
 	return job, err
+}
+
+type Channel_ID string
+type Consumer_ID string
+
+func (djRepo *DeliveryJobDBRepository) GetJobStatusCountsGroupedByConsumer() (map[Channel_ID]map[Consumer_ID][]*data.StatusCount[data.JobStatus], error) {
+	type statusRow struct {
+		channelId  string
+		consumerId string
+		status     data.JobStatus
+		count      int
+	}
+	rows := make([]*statusRow, 0)
+	query := `SELECT c.channelId, j.consumerId, j.status, count(j.id)
+FROM job j JOIN consumer c on j.consumerId = c.id
+GROUP BY c.channelId, j.consumerId, j.status`
+	scanStatusCount := func() []interface{} {
+		statusCount := &statusRow{}
+		rows = append(rows, statusCount)
+		return []interface{}{&statusCount.channelId, &statusCount.consumerId, &statusCount.status, &statusCount.count}
+	}
+	err := queryRows(djRepo.db, query, nilArgs, scanStatusCount)
+	log.Info().Msg("Query: " + query + "; Status rows: " + strconv.Itoa(len(rows)))
+	result := make(map[Channel_ID]map[Consumer_ID][]*data.StatusCount[data.JobStatus])
+	if err == nil {
+		for _, row := range rows {
+			channelID := Channel_ID(row.channelId)
+			consumerID := Consumer_ID(row.consumerId)
+			if _, ok := result[channelID]; !ok {
+				result[channelID] = make(map[Consumer_ID][]*data.StatusCount[data.JobStatus])
+			}
+			if _, ok := result[channelID][consumerID]; !ok {
+				result[channelID][consumerID] = make([]*data.StatusCount[data.JobStatus], 0)
+			}
+			result[channelID][consumerID] = append(result[channelID][consumerID], &data.StatusCount[data.JobStatus]{
+				Status: row.status,
+				Count:  row.count,
+			})
+		}
+	}
+	// The following log is for local dev/testing only
+	// log.Info().Msg("Result: " + fmt.Sprint(result))
+	return result, err
 }
 
 // NewDeliveryJobRepository creates a new instance of DeliveryJobRepository
