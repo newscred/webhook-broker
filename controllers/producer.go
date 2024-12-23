@@ -56,6 +56,7 @@ func isConditionalUpdateCalled(w http.ResponseWriter, r *http.Request, model dat
 func writeGetResult(err error, errFn func(w http.ResponseWriter), w http.ResponseWriter, msg interface{}) {
 	if err != nil {
 		errFn(w)
+		return
 	}
 	if stakeholder, ok := msg.(data.Updateable); ok {
 		w.Header().Add(headerLastModified, stakeholder.GetLastUpdatedHTTPTimeString())
