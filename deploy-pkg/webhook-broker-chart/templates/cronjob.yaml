@@ -1,0 +1,66 @@
+{{- if .Values.broker.dbPruning.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: prune-db
+  labels:
+    {{- include "webhook-broker-chart.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.broker.dbPruning.cronSchedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 10
+  failedJobsHistoryLimit: 10
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          {{- with .Values.podAnnotations }}
+          annotations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          labels:
+            {{- include "webhook-broker-chart.selectorLabels" . | nindent 12 }}
+        spec:
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          serviceAccountName: {{ include "webhook-broker-chart.serviceAccountName" . }}
+          securityContext:
+            {{- toYaml .Values.podSecurityContext | nindent 12 }}
+          containers:
+            - name: {{ .Chart.Name }}
+              securityContext:
+                {{- toYaml .Values.securityContext | nindent 16 }}
+              image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              command: ["/webhook-broker"]
+              args: ["-command", "prune", "-config", "/app-config/webhook-broker.cfg"]
+              volumeMounts:
+                - name: conf-vol
+                  mountPath: /app-config/
+                - name: persistent-vol
+                  mountPath: /mnt/ephemeral/
+              resources:
+                {{- toYaml .Values.resources | nindent 16 }}
+          restartPolicy: OnFailure
+          volumes:
+            - name: conf-vol
+              configMap:
+                name: w7b6-configmap
+            - name: persistent-vol
+              persistentVolumeClaim:
+                claimName: {{ include "webhook-broker-chart.fullname" . }}
+          {{- with .Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}
