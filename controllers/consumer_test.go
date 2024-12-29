@@ -23,6 +23,7 @@ import (
 
 var (
 	consumerRepo          storage.ConsumerRepository
+	cachedConsumerRepo    storage.PseudoConsumerRepository
 	callbackURL           *url.URL
 	consumerTestChannel   *data.Channel
 	deleteUnmodifiedSince string
@@ -41,6 +42,7 @@ const (
 // ChannelTestSetup is called from TestMain for the package
 func ConsumerTestSetup() {
 	consumerRepo = storage.NewConsumerRepository(db, channelRepo)
+	cachedConsumerRepo = storage.NewCachedConsumerRepository(consumerRepo, 2*time.Second)
 	channel, err := data.NewChannel(channelTestConsumerID, successfulGetTestToken)
 	if err != nil {
 		log.Fatal()
@@ -213,6 +215,20 @@ func TestConsumerGet(t *testing.T) {
 		getController := getNewChannelController(channelRepo)
 		testRouter := createTestRouter(getController)
 		req, _ := http.NewRequest("GET", "/channel/"+consumerTestChannel.ChannelID+"/consumer/"+time.Now().String(), nil)
+		rr := httptest.NewRecorder()
+		testRouter.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusNotFound, rr.Code)
+	})
+}
+
+func TestCachedConsumerGet(t *testing.T) {
+	t.Run("NotFound", func(t *testing.T) {
+		t.Parallel()
+		getConsumerController := getNewConsumerController(cachedConsumerRepo)
+		testRouter := createTestRouter(getConsumerController)
+		testURI := getConsumerController.FormatAsRelativeLink(httprouter.Param{Key: channelIDPathParamKey, Value: consumerTestChannel.ChannelID}, httprouter.Param{Key: consumerIDPathParamKey, Value: time.Now().String()})
+		t.Log(testURI)
+		req, _ := http.NewRequest("GET", testURI, nil)
 		rr := httptest.NewRecorder()
 		testRouter.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusNotFound, rr.Code)

@@ -21,6 +21,7 @@ import (
 )
 
 var channelRepo storage.ChannelRepository
+var cachedChannelRepo storage.PseudoChannelRepository
 
 const (
 	listTestChannelIDPrefix    = "controller-get-list-"
@@ -31,6 +32,7 @@ const (
 // ChannelTestSetup is called from TestMain for the package
 func ChannelTestSetup() {
 	channelRepo = storage.NewChannelRepository(db)
+	cachedChannelRepo = storage.NewCachedChannelRepository(channelRepo, 2*time.Second)
 	for index := 49; index > -1; index = index - 1 {
 		indexString := strconv.Itoa(index)
 		channel, err := data.NewChannel(listTestChannelIDPrefix+indexString, successfulGetTestToken+" - "+indexString)
@@ -141,6 +143,17 @@ func TestChannelGet(t *testing.T) {
 	t.Run("NotFound", func(t *testing.T) {
 		t.Parallel()
 		testRouter := createTestRouter(getNewChannelController(channelRepo))
+		req, _ := http.NewRequest("GET", "/channel/"+time.Now().String(), nil)
+		rr := httptest.NewRecorder()
+		testRouter.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusNotFound, rr.Code)
+	})
+}
+
+func TestCachedChannelGet(t *testing.T) {
+	t.Run("NotFound", func(t *testing.T) {
+		t.Parallel()
+		testRouter := createTestRouter(getNewChannelController(cachedChannelRepo))
 		req, _ := http.NewRequest("GET", "/channel/"+time.Now().String(), nil)
 		rr := httptest.NewRecorder()
 		testRouter.ServeHTTP(rr, req)
