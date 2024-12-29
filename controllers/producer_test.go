@@ -21,6 +21,7 @@ import (
 )
 
 var producerRepo storage.ProducerRepository
+var cachedProducerRepo storage.PseudoProducerRepository
 
 const (
 	successfulGetTestToken      = "sometokenforget"
@@ -32,6 +33,7 @@ const (
 // ProducerTestSetup is called from TestMain for the package
 func ProducerTestSetup() {
 	producerRepo = storage.NewProducerRepository(db)
+	cachedProducerRepo = storage.NewCachedProducerRepository(producerRepo, 2*time.Second)
 	for index := 47; index > -1; index = index - 1 {
 		indexString := strconv.Itoa(index)
 		producer, err := data.NewProducer(listTestProducerIDPrefix+indexString, successfulGetTestToken+" - "+indexString)
@@ -133,6 +135,17 @@ func TestProducerGet(t *testing.T) {
 	t.Run("NotFound", func(t *testing.T) {
 		t.Parallel()
 		testRouter := createTestRouter(NewProducerController(producerRepo))
+		req, _ := http.NewRequest("GET", "/producer/"+time.Now().String(), nil)
+		rr := httptest.NewRecorder()
+		testRouter.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusNotFound, rr.Code)
+	})
+}
+
+func TestCachedProducerGet(t *testing.T) {
+	t.Run("NotFound", func(t *testing.T) {
+		t.Parallel()
+		testRouter := createTestRouter(NewProducerController(cachedProducerRepo))
 		req, _ := http.NewRequest("GET", "/producer/"+time.Now().String(), nil)
 		rr := httptest.NewRecorder()
 		testRouter.ServeHTTP(rr, req)
