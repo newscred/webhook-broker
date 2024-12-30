@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -219,6 +220,29 @@ func TestMessagesGet(t *testing.T) {
 		json.NewDecoder(strings.NewReader(rr.Body.String())).Decode(bodyChannels)
 		assert.Equal(t, 0, len(bodyChannels.Result))
 	})
+	t.Run("SuccessWithFilters", func(t *testing.T) {
+		t.Parallel()
+		controller := getMessagesController()
+		testRouter := createTestRouter(controller)
+		req, _ := http.NewRequest(http.MethodGet, baseURL+"?status=102", nil)
+		rr := httptest.NewRecorder()
+		testRouter.ServeHTTP(rr, req)
+		bodyChannels := &ListResult{}
+		json.NewDecoder(strings.NewReader(rr.Body.String())).Decode(bodyChannels)
+		assert.Equal(t, 25, len(bodyChannels.Result))
+		req, _ = http.NewRequest(http.MethodGet, baseURL+"?status=101", nil)
+		rr = httptest.NewRecorder()
+		testRouter.ServeHTTP(rr, req)
+		bodyChannels = &ListResult{}
+		json.NewDecoder(strings.NewReader(rr.Body.String())).Decode(bodyChannels)
+		assert.Equal(t, 0, len(bodyChannels.Result))
+		req, _ = http.NewRequest(http.MethodGet, baseURL+"?status=101&status=102", nil)
+		rr = httptest.NewRecorder()
+		testRouter.ServeHTTP(rr, req)
+		bodyChannels = &ListResult{}
+		json.NewDecoder(strings.NewReader(rr.Body.String())).Decode(bodyChannels)
+		assert.Equal(t, 25, len(bodyChannels.Result))
+	})
 }
 
 func TestDLQFormatLinks(t *testing.T) {
@@ -386,5 +410,56 @@ func TestDLQRequeue(t *testing.T) {
 		testRouter.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusInternalServerError, rr.Code)
 		assert.Equal(t, rr.Body.String(), errExpected.Error())
+	})
+}
+
+func TestMessagesStatusController_Get(t *testing.T) {
+	channelID := "sample-channel"
+	msgRepo := new(storagemocks.MessageRepository)
+	djRepo := new(storagemocks.DeliveryJobRepository)
+	msgsStatusController := NewMessagesStatusController(NewMessagesController(NewMessageController(msgRepo, djRepo), msgRepo), msgRepo)
+
+	router := httprouter.New()
+	router.GET(messagesStatusPath, msgsStatusController.Get)
+
+	t.Run("GetMessageStatusCountsByChannel returns error", func(t *testing.T) {
+		msgRepo.On("GetMessageStatusCountsByChannel", channelID).Once().Return(nil, fmt.Errorf("some error"))
+		req, _ := http.NewRequest("GET", "/channel/"+channelID+"/messages-status", nil)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusInternalServerError, rr.Code)
+		msgRepo.AssertExpectations(t)
+	})
+
+	t.Run("GetMessageStatusCountsByChannel returns empty result", func(t *testing.T) {
+		msgRepo.On("GetMessageStatusCountsByChannel", channelID).Once().Return([]*data.StatusCount[data.MsgStatus]{}, nil)
+
+		req, _ := http.NewRequest("GET", "/channel/"+channelID+"/messages-status", nil)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusOK, rr.Code)
+		expected := `{"Counts": {}}`
+		assert.JSONEq(t, expected, rr.Body.String())
+		msgRepo.AssertExpectations(t)
+	})
+
+	t.Run("GetMessageStatusCountsByChannel returns results", func(t *testing.T) {
+		statusCounts := []*data.StatusCount[data.MsgStatus]{
+			{Status: data.MsgStatusAcknowledged, Count: 2},
+			{Status: data.MsgStatusDispatched, Count: 5},
+		}
+
+		msgRepo.On("GetMessageStatusCountsByChannel", channelID).Once().Return(statusCounts, nil)
+
+		req, _ := http.NewRequest("GET", "/channel/"+channelID+"/messages-status", nil)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusOK, rr.Code)
+		expected := `{"Counts": {"ACKNOWLEDGED": {"Count": 2, "Links": {"messages": "/channel/sample-channel/messages?status=101"}}, "DISPATCHED": {"Count": 5, "Links": {"messages": "/channel/sample-channel/messages?status=102"}}}}`
+		assert.JSONEq(t, expected, rr.Body.String())
+
+		msgRepo.AssertExpectations(t)
 	})
 }
