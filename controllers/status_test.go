@@ -12,8 +12,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rs/zerolog/log"
-
 	"github.com/julienschmidt/httprouter"
 	"github.com/newscred/webhook-broker/config"
 	"github.com/newscred/webhook-broker/storage"
@@ -30,6 +28,7 @@ var (
 )
 
 func TestMain(m *testing.M) {
+	os.Remove("./webhook-broker.sqlite3")
 	var err error
 	configuration, err = config.GetConfiguration("./controller-test-config.cfg")
 	if err == nil {
@@ -51,7 +50,7 @@ func TestMain(m *testing.M) {
 		}
 	}
 	if err != nil {
-		log.Fatal().Err(err)
+		panic(err)
 	}
 }
 
