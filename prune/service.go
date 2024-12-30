@@ -46,7 +46,7 @@ var (
 		dirPath := fmt.Sprintf("file://%s/%s", pruneConfig.GetExportPath(), pruneConfig.GetRemoteFilePrefix())
 		objectName := fmt.Sprintf("local_%s_%s.jsonl", pruneConfig.GetExportNodeName(), now)
 		log.Info().Msgf("Local archive path: %s, object name: %s", dirPath, objectName)
-		fileBucket, err := blob.OpenBucket(context.Background(), dirPath)
+		fileBucket, err := blob.OpenBucket(context.Background(), dirPath+"?no_tmp_dir=1")
 		if err != nil {
 			return nil, fmt.Errorf("failed to open local archive file: %w", err)
 		}
