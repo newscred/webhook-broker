@@ -448,6 +448,19 @@ func TestRequeueDeadJobsForConsumer(t *testing.T) {
 	jobs := getDeliveryJobsInFixture(message)
 	err = djRepo.DispatchMessage(message, jobs...)
 	testJobs := []*data.DeliveryJob{jobs[5], jobs2[5]}
+
+	t.Run("RequeueDeadJob", func(t *testing.T) {
+		sampleTestJob := jobs[5]
+		err := djRepo.MarkJobInflight(sampleTestJob)
+		assert.Nil(t, err)
+		err = djRepo.MarkJobDead(sampleTestJob)
+		assert.Nil(t, err)
+		err = djRepo.RequeueDeadJob(sampleTestJob)
+		assert.Nil(t, err)
+		err = djRepo.RequeueDeadJob(sampleTestJob)
+		assert.NotNil(t, err)
+	})
+
 	for _, testJob := range testJobs {
 		err := djRepo.MarkJobInflight(testJob)
 		assert.Nil(t, err)

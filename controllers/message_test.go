@@ -92,7 +92,7 @@ func getMessagesController() *MessagesController {
 func getDLQControllerWithMockedRepo() *DLQController {
 	consumerRepo := new(storagemocks.ConsumerRepository)
 	djRepo := new(storagemocks.DeliveryJobRepository)
-	return NewDLQController(getMessageController(), djRepo, consumerRepo)
+	return NewDLQController(getMessageController(), NewJobRequeueController(djRepo, channelRepo, consumerRepo), djRepo, consumerRepo)
 }
 
 func TestMessageFormatRelativeLink(t *testing.T) {
@@ -276,8 +276,10 @@ func TestDLQGet(t *testing.T) {
 			}
 		}
 		for _, deadJob := range bodyChannels.DeadJobs {
+			log.Debug().Msgf("DeadJob: %v", deadJob)
 			_, ok := expectedURLs[deadJob.MessageURL]
 			assert.True(t, ok)
+			assert.True(t, strings.HasSuffix(deadJob.JobRequeueURL, "/requeue-dead-job"))
 		}
 	})
 	t.Run("404", func(t *testing.T) {

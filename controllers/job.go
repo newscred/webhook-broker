@@ -19,6 +19,7 @@ const (
 	jobsPath            = consumerPath + "/queued-jobs"
 	jobIDPathParamKey   = "jobId"
 	jobPath             = consumerPath + "/job/:" + jobIDPathParamKey
+	jobRequeuePath      = consumerPath + "/job/:" + jobIDPathParamKey + "/requeue-dead-job"
 	defaultPageSize     = 25
 	maxPageSize         = 100
 )
@@ -165,6 +166,45 @@ func getConsumerWithValidation(w http.ResponseWriter, r *http.Request, params ht
 		valid = false
 	}
 	return consumer, valid
+}
+
+type JobRequeueController struct {
+	DeliveryJobRepo storage.DeliveryJobRepository
+	ChannelRepo     storage.ChannelRepository
+	ConsumerRepo    storage.ConsumerRepository
+}
+
+// NewJobRequeueController creates and returns a new instance of JobRequeueController
+func NewJobRequeueController(deliveryJobRepo storage.DeliveryJobRepository, channelRepo storage.ChannelRepository, consumerRepo storage.ConsumerRepository) *JobRequeueController {
+	return &JobRequeueController{DeliveryJobRepo: deliveryJobRepo, ChannelRepo: channelRepo, ConsumerRepo: consumerRepo}
+}
+
+// GetPath returns the endpoint's path
+func (controller *JobRequeueController) GetPath() string {
+	return jobRequeuePath
+}
+
+// FormatAsRelativeLink Format as relative URL of this resource based on the params
+func (controller *JobRequeueController) FormatAsRelativeLink(params ...httprouter.Param) string {
+	return formatURL(params, controller.GetPath(), channelIDPathParamKey, consumerIDPathParamKey, jobIDPathParamKey)
+}
+
+// Post implements the POST /channel/:channelId/consumer/:consumerId/job/:jobId/requeue-dead-job
+func (controller *JobRequeueController) Post(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+	job, valid := getJobWithValidation(w, r, params, controller.ChannelRepo, controller.ConsumerRepo, controller.DeliveryJobRepo)
+	if !valid {
+		return
+	}
+	if job.Status != data.JobDead {
+		writeStatus(w, http.StatusBadRequest, errJobDoesNotExist)
+		return
+	}
+	err := controller.DeliveryJobRepo.RequeueDeadJob(job)
+	if err == nil {
+		writeStatus(w, http.StatusAccepted, nil)
+	} else {
+		writeErr(w, err)
+	}
 }
 
 // JobController represents all endpoints related to a single job for a consumer

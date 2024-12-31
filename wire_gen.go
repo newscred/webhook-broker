@@ -43,7 +43,8 @@ func GetHTTPServer(cliConfig *config.CLIConfig) (*HTTPServiceContainer, error) {
 	messageRepository := newMessageRepository(dataAccessor)
 	deliveryJobRepository := newDeliveryJobRepository(dataAccessor)
 	messageController := controllers.NewMessageController(messageRepository, deliveryJobRepository)
-	dlqController := controllers.NewDLQController(messageController, deliveryJobRepository, consumerRepository)
+	jobRequeueController := controllers.NewJobRequeueController(deliveryJobRepository, channelRepository, consumerRepository)
+	dlqController := controllers.NewDLQController(messageController, jobRequeueController, deliveryJobRepository, consumerRepository)
 	consumerController := controllers.NewConsumerController(channelRepository, consumerRepository, dlqController)
 	consumersController := controllers.NewConsumersController(consumerController, consumerRepository)
 	messagesController := controllers.NewMessagesController(messageController, messageRepository)
@@ -78,6 +79,7 @@ func GetHTTPServer(cliConfig *config.CLIConfig) (*HTTPServiceContainer, error) {
 		DLQController:            dlqController,
 		ChannelsController:       channelsController,
 		MessagesStatusController: messagesStatusController,
+		JobRequeueController:     jobRequeueController,
 	}
 	router := controllers.NewRouter(controllersControllers)
 	server := controllers.ConfigureAPI(configConfig, serverLifecycleListenerImpl, router)

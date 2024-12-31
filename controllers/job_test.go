@@ -2,6 +2,8 @@ package controllers
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io/ioutil"
 	"math/rand"
 	"net/http"
@@ -876,4 +878,112 @@ func TestJobControllerPost_TransitionFailureTimeout(t *testing.T) {
 	for _, invalidTransition := range invalidTransitions {
 		runInvalidTransitionTest(invalidTransition.nextState, invalidTransition.timeout)
 	}
+}
+
+func TestJobRequeueController_Post(t *testing.T) {
+	repo := new(storagemocks.DeliveryJobRepository)
+	channelRepo := new(storagemocks.ChannelRepository)
+	consumerRepo := new(storagemocks.ConsumerRepository)
+
+	controller := NewJobRequeueController(repo, channelRepo, consumerRepo)
+	router := createTestRouter(controller)
+
+	channelID := "test-channel"
+	consumerID := "test-consumer"
+	jobID := "test-job-id"
+	token := "test-token"
+
+	t.Run("Invalid Job Status", func(t *testing.T) {
+		mockChannel, _ := data.NewChannel(channelID, token)
+		mockChannel.QuickFix()
+		channelRepo.On("Get", channelID).Return(mockChannel, nil)
+		mockConsumer, _ := data.NewConsumer(mockChannel, consumerID, token, callbackURL, data.PullConsumer.String())
+		mockConsumer.QuickFix()
+		consumerRepo.On("Get", channelID, consumerID).Return(mockConsumer, nil)
+		mockProducer, _ := data.NewProducer("test-producer", token)
+		mockProducer.QuickFix()
+		mockMsg, _ := data.NewMessage(mockChannel, mockProducer, "test-payload", "text/plain", data.HeadersMap{})
+		mockMsg.QuickFix()
+		job, _ := data.NewDeliveryJob(mockMsg, mockConsumer)
+		job.QuickFix()
+		job.Status = data.JobQueued
+		repo.On("GetByID", jobID).Return(job, nil).Once()
+
+		url := fmt.Sprintf("/channel/%s/consumer/%s/job/%s/requeue-dead-job", channelID, consumerID, jobID)
+		req, _ := http.NewRequest("POST", url, nil)
+		req.Header.Set(headerChannelToken, token)
+		req.Header.Set(headerConsumerToken, token)
+		rr := httptest.NewRecorder()
+
+		router.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusBadRequest, rr.Code)
+		repo.AssertExpectations(t)
+		channelRepo.AssertExpectations(t)
+		consumerRepo.AssertExpectations(t)
+
+	})
+
+	t.Run("Job Requeue Successful", func(t *testing.T) {
+		mockChannel, _ := data.NewChannel(channelID, token)
+		mockChannel.QuickFix()
+		channelRepo.On("Get", channelID).Return(mockChannel, nil)
+		mockConsumer, _ := data.NewConsumer(mockChannel, consumerID, token, callbackURL, data.PullConsumer.String())
+		mockConsumer.QuickFix()
+		consumerRepo.On("Get", channelID, consumerID).Return(mockConsumer, nil)
+		mockProducer, _ := data.NewProducer("test-producer", token)
+		mockProducer.QuickFix()
+		mockMsg, _ := data.NewMessage(mockChannel, mockProducer, "test-payload", "text/plain", data.HeadersMap{})
+		mockMsg.QuickFix()
+		job, _ := data.NewDeliveryJob(mockMsg, mockConsumer)
+		job.QuickFix()
+		job.Status = data.JobDead
+		repo.On("GetByID", jobID).Return(job, nil).Once()
+		repo.On("RequeueDeadJob", job).Return(nil).Once()
+
+		url := fmt.Sprintf("/channel/%s/consumer/%s/job/%s/requeue-dead-job", channelID, consumerID, jobID)
+		req, _ := http.NewRequest("POST", url, nil)
+		req.Header.Set(headerChannelToken, token)
+		req.Header.Set(headerConsumerToken, token)
+
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusAccepted, rr.Code)
+		repo.AssertExpectations(t)
+		channelRepo.AssertExpectations(t)
+		consumerRepo.AssertExpectations(t)
+	})
+
+	t.Run("Job Requeue Error", func(t *testing.T) {
+		expectedErr := errors.New("requeue error")
+		mockChannel, _ := data.NewChannel(channelID, token)
+		mockChannel.QuickFix()
+		channelRepo.On("Get", channelID).Return(mockChannel, nil)
+		mockConsumer, _ := data.NewConsumer(mockChannel, consumerID, token, callbackURL, data.PullConsumer.String())
+		mockConsumer.QuickFix()
+		consumerRepo.On("Get", channelID, consumerID).Return(mockConsumer, nil)
+		mockProducer, _ := data.NewProducer("test-producer", token)
+		mockProducer.QuickFix()
+		mockMsg, _ := data.NewMessage(mockChannel, mockProducer, "test-payload", "text/plain", data.HeadersMap{})
+		mockMsg.QuickFix()
+		job, _ := data.NewDeliveryJob(mockMsg, mockConsumer)
+		job.QuickFix()
+		job.Status = data.JobDead
+		repo.On("GetByID", jobID).Return(job, nil).Once()
+		repo.On("RequeueDeadJob", job).Return(expectedErr).Once()
+
+		url := fmt.Sprintf("/channel/%s/consumer/%s/job/%s/requeue-dead-job", channelID, consumerID, jobID)
+		req, _ := http.NewRequest("POST", url, nil)
+		req.Header.Set(headerChannelToken, token)
+		req.Header.Set(headerConsumerToken, token)
+
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusInternalServerError, rr.Code)
+		assert.Equal(t, expectedErr.Error(), rr.Body.String())
+
+		repo.AssertExpectations(t)
+		channelRepo.AssertExpectations(t)
+		consumerRepo.AssertExpectations(t)
+	})
 }
