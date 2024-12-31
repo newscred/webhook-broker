@@ -290,15 +290,17 @@ func (djRepo *DeliveryJobDBRepository) GetJobStatusCountsGroupedByConsumer() (ma
 		consumerId string
 		status     data.JobStatus
 		count      int
+		oldest     string
+		newest     string
 	}
 	rows := make([]*statusRow, 0)
-	query := `SELECT c.channelId, j.consumerId, j.status, count(j.id)
+	query := `SELECT c.channelId, j.consumerId, j.status, count(j.id), min(j.statusChangedAt), max(j.statusChangedAt)
 FROM job j JOIN consumer c on j.consumerId = c.id
 GROUP BY c.channelId, j.consumerId, j.status`
 	scanStatusCount := func() []interface{} {
 		statusCount := &statusRow{}
 		rows = append(rows, statusCount)
-		return []interface{}{&statusCount.channelId, &statusCount.consumerId, &statusCount.status, &statusCount.count}
+		return []interface{}{&statusCount.channelId, &statusCount.consumerId, &statusCount.status, &statusCount.count, &statusCount.oldest, &statusCount.newest}
 	}
 	err := queryRows(djRepo.db, query, nilArgs, scanStatusCount)
 	log.Info().Msg("Query: " + query + "; Status rows: " + strconv.Itoa(len(rows)))
@@ -314,8 +316,10 @@ GROUP BY c.channelId, j.consumerId, j.status`
 				result[channelID][consumerID] = make([]*data.StatusCount[data.JobStatus], 0)
 			}
 			result[channelID][consumerID] = append(result[channelID][consumerID], &data.StatusCount[data.JobStatus]{
-				Status: row.status,
-				Count:  row.count,
+				Status:              row.status,
+				Count:               row.count,
+				OldestItemTimestamp: row.oldest,
+				NewestItemTimestamp: row.newest,
 			})
 		}
 	}

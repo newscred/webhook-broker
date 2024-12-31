@@ -94,6 +94,17 @@ func TestGetMessageStatusCountsByChannel(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, 2, len(counts))
 	assert.Equal(t, 1, counts[0].Count)
+	assert.NotNil(t, counts[0].Status)
+	log.Debug().Msg(counts[0].OldestItemTimestamp)
+	currentTime := time.Now()
+	formattedTime := time.Date(currentTime.Year(), currentTime.Month(), currentTime.Day(), 0, 0, 0, 0, currentTime.Location()).Format("2006-01-02 15:04:05.1231234Z07:00")
+	assert.NotNil(t, counts[0].OldestItemTimestamp)
+	assert.True(t, len(counts[0].OldestItemTimestamp) > 10)
+	assert.Less(t, formattedTime, counts[0].OldestItemTimestamp)
+	assert.NotNil(t, counts[0].NewestItemTimestamp)
+	assert.True(t, len(counts[0].NewestItemTimestamp) > 10)
+	assert.Less(t, formattedTime, counts[0].NewestItemTimestamp)
+	assert.LessOrEqual(t, counts[0].OldestItemTimestamp, counts[0].NewestItemTimestamp)
 	assert.Equal(t, 1, counts[1].Count)
 }
 

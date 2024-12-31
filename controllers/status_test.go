@@ -139,14 +139,14 @@ func TestJobStatusController_Get(t *testing.T) {
 		jobStatus := map[storage.Channel_ID]map[storage.Consumer_ID][]*data.StatusCount[data.JobStatus]{
 			storage.Channel_ID("channel1"): {
 				storage.Consumer_ID("consumer1"): []*data.StatusCount[data.JobStatus]{
-					{Status: data.JobQueued, Count: 2},
-					{Status: data.JobDead, Count: 5},
+					{Status: data.JobQueued, Count: 2, OldestItemTimestamp: "oldest", NewestItemTimestamp: "newest"},
+					{Status: data.JobDead, Count: 5, OldestItemTimestamp: "oldest", NewestItemTimestamp: "newest"},
 				},
 			},
 			storage.Channel_ID("channel2"): {
 				storage.Consumer_ID("consumer2"): []*data.StatusCount[data.JobStatus]{
-					{Status: data.JobInflight, Count: 1},
-					{Status: data.JobDelivered, Count: 3},
+					{Status: data.JobInflight, Count: 1, OldestItemTimestamp: "oldest", NewestItemTimestamp: "newest"},
+					{Status: data.JobDelivered, Count: 3, OldestItemTimestamp: "oldest", NewestItemTimestamp: "newest"},
 				},
 			},
 		}
