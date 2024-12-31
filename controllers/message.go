@@ -33,7 +33,8 @@ type DeliveryJobModel struct {
 // DeadDeliveryJobModel is a DeliveryJobModel with reference to its message and to be used for DLQ
 type DeadDeliveryJobModel struct {
 	DeliveryJobModel
-	MessageURL string
+	MessageURL    string
+	JobRequeueURL string
 }
 
 // DLQList represents the list of jobs that are dead
@@ -91,12 +92,16 @@ func newDeliveryJobModel(job *data.DeliveryJob) *DeliveryJobModel {
 	}
 }
 
-func newDeadDeliveryJobs(msgController EndpointController, jobs ...*data.DeliveryJob) []*DeadDeliveryJobModel {
+func newDeadDeliveryJobs(msgController EndpointController, jobRequeueController EndpointController, jobs ...*data.DeliveryJob) []*DeadDeliveryJobModel {
 	result := make([]*DeadDeliveryJobModel, 0, len(jobs))
 	for _, job := range jobs {
-		messageURL := msgController.FormatAsRelativeLink(httprouter.Param{Key: channelIDPathParamKey, Value: job.Message.BroadcastedTo.ChannelID},
+		channelIDParam := httprouter.Param{Key: channelIDPathParamKey, Value: job.Message.BroadcastedTo.ChannelID}
+		messageURL := msgController.FormatAsRelativeLink(channelIDParam,
 			httprouter.Param{Key: messageIDParamKey, Value: job.Message.MessageID})
-		result = append(result, &DeadDeliveryJobModel{DeliveryJobModel: *newDeliveryJobModel(job), MessageURL: messageURL})
+		jobRequeueURL := jobRequeueController.FormatAsRelativeLink(channelIDParam,
+			httprouter.Param{Key: consumerIDPathParamKey, Value: job.Listener.ConsumerID},
+			httprouter.Param{Key: jobIDPathParamKey, Value: job.ID.String()})
+		result = append(result, &DeadDeliveryJobModel{DeliveryJobModel: *newDeliveryJobModel(job), MessageURL: messageURL, JobRequeueURL: jobRequeueURL})
 	}
 	return result
 }
@@ -260,14 +265,15 @@ func (messagesStatusController *MessagesStatusController) Get(w http.ResponseWri
 
 // DLQController represents the GET and POST endpoint for reading dead and requeuing all dead messages for delivery.
 type DLQController struct {
-	MessageController EndpointController
-	DeliveryJobRepo   storage.DeliveryJobRepository
-	ConsumerRepo      storage.ConsumerRepository
+	MessageController    EndpointController
+	DeliveryJobRepo      storage.DeliveryJobRepository
+	ConsumerRepo         storage.ConsumerRepository
+	JobRequeueController EndpointController
 }
 
 // NewDLQController retrieves the controller for DLQ list and requeue endpoints
-func NewDLQController(msgController *MessageController, djRepo storage.DeliveryJobRepository, consumerRepo storage.ConsumerRepository) *DLQController {
-	return &DLQController{MessageController: msgController, DeliveryJobRepo: djRepo, ConsumerRepo: consumerRepo}
+func NewDLQController(msgController *MessageController, jobRequeueController *JobRequeueController, djRepo storage.DeliveryJobRepository, consumerRepo storage.ConsumerRepository) *DLQController {
+	return &DLQController{MessageController: msgController, JobRequeueController: jobRequeueController, DeliveryJobRepo: djRepo, ConsumerRepo: consumerRepo}
 }
 
 // GetPath returns the endpoint's path
@@ -286,7 +292,7 @@ func (controller *DLQController) Get(w http.ResponseWriter, r *http.Request, par
 	if consumer != nil {
 		deadJobs, resultPagination, err := controller.DeliveryJobRepo.GetJobsForConsumer(consumer, data.JobDead, getPagination(r))
 		if err == nil {
-			data := &DLQList{DeadJobs: newDeadDeliveryJobs(controller.MessageController, deadJobs...), Pages: getPaginationLinks(r, resultPagination)}
+			data := &DLQList{DeadJobs: newDeadDeliveryJobs(controller.MessageController, controller.JobRequeueController, deadJobs...), Pages: getPaginationLinks(r, resultPagination)}
 			writeJSON(w, data)
 		} else {
 			writeErr(w, err)

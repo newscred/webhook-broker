@@ -228,6 +228,15 @@ func (djRepo *DeliveryJobDBRepository) RequeueDeadJobsForConsumer(consumer *data
 	return err
 }
 
+// RequeueDeadJob queues up a dead job
+func (djRepo *DeliveryJobDBRepository) RequeueDeadJob(job *data.DeliveryJob) (err error) {
+	currentTime := time.Now()
+	err = transactionalWrites(djRepo.db, func(tx *sql.Tx) error {
+		return inTransactionExec(tx, emptyOps, "UPDATE job SET status = ?, statusChangedAt = ?, updatedAt = ?, retryAttemptCount = ? WHERE id like ? and status = ?", args2SliceFnWrapper(data.JobQueued, currentTime, currentTime, 0, job.ID, data.JobDead), 1)
+	})
+	return err
+}
+
 // GetJobsForConsumer retrieves DeliveryJob created for delivery to a customer and it has to be filtered by a specific status
 func (djRepo *DeliveryJobDBRepository) GetJobsForConsumer(consumer *data.Consumer, jobStatus data.JobStatus, page *data.Pagination) ([]*data.DeliveryJob, *data.Pagination, error) {
 	if page == nil || (page.Next != nil && page.Previous != nil) {

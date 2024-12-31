@@ -4,8 +4,9 @@ package mocks
 
 import (
 	data "github.com/newscred/webhook-broker/storage/data"
-	storage "github.com/newscred/webhook-broker/storage"
 	mock "github.com/stretchr/testify/mock"
+
+	storage "github.com/newscred/webhook-broker/storage"
 
 	time "time"
 )
@@ -367,6 +368,24 @@ func (_m *DeliveryJobRepository) MarkQueuedJobAsDead(deliveryJob *data.DeliveryJ
 	var r0 error
 	if rf, ok := ret.Get(0).(func(*data.DeliveryJob) error); ok {
 		r0 = rf(deliveryJob)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// RequeueDeadJob provides a mock function with given fields: job
+func (_m *DeliveryJobRepository) RequeueDeadJob(job *data.DeliveryJob) error {
+	ret := _m.Called(job)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RequeueDeadJob")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*data.DeliveryJob) error); ok {
+		r0 = rf(job)
 	} else {
 		r0 = ret.Error(0)
 	}

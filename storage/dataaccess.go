@@ -83,6 +83,7 @@ type DeliveryJobRepository interface {
 	GetJobsReadyForInflightSince(delta time.Duration) []*data.DeliveryJob
 	DeleteJobsForMessage(message *data.Message) error
 	GetJobStatusCountsGroupedByConsumer() (map[Channel_ID]map[Consumer_ID][]*data.StatusCount[data.JobStatus], error)
+	RequeueDeadJob(job *data.DeliveryJob) (err error)
 }
 
 // LockRepository allows storage operations over Lock
