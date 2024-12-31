@@ -110,3 +110,66 @@ func TestStatus_JSONMarshalError(t *testing.T) {
 	assert.Equal(t, err.Error(), rr.Body.String())
 	mAppRepo.AssertExpectations(t)
 }
+
+func TestJobStatusController_Get(t *testing.T) {
+	repo := new(storagemocks.DeliveryJobRepository)
+	controller := NewJobStatusController(repo)
+	router := createTestRouter(controller)
+
+	t.Run("GetJobStatusCountsGroupedByConsumer returns error", func(t *testing.T) {
+		mockCall := repo.On("GetJobStatusCountsGroupedByConsumer").Return(nil, errors.New("some-error"))
+		req, _ := http.NewRequest("GET", "/job-status", nil)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusInternalServerError, rr.Code)
+		mockCall.Unset()
+	})
+
+	t.Run("GetJobStatusCountsGroupedByConsumer returns empty result", func(t *testing.T) {
+		mockCall := repo.On("GetJobStatusCountsGroupedByConsumer").Return(map[storage.Channel_ID]map[storage.Consumer_ID][]*data.StatusCount[data.JobStatus]{}, nil) // Return empty map
+		req, _ := http.NewRequest("GET", "/job-status", nil)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusOK, rr.Code)
+		assert.JSONEq(t, "{}", rr.Body.String()) // Empty JSON object expected
+		mockCall.Unset()
+	})
+
+	t.Run("GetJobStatusCountsGroupedByConsumer returns results", func(t *testing.T) {
+		jobStatus := map[storage.Channel_ID]map[storage.Consumer_ID][]*data.StatusCount[data.JobStatus]{
+			storage.Channel_ID("channel1"): {
+				storage.Consumer_ID("consumer1"): []*data.StatusCount[data.JobStatus]{
+					{Status: data.JobQueued, Count: 2},
+					{Status: data.JobDead, Count: 5},
+				},
+			},
+			storage.Channel_ID("channel2"): {
+				storage.Consumer_ID("consumer2"): []*data.StatusCount[data.JobStatus]{
+					{Status: data.JobInflight, Count: 1},
+					{Status: data.JobDelivered, Count: 3},
+				},
+			},
+		}
+
+		mockCall := repo.On("GetJobStatusCountsGroupedByConsumer").Return(jobStatus, nil)
+		req, _ := http.NewRequest("GET", "/job-status", nil)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusOK, rr.Code)
+
+		// Marshal and unmarshal to handle map comparison and ordering
+		var actual interface{}
+		err := json.Unmarshal(rr.Body.Bytes(), &actual)
+		assert.NoError(t, err)
+
+		expectedJSON, err := json.Marshal(jobStatus)
+		assert.NoError(t, err)
+		var expected interface{}
+		err = json.Unmarshal(expectedJSON, &expected)
+		assert.NoError(t, err)
+
+		assert.Equal(t, expected, actual)
+
+		mockCall.Unset()
+	})
+}
