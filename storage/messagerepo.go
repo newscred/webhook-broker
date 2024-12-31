@@ -284,11 +284,11 @@ func (msgRepo *MessageDBRepository) DeleteMessage(message *data.Message) error {
 
 func (msgRepo *MessageDBRepository) GetMessageStatusCountsByChannel(channelID string) ([]*data.StatusCount[data.MsgStatus], error) {
 	result := make([]*data.StatusCount[data.MsgStatus], 0)
-	query := "SELECT status, count(id) FROM message WHERE channelId like ? GROUP BY status"
+	query := "SELECT status, count(id), min(receivedAt) as oldestItemTimestamp, max(receivedAt) as newestItemTimestamp FROM message WHERE channelId like ? GROUP BY status"
 	scanStatusCount := func() []interface{} {
 		statusCount := &data.StatusCount[data.MsgStatus]{}
 		result = append(result, statusCount)
-		return []interface{}{&statusCount.Status, &statusCount.Count}
+		return []interface{}{&statusCount.Status, &statusCount.Count, &statusCount.OldestItemTimestamp, &statusCount.NewestItemTimestamp}
 	}
 	err := queryRows(msgRepo.db, query, args2SliceFnWrapper(channelID), scanStatusCount)
 	return result, err

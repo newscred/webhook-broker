@@ -29,20 +29,22 @@ func (status JobStatus) GetValue() int {
 }
 
 // Status represents a generic status with string conversion.
-type Status[T ~int] interface {
+type Status interface {
 	String() string
 	// GetValue returns the underlying status value.  This is necessary
 	// since the String() method might perform formatting.
-	GetValue() T
+	GetValue() int
 }
 
-type StatusCount[T ~int] struct {
-	Status T   `json:"status"`
-	Count  int `json:"count"`
+type StatusCount[T Status] struct {
+	Status              T      `json:"status"`
+	Count               int    `json:"count"`
+	OldestItemTimestamp string `json:"oldestItemTimestamp"`
+	NewestItemTimestamp string `json:"newestItemTimestamp"`
 }
 
 func (sc StatusCount[T]) String() string {
-	return fmt.Sprint(sc.Status, ": ", sc.Count)
+	return fmt.Sprintf("%s: %d, Oldest: %s, Newest: %s", sc.Status, sc.Count, sc.OldestItemTimestamp, sc.NewestItemTimestamp)
 }
 
 const (

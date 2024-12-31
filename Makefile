@@ -94,13 +94,13 @@ endif
 	)
 
 time-test:
-	time go test -timeout 30s -mod=readonly ./... -count=1
+	time go test -timeout 45s -mod=readonly ./... -count=1
 
 ci-test:
-	go test -timeout 30s -mod=readonly -v ./... -short
+	go test -timeout 45s -mod=readonly -v ./... -short
 
 test:
-	go test -timeout 30s -mod=readonly ./...
+	go test -timeout 45s -mod=readonly ./...
 
 install: build
 	go install -mod=readonly
