@@ -14,7 +14,8 @@ import (
 
 const (
 	jobPropertyCount     = 11
-	jobCommonSelectQuery = "SELECT id, messageId, consumerId, status, dispatchReceivedAt, retryAttemptCount, statusChangedAt, earliestNextAttemptAt, createdAt, updatedAt, priority, incrementalTimeout FROM job WHERE"
+	jobCommonProjection  = "SELECT id, messageId, consumerId, status, dispatchReceivedAt, retryAttemptCount, statusChangedAt, earliestNextAttemptAt, createdAt, updatedAt, priority, incrementalTimeout"
+	jobCommonSelectQuery = jobCommonProjection + " FROM job WHERE"
 )
 
 // DeliveryJobDBRepository is the DeliveryJobRepository's RDBMS implementation
@@ -177,6 +178,10 @@ func (djRepo *DeliveryJobDBRepository) getJobs(baseQuery string, message *data.M
 }
 
 func (djRepo *DeliveryJobDBRepository) getJobsForStatusAndDelta(status data.JobStatus, delta time.Duration, useStatusChangedAt bool) []*data.DeliveryJob {
+	return djRepo.getJobsForStatusAndDeltaWithCustomQuery(status, delta, useStatusChangedAt, jobCommonSelectQuery, "")
+}
+
+func (djRepo *DeliveryJobDBRepository) getJobsForStatusAndDeltaWithCustomQuery(status data.JobStatus, delta time.Duration, useStatusChangedAt bool, jobQueryBase string, jobAlias string) []*data.DeliveryJob {
 	jobs := make([]*data.DeliveryJob, 0)
 	page := data.NewPagination(nil, nil)
 	if delta > 0 {
@@ -187,8 +192,16 @@ func (djRepo *DeliveryJobDBRepository) getJobsForStatusAndDelta(status data.JobS
 	if useStatusChangedAt {
 		dateCol = "statusChangedAt"
 	}
+	orderBy := largePageSizeWithOrder
+	aliasPrefix := ""
+	if len(jobAlias) > 0 {
+		orderBy = getOrderByClauseWithAlias(jobAlias, LIMIT_100_SUFFIX)
+		aliasPrefix = jobAlias + "."
+	}
+	commonBaseQuery := jobQueryBase + fmt.Sprintf(" %sstatus = ? AND  %s%s <= ?", aliasPrefix, aliasPrefix, dateCol)
+	log.Debug().Msgf("JobsForStatusAndDeltaWithCustomQuery for status %s common query: %s", status, commonBaseQuery)
 	for more {
-		baseQuery := jobCommonSelectQuery + " status = ? AND " + dateCol + " <= ?" + getPaginationQueryFragmentWithConfigurablePageSize(page, true, largePageSizeWithOrder)
+		baseQuery := commonBaseQuery + getPaginationQueryFragmentWithConfigurablePageSizeWithAlias(page, true, orderBy, jobAlias)
 		pageJobs, pagination, err := djRepo.getJobs(baseQuery, nil, nil, appendWithPaginationArgs(page, status, time.Now().Add(delta)))
 		if err == nil {
 			jobs = append(jobs, pageJobs...)
@@ -260,8 +273,11 @@ func (djRepo *DeliveryJobDBRepository) GetJobsInflightSince(delta time.Duration)
 }
 
 // GetJobsReadyForInflightSince retrieves jobs in queued status and earliestNextAttemptAt < `now`-delta
-func (djRepo *DeliveryJobDBRepository) GetJobsReadyForInflightSince(delta time.Duration) []*data.DeliveryJob {
-	return djRepo.getJobsForStatusAndDelta(data.JobQueued, delta, false)
+func (djRepo *DeliveryJobDBRepository) GetJobsReadyForInflightSince(delta time.Duration, retryThreshold int) []*data.DeliveryJob {
+	query := fmt.Sprintf(`SELECT b.id as id, messageId, b.consumerId as consumerId, status, dispatchReceivedAt, retryAttemptCount, statusChangedAt, earliestNextAttemptAt, b.createdAt as createdAt, b.updatedAt as updatedAt, priority, incrementalTimeout
+FROM job as b join consumer as c on b.consumerId = c.id
+WHERE (c.type = %d OR retryAttemptCount >= %d) AND`, data.PushConsumer, retryThreshold)
+	return djRepo.getJobsForStatusAndDeltaWithCustomQuery(data.JobQueued, delta, false, query, "b")
 }
 
 // GetByID loads the delivery job with specified id if it exists, else returns an error

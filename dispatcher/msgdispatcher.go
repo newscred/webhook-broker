@@ -142,7 +142,7 @@ var (
 
 	retryQueuedJobs = func(msgDispatcher *MessageDispatcherImpl) {
 		defer genericPanicRecoveryFunc()
-		jobs := msgDispatcher.djRepo.GetJobsReadyForInflightSince(msgDispatcher.rationalDelay)
+		jobs := msgDispatcher.djRepo.GetJobsReadyForInflightSince(msgDispatcher.rationalDelay, int(msgDispatcher.brokerConfig.GetMaxRetry()))
 		for _, job := range jobs {
 			if job.Listener.Type == data.PullConsumer {
 				if job.RetryAttemptCount >= uint(msgDispatcher.brokerConfig.GetMaxRetry()) {

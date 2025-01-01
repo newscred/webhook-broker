@@ -80,7 +80,7 @@ type DeliveryJobRepository interface {
 	GetPrioritizedJobsForConsumer(consumer *data.Consumer, jobStatus data.JobStatus, pageSize int) ([]*data.DeliveryJob, error)
 	GetByID(id string) (*data.DeliveryJob, error)
 	GetJobsInflightSince(delta time.Duration) []*data.DeliveryJob
-	GetJobsReadyForInflightSince(delta time.Duration) []*data.DeliveryJob
+	GetJobsReadyForInflightSince(delta time.Duration, retryThreshold int) []*data.DeliveryJob
 	DeleteJobsForMessage(message *data.Message) error
 	GetJobStatusCountsGroupedByConsumer() (map[Channel_ID]map[Consumer_ID][]*data.StatusCount[data.JobStatus], error)
 	RequeueDeadJob(job *data.DeliveryJob) (err error)

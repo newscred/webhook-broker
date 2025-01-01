@@ -217,17 +217,17 @@ func (_m *DeliveryJobRepository) GetJobsInflightSince(delta time.Duration) []*da
 	return r0
 }
 
-// GetJobsReadyForInflightSince provides a mock function with given fields: delta
-func (_m *DeliveryJobRepository) GetJobsReadyForInflightSince(delta time.Duration) []*data.DeliveryJob {
-	ret := _m.Called(delta)
+// GetJobsReadyForInflightSince provides a mock function with given fields: delta, retryThreshold
+func (_m *DeliveryJobRepository) GetJobsReadyForInflightSince(delta time.Duration, retryThreshold int) []*data.DeliveryJob {
+	ret := _m.Called(delta, retryThreshold)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetJobsReadyForInflightSince")
 	}
 
 	var r0 []*data.DeliveryJob
-	if rf, ok := ret.Get(0).(func(time.Duration) []*data.DeliveryJob); ok {
-		r0 = rf(delta)
+	if rf, ok := ret.Get(0).(func(time.Duration, int) []*data.DeliveryJob); ok {
+		r0 = rf(delta, retryThreshold)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]*data.DeliveryJob)
