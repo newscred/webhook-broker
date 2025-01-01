@@ -83,10 +83,10 @@ var deliverJob = func(w *Worker, job *Job) {
 		logger.Debug().Msg("delivered job")
 		err = w.djRepo.MarkJobDelivered(job.Data)
 	} else if job.Data.RetryAttemptCount >= uint(w.brokerConfig.GetMaxRetry()) {
-		logger.Debug().Err(err).Msg("job marked dead")
+		logger.Debug().Err(err).Msgf("job marked dead; message: %s, channel: %s, consumer: %s, job: %s", job.Data.Message.MessageID, job.Data.Message.BroadcastedTo.ChannelID, job.Data.Listener.ConsumerID, job.Data.ID.String())
 		err = w.djRepo.MarkJobDead(job.Data)
 	} else {
-		logger.Debug().Err(err).Msg("schedule for retry job ")
+		logger.Debug().Err(err).Msgf("schedule for retry job; message: %s, channel: %s, consumer: %s, job: %s", job.Data.Message.MessageID, job.Data.Message.BroadcastedTo.ChannelID, job.Data.Listener.ConsumerID, job.Data.ID.String())
 		err = w.djRepo.MarkJobRetry(job.Data, w.earliestDelta(job.Data.RetryAttemptCount+1))
 	}
 	if err != nil {
