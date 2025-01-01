@@ -30,6 +30,15 @@ type DeliveryJobModel struct {
 	StatusChangedAt  time.Time
 }
 
+type HyperlinkedDeliveryJobModel struct {
+	DeliveryJobModel
+	MessageURL    string
+	ChannelURL    string
+	ConsumerURL   string
+	ProducerURL   string
+	JobRequeueURL string
+}
+
 // DeadDeliveryJobModel is a DeliveryJobModel with reference to its message and to be used for DLQ
 type DeadDeliveryJobModel struct {
 	DeliveryJobModel
