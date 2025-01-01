@@ -285,7 +285,7 @@ func TestStatusUpdatesForJob(t *testing.T) {
 }
 
 func TestStatusBasedJobsListing(t *testing.T) {
-	t.Run("SuccessRetryList", func(t *testing.T) {
+	t.Run("RetryListQueryError", func(t *testing.T) {
 		t.Parallel()
 		var buf bytes.Buffer
 		oldLogger := log.Logger
@@ -302,32 +302,44 @@ func TestStatusBasedJobsListing(t *testing.T) {
 		assert.Contains(t, buf.String(), errString)
 
 	})
+	pullConsumer, err := data.NewConsumer(channel1, "test-pull-consumer", "token", callbackURL, data.PullConsumerStr)
+	assert.Nil(t, err)
+	_, err = getConsumerRepo().Store(pullConsumer)
+	assert.Nil(t, err)
 	djRepo := getDeliverJobRepository()
 	msgRepo := getMessageRepository()
 	message := getMessageForJob()
 	msgRepo.Create(message)
 	jobs := getDeliveryJobsInFixture(message)
-	err := djRepo.DispatchMessage(message, jobs...)
-	djRepo.MarkJobInflight(jobs[0])
+	err = djRepo.DispatchMessage(message, jobs...)
+	inflightJob := jobs[0]
+	for _, job := range jobs {
+		if job.Listener.Type != data.PullConsumer {
+			inflightJob = job
+			break
+		}
+	}
+	djRepo.MarkJobInflight(inflightJob)
 	assert.Nil(t, err)
 	time.Sleep(configuration.RationalDelay + 1)
 	t.Run("SuccessInflightRecoveryList", func(t *testing.T) {
-		t.Parallel()
 		thisJobs := djRepo.GetJobsInflightSince(configuration.RationalDelay)
 		assert.LessOrEqual(t, 1, len(thisJobs))
 		found := false
 		for _, job := range thisJobs {
-			if job.ID == jobs[0].ID {
+			if job.ID == inflightJob.ID {
 				found = true
 			}
 		}
 		assert.True(t, found)
 	})
 	t.Run("SuccessRetryList", func(t *testing.T) {
-		t.Parallel()
-		thisJobs := djRepo.GetJobsReadyForInflightSince(configuration.RationalDelay)
+		thisJobs := djRepo.GetJobsReadyForInflightSince(configuration.RationalDelay, 4)
 		assert.LessOrEqual(t, len(jobs)-1, len(thisJobs))
 		found := false
+		for _, thisJob := range thisJobs {
+			assert.True(t, thisJob.Listener.Type == data.PushConsumer)
+		}
 		for index := 1; index < len(jobs); index++ {
 			for _, job := range thisJobs {
 				if job.ID == jobs[index].ID {
