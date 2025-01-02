@@ -1,0 +1,14 @@
+{{include Dockerfile}}
+
+RUN apk add util-linux bash nginx
+
+RUN mkdir -p /files/export/
+RUN mkdir -p /etc/nginx/conf.d/
+
+ADD integration-test/config/prune/runner.sh .
+ADD integration-test/config/prune/file_browser_nginx.conf /etc/nginx/http.d/file_browser.conf
+RUN rm -f /etc/nginx/http.d/default.conf
+
+EXPOSE 80
+
+ENTRYPOINT ["/bin/sh" , "-c" , "/bin/bash /runner.sh & nginx -g 'daemon off;'"]

@@ -33,3 +33,4 @@ webhook-broker.cfg
 integration-test/integration-test
 *.ovpn
 webhook-broker-chart-*.tgz
+testDockerfile

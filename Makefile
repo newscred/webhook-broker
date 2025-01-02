@@ -114,9 +114,12 @@ clean:
 	-rm -vrf ./dist/*
 	-rm -v webhook-broker
 
+prep-itest:
+	- ./build/scripts/prune-dockerfile-generator.sh
+	
 itest-down:
 	- docker compose -f docker-compose.integration-test.yaml down
 
-itest: itest-down
+itest: prep-itest itest-down
 	docker compose -f docker-compose.integration-test.yaml build
 	docker compose -f docker-compose.integration-test.yaml up tester
