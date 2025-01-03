@@ -15,5 +15,7 @@ jobs:
     steps:
     - uses: actions/checkout@master
     - uses: docker/setup-buildx-action@v2
+    - name: Generate Pruner Dockerfile
+      run: /usr/bin/bash ./build/scripts/prune-dockerfile-generator.sh
     - name: Run Integration Test
       run: make itest

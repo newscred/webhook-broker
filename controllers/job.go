@@ -19,6 +19,8 @@ const (
 	jobsPath            = consumerPath + "/queued-jobs"
 	jobIDPathParamKey   = "jobId"
 	jobPath             = consumerPath + "/job/:" + jobIDPathParamKey
+	jobRequeueSuffix    = "/requeue-dead-job"
+	jobRequeuePath      = jobPath + jobRequeueSuffix
 	defaultPageSize     = 25
 	maxPageSize         = 100
 )
@@ -167,16 +169,80 @@ func getConsumerWithValidation(w http.ResponseWriter, r *http.Request, params ht
 	return consumer, valid
 }
 
-// JobController represents all endpoints related to a single job for a consumer
-type JobController struct {
+type JobRequeueController struct {
+	DeliveryJobRepo storage.DeliveryJobRepository
 	ChannelRepo     storage.ChannelRepository
 	ConsumerRepo    storage.ConsumerRepository
-	DeliveryJobRepo storage.DeliveryJobRepository
+}
+
+// NewJobRequeueController creates and returns a new instance of JobRequeueController
+func NewJobRequeueController(deliveryJobRepo storage.DeliveryJobRepository, channelRepo storage.ChannelRepository, consumerRepo storage.ConsumerRepository) *JobRequeueController {
+	return &JobRequeueController{DeliveryJobRepo: deliveryJobRepo, ChannelRepo: channelRepo, ConsumerRepo: consumerRepo}
+}
+
+// GetPath returns the endpoint's path
+func (controller *JobRequeueController) GetPath() string {
+	return jobRequeuePath
+}
+
+// FormatAsRelativeLink Format as relative URL of this resource based on the params
+func (controller *JobRequeueController) FormatAsRelativeLink(params ...httprouter.Param) string {
+	return formatURL(params, controller.GetPath(), channelIDPathParamKey, consumerIDPathParamKey, jobIDPathParamKey)
+}
+
+// Post implements the POST /channel/:channelId/consumer/:consumerId/job/:jobId/requeue-dead-job
+func (controller *JobRequeueController) Post(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+	job, valid := getJobWithValidation(w, r, params, controller.ChannelRepo, controller.ConsumerRepo, controller.DeliveryJobRepo)
+	if !valid {
+		return
+	}
+	if job.Status != data.JobDead {
+		writeStatus(w, http.StatusBadRequest, errJobDoesNotExist)
+		return
+	}
+	err := controller.DeliveryJobRepo.RequeueDeadJob(job)
+	if err == nil {
+		writeStatus(w, http.StatusAccepted, nil)
+	} else {
+		writeErr(w, err)
+	}
+}
+
+// JobController represents all endpoints related to a single job for a consumer
+type JobController struct {
+	MsgController      EndpointController
+	ChannelController  EndpointController
+	ProducerController EndpointController
+	ConsumerController EndpointController
+	ChannelRepo        storage.ChannelRepository
+	ConsumerRepo       storage.ConsumerRepository
+	DeliveryJobRepo    storage.DeliveryJobRepository
 }
 
 // NewJobController creates and returns a new instance of JobController
-func NewJobController(channelRepo storage.ChannelRepository, consumerRepo storage.ConsumerRepository, deliveryJobRepo storage.DeliveryJobRepository) *JobController {
-	return &JobController{ChannelRepo: channelRepo, ConsumerRepo: consumerRepo, DeliveryJobRepo: deliveryJobRepo}
+func NewJobController(msgController *MessageController, channelController *ChannelController, producerController *ProducerController, consumerController *ConsumerController, channelRepo storage.ChannelRepository, consumerRepo storage.ConsumerRepository, deliveryJobRepo storage.DeliveryJobRepository) *JobController {
+	return &JobController{MsgController: msgController, ChannelController: channelController, ProducerController: producerController, ConsumerController: consumerController, ChannelRepo: channelRepo, ConsumerRepo: consumerRepo, DeliveryJobRepo: deliveryJobRepo}
+}
+
+// Get implements the GET /channel/:channelId/consumer/:consumerId/job/:jobId endpoint
+func (controller *JobController) Get(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+	job, valid := getJobWithValidation(w, r, params, controller.ChannelRepo, controller.ConsumerRepo, controller.DeliveryJobRepo)
+	if !valid {
+		return
+	}
+	channelParam := httprouter.Param{Key: channelIDPathParamKey, Value: job.Message.BroadcastedTo.ChannelID}
+	consumerParam := httprouter.Param{Key: consumerIDPathParamKey, Value: job.Listener.ConsumerID}
+	linkedDJ := &HyperlinkedDeliveryJobModel{
+		DeliveryJobModel: *newDeliveryJobModel(job),
+		MessageURL:       controller.MsgController.FormatAsRelativeLink(channelParam, httprouter.Param{Key: messageIDParamKey, Value: job.Message.MessageID}),
+		ConsumerURL:      controller.ConsumerController.FormatAsRelativeLink(channelParam, consumerParam),
+		ProducerURL:      controller.ProducerController.FormatAsRelativeLink(httprouter.Param{Key: producerIDPathParamKey, Value: job.Message.ProducedBy.ProducerID}),
+		ChannelURL:       controller.ChannelController.FormatAsRelativeLink(channelParam),
+	}
+	if job.Status == data.JobDead {
+		linkedDJ.JobRequeueURL = controller.FormatAsRelativeLink(channelParam, consumerParam, httprouter.Param{Key: jobIDPathParamKey, Value: job.ID.String()}) + jobRequeueSuffix
+	}
+	writeJSON(w, linkedDJ)
 }
 
 // Post implements the POST /channel/:channelId/consumer/:consumerId/job/:jobId endpoint

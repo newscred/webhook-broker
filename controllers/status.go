@@ -12,7 +12,8 @@ import (
 )
 
 const (
-	statusPath = "/_status"
+	statusPath    = "/_status"
+	jobStatusPath = "/job-status"
 )
 
 // AppData to deserialize in status endpoint
@@ -56,4 +57,34 @@ func (cont *StatusController) Get(w http.ResponseWriter, r *http.Request, _ http
 	}
 	data := AppData{SeedData: app.GetSeedData(), AppStatus: app.GetStatus()}
 	writeJSON(w, data)
+}
+
+type JobStatusController struct {
+	DeliveryJobRepo storage.DeliveryJobRepository
+}
+
+// NewJobStatusController Factory for new JobStatusController
+func NewJobStatusController(deliveryJobRepo storage.DeliveryJobRepository) *JobStatusController {
+	statusController := &JobStatusController{DeliveryJobRepo: deliveryJobRepo}
+	return statusController
+}
+
+// GetPath returns the endpoint path
+func (cont *JobStatusController) GetPath() string {
+	return jobStatusPath
+}
+
+// FormatAsRelativeLink Format as relative URL of this resource based on the params
+func (cont *JobStatusController) FormatAsRelativeLink(params ...httprouter.Param) string {
+	return cont.GetPath()
+}
+
+// Get is the GET /job-status endpoint controller
+func (cont *JobStatusController) Get(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	status, err := cont.DeliveryJobRepo.GetJobStatusCountsGroupedByConsumer()
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, status)
 }

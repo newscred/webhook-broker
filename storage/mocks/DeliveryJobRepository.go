@@ -6,6 +6,8 @@ import (
 	data "github.com/newscred/webhook-broker/storage/data"
 	mock "github.com/stretchr/testify/mock"
 
+	storage "github.com/newscred/webhook-broker/storage"
+
 	time "time"
 )
 
@@ -80,6 +82,36 @@ func (_m *DeliveryJobRepository) GetByID(id string) (*data.DeliveryJob, error) {
 
 	if rf, ok := ret.Get(1).(func(string) error); ok {
 		r1 = rf(id)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// GetJobStatusCountsGroupedByConsumer provides a mock function with given fields:
+func (_m *DeliveryJobRepository) GetJobStatusCountsGroupedByConsumer() (map[storage.Channel_ID]map[storage.Consumer_ID][]*data.StatusCount[data.JobStatus], error) {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetJobStatusCountsGroupedByConsumer")
+	}
+
+	var r0 map[storage.Channel_ID]map[storage.Consumer_ID][]*data.StatusCount[data.JobStatus]
+	var r1 error
+	if rf, ok := ret.Get(0).(func() (map[storage.Channel_ID]map[storage.Consumer_ID][]*data.StatusCount[data.JobStatus], error)); ok {
+		return rf()
+	}
+	if rf, ok := ret.Get(0).(func() map[storage.Channel_ID]map[storage.Consumer_ID][]*data.StatusCount[data.JobStatus]); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(map[storage.Channel_ID]map[storage.Consumer_ID][]*data.StatusCount[data.JobStatus])
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -185,17 +217,17 @@ func (_m *DeliveryJobRepository) GetJobsInflightSince(delta time.Duration) []*da
 	return r0
 }
 
-// GetJobsReadyForInflightSince provides a mock function with given fields: delta
-func (_m *DeliveryJobRepository) GetJobsReadyForInflightSince(delta time.Duration) []*data.DeliveryJob {
-	ret := _m.Called(delta)
+// GetJobsReadyForInflightSince provides a mock function with given fields: delta, retryThreshold
+func (_m *DeliveryJobRepository) GetJobsReadyForInflightSince(delta time.Duration, retryThreshold int) []*data.DeliveryJob {
+	ret := _m.Called(delta, retryThreshold)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetJobsReadyForInflightSince")
 	}
 
 	var r0 []*data.DeliveryJob
-	if rf, ok := ret.Get(0).(func(time.Duration) []*data.DeliveryJob); ok {
-		r0 = rf(delta)
+	if rf, ok := ret.Get(0).(func(time.Duration, int) []*data.DeliveryJob); ok {
+		r0 = rf(delta, retryThreshold)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]*data.DeliveryJob)
@@ -336,6 +368,24 @@ func (_m *DeliveryJobRepository) MarkQueuedJobAsDead(deliveryJob *data.DeliveryJ
 	var r0 error
 	if rf, ok := ret.Get(0).(func(*data.DeliveryJob) error); ok {
 		r0 = rf(deliveryJob)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// RequeueDeadJob provides a mock function with given fields: job
+func (_m *DeliveryJobRepository) RequeueDeadJob(job *data.DeliveryJob) error {
+	ret := _m.Called(job)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RequeueDeadJob")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*data.DeliveryJob) error); ok {
+		r0 = rf(job)
 	} else {
 		r0 = ret.Error(0)
 	}

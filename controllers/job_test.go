@@ -2,6 +2,8 @@ package controllers
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io/ioutil"
 	"math/rand"
 	"net/http"
@@ -347,9 +349,15 @@ func TestJobsControllerGet_Error(t *testing.T) {
 	})
 }
 
+func getJobController() *JobController {
+	return NewJobController(getMessageController(), getNewChannelController(channelRepo),
+		NewProducerController(producerRepo), getNewConsumerController(consumerRepo),
+		channelRepo, consumerRepo, deliveryJobRepo)
+}
+
 func TestJobFormatAsRelativeLink(t *testing.T) {
 	t.Parallel()
-	controller := NewJobController(channelRepo, consumerRepo, deliveryJobRepo)
+	controller := getJobController()
 	assert.Equal(t, jobPath, controller.GetPath())
 	formattedPath := controller.FormatAsRelativeLink(
 		httprouter.Param{Key: channelIDPathParamKey, Value: "someChannelId"},
@@ -364,7 +372,7 @@ func TestJobControllerPost_Success(t *testing.T) {
 	job, err := setupTestJob()
 	assert.NoError(t, err)
 
-	jobController := NewJobController(channelRepo, consumerRepo, deliveryJobRepo)
+	jobController := getJobController()
 	testRouter := createTestRouter(jobController)
 	testURI := jobController.FormatAsRelativeLink(
 		httprouter.Param{Key: channelIDPathParamKey, Value: jobTestChannel.ChannelID},
@@ -389,16 +397,40 @@ func TestJobControllerPost_Success(t *testing.T) {
 	for _, transition := range validTransitions {
 		testName := "Success:202-Accepted " + transition.current.String() + " to " + transition.next.String()
 		t.Run(testName, func(t *testing.T) {
+			// While testing Job's POST endpoint, we also test the Job's GET endpoint
+			req, err := http.NewRequest(http.MethodGet, testURI, nil)
+			assert.NoError(t, err)
+			req.Header.Add(headerContentType, jobPostTestContentType)
+			req.Header.Add(headerChannelToken, jobTestChannel.Token)
+			req.Header.Add(headerConsumerToken, jobTestPullConsumer.Token)
+			rr := httptest.NewRecorder()
+			testRouter.ServeHTTP(rr, req)
+			assert.Equal(t, http.StatusOK, rr.Code)
+			body := rr.Body.String()
+			t.Log(body)
+			jobModel := &HyperlinkedDeliveryJobModel{}
+			json.NewDecoder(strings.NewReader(body)).Decode(jobModel)
+			assert.NotEmpty(t, jobModel.ChannelURL)
+			assert.NotEmpty(t, jobModel.MessageURL)
+			assert.NotEmpty(t, jobModel.ProducerURL)
+			assert.NotEmpty(t, jobModel.ConsumerURL)
+			if transition.current == data.JobDead {
+				assert.NotEmpty(t, jobModel.JobRequeueURL)
+			} else {
+				assert.Empty(t, jobModel.JobRequeueURL)
+			}
+
+			// THE POST ENDPOINT TESTS
 			bodyString := "{\"NextState\": \"" + transition.next.String() + "\"}"
 			requestBody := ioutil.NopCloser(strings.NewReader(bodyString))
-			req, err := http.NewRequest(http.MethodPost, testURI, requestBody)
+			req, err = http.NewRequest(http.MethodPost, testURI, requestBody)
 			assert.NoError(t, err)
 
 			req.Header.Add(headerContentType, jobPostTestContentType)
 			req.Header.Add(headerChannelToken, jobTestChannel.Token)
 			req.Header.Add(headerConsumerToken, jobTestPullConsumer.Token)
 
-			rr := httptest.NewRecorder()
+			rr = httptest.NewRecorder()
 			testRouter.ServeHTTP(rr, req)
 			assert.Equal(t, http.StatusAccepted, rr.Code)
 
@@ -415,7 +447,7 @@ func TestJobControllerPost_TransitionFailure(t *testing.T) {
 	job, err := setupTestJob()
 	assert.NoError(t, err)
 
-	jobController := NewJobController(channelRepo, consumerRepo, deliveryJobRepo)
+	jobController := getJobController()
 	testRouter := createTestRouter(jobController)
 	testURI := jobController.FormatAsRelativeLink(
 		httprouter.Param{Key: channelIDPathParamKey, Value: jobTestChannel.ChannelID},
@@ -473,7 +505,7 @@ func TestJobControllerPost_TransitionFailure(t *testing.T) {
 }
 
 func TestJobControllerPost_Error(t *testing.T) {
-	jobController := NewJobController(channelRepo, consumerRepo, deliveryJobRepo)
+	jobController := getJobController()
 	testRouter := createTestRouter(jobController)
 	t.Run("400 Channel Not Found", func(t *testing.T) {
 		t.Parallel()
@@ -711,7 +743,7 @@ func TestJobControllerPost_Timeout_DifferentTime(t *testing.T) {
 			job, err := setupTestJob()
 			assert.NoError(t, err)
 
-			jobController := NewJobController(channelRepo, consumerRepo, deliveryJobRepo)
+			jobController := getJobController()
 			testRouter := createTestRouter(jobController)
 			testURI := jobController.FormatAsRelativeLink(
 				httprouter.Param{Key: channelIDPathParamKey, Value: jobTestChannel.ChannelID},
@@ -746,7 +778,7 @@ func TestJobControllerPost_TimeoutValid(t *testing.T) {
 	job, err := setupTestJob()
 	assert.NoError(t, err)
 
-	jobController := NewJobController(channelRepo, consumerRepo, deliveryJobRepo)
+	jobController := getJobController()
 	testRouter := createTestRouter(jobController)
 	testURI := jobController.FormatAsRelativeLink(
 		httprouter.Param{Key: channelIDPathParamKey, Value: jobTestChannel.ChannelID},
@@ -796,7 +828,7 @@ func TestJobControllerPost_TransitionFailureTimeout(t *testing.T) {
 	job, err := setupTestJob()
 	assert.NoError(t, err)
 
-	jobController := NewJobController(channelRepo, consumerRepo, deliveryJobRepo)
+	jobController := getJobController()
 	testRouter := createTestRouter(jobController)
 	testURI := jobController.FormatAsRelativeLink(
 		httprouter.Param{Key: channelIDPathParamKey, Value: jobTestChannel.ChannelID},
@@ -876,4 +908,112 @@ func TestJobControllerPost_TransitionFailureTimeout(t *testing.T) {
 	for _, invalidTransition := range invalidTransitions {
 		runInvalidTransitionTest(invalidTransition.nextState, invalidTransition.timeout)
 	}
+}
+
+func TestJobRequeueController_Post(t *testing.T) {
+	repo := new(storagemocks.DeliveryJobRepository)
+	channelRepo := new(storagemocks.ChannelRepository)
+	consumerRepo := new(storagemocks.ConsumerRepository)
+
+	controller := NewJobRequeueController(repo, channelRepo, consumerRepo)
+	router := createTestRouter(controller)
+
+	channelID := "test-channel"
+	consumerID := "test-consumer"
+	jobID := "test-job-id"
+	token := "test-token"
+
+	t.Run("Invalid Job Status", func(t *testing.T) {
+		mockChannel, _ := data.NewChannel(channelID, token)
+		mockChannel.QuickFix()
+		channelRepo.On("Get", channelID).Return(mockChannel, nil)
+		mockConsumer, _ := data.NewConsumer(mockChannel, consumerID, token, callbackURL, data.PullConsumer.String())
+		mockConsumer.QuickFix()
+		consumerRepo.On("Get", channelID, consumerID).Return(mockConsumer, nil)
+		mockProducer, _ := data.NewProducer("test-producer", token)
+		mockProducer.QuickFix()
+		mockMsg, _ := data.NewMessage(mockChannel, mockProducer, "test-payload", "text/plain", data.HeadersMap{})
+		mockMsg.QuickFix()
+		job, _ := data.NewDeliveryJob(mockMsg, mockConsumer)
+		job.QuickFix()
+		job.Status = data.JobQueued
+		repo.On("GetByID", jobID).Return(job, nil).Once()
+
+		url := fmt.Sprintf("/channel/%s/consumer/%s/job/%s/requeue-dead-job", channelID, consumerID, jobID)
+		req, _ := http.NewRequest("POST", url, nil)
+		req.Header.Set(headerChannelToken, token)
+		req.Header.Set(headerConsumerToken, token)
+		rr := httptest.NewRecorder()
+
+		router.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusBadRequest, rr.Code)
+		repo.AssertExpectations(t)
+		channelRepo.AssertExpectations(t)
+		consumerRepo.AssertExpectations(t)
+
+	})
+
+	t.Run("Job Requeue Successful", func(t *testing.T) {
+		mockChannel, _ := data.NewChannel(channelID, token)
+		mockChannel.QuickFix()
+		channelRepo.On("Get", channelID).Return(mockChannel, nil)
+		mockConsumer, _ := data.NewConsumer(mockChannel, consumerID, token, callbackURL, data.PullConsumer.String())
+		mockConsumer.QuickFix()
+		consumerRepo.On("Get", channelID, consumerID).Return(mockConsumer, nil)
+		mockProducer, _ := data.NewProducer("test-producer", token)
+		mockProducer.QuickFix()
+		mockMsg, _ := data.NewMessage(mockChannel, mockProducer, "test-payload", "text/plain", data.HeadersMap{})
+		mockMsg.QuickFix()
+		job, _ := data.NewDeliveryJob(mockMsg, mockConsumer)
+		job.QuickFix()
+		job.Status = data.JobDead
+		repo.On("GetByID", jobID).Return(job, nil).Once()
+		repo.On("RequeueDeadJob", job).Return(nil).Once()
+
+		url := fmt.Sprintf("/channel/%s/consumer/%s/job/%s/requeue-dead-job", channelID, consumerID, jobID)
+		req, _ := http.NewRequest("POST", url, nil)
+		req.Header.Set(headerChannelToken, token)
+		req.Header.Set(headerConsumerToken, token)
+
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusAccepted, rr.Code)
+		repo.AssertExpectations(t)
+		channelRepo.AssertExpectations(t)
+		consumerRepo.AssertExpectations(t)
+	})
+
+	t.Run("Job Requeue Error", func(t *testing.T) {
+		expectedErr := errors.New("requeue error")
+		mockChannel, _ := data.NewChannel(channelID, token)
+		mockChannel.QuickFix()
+		channelRepo.On("Get", channelID).Return(mockChannel, nil)
+		mockConsumer, _ := data.NewConsumer(mockChannel, consumerID, token, callbackURL, data.PullConsumer.String())
+		mockConsumer.QuickFix()
+		consumerRepo.On("Get", channelID, consumerID).Return(mockConsumer, nil)
+		mockProducer, _ := data.NewProducer("test-producer", token)
+		mockProducer.QuickFix()
+		mockMsg, _ := data.NewMessage(mockChannel, mockProducer, "test-payload", "text/plain", data.HeadersMap{})
+		mockMsg.QuickFix()
+		job, _ := data.NewDeliveryJob(mockMsg, mockConsumer)
+		job.QuickFix()
+		job.Status = data.JobDead
+		repo.On("GetByID", jobID).Return(job, nil).Once()
+		repo.On("RequeueDeadJob", job).Return(expectedErr).Once()
+
+		url := fmt.Sprintf("/channel/%s/consumer/%s/job/%s/requeue-dead-job", channelID, consumerID, jobID)
+		req, _ := http.NewRequest("POST", url, nil)
+		req.Header.Set(headerChannelToken, token)
+		req.Header.Set(headerConsumerToken, token)
+
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusInternalServerError, rr.Code)
+		assert.Equal(t, expectedErr.Error(), rr.Body.String())
+
+		repo.AssertExpectations(t)
+		channelRepo.AssertExpectations(t)
+		consumerRepo.AssertExpectations(t)
+	})
 }

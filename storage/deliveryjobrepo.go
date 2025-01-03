@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -13,7 +14,8 @@ import (
 
 const (
 	jobPropertyCount     = 11
-	jobCommonSelectQuery = "SELECT id, messageId, consumerId, status, dispatchReceivedAt, retryAttemptCount, statusChangedAt, earliestNextAttemptAt, createdAt, updatedAt, priority, incrementalTimeout FROM job WHERE"
+	jobCommonProjection  = "SELECT id, messageId, consumerId, status, dispatchReceivedAt, retryAttemptCount, statusChangedAt, earliestNextAttemptAt, createdAt, updatedAt, priority, incrementalTimeout"
+	jobCommonSelectQuery = jobCommonProjection + " FROM job WHERE"
 )
 
 // DeliveryJobDBRepository is the DeliveryJobRepository's RDBMS implementation
@@ -176,6 +178,10 @@ func (djRepo *DeliveryJobDBRepository) getJobs(baseQuery string, message *data.M
 }
 
 func (djRepo *DeliveryJobDBRepository) getJobsForStatusAndDelta(status data.JobStatus, delta time.Duration, useStatusChangedAt bool) []*data.DeliveryJob {
+	return djRepo.getJobsForStatusAndDeltaWithCustomQuery(status, delta, useStatusChangedAt, jobCommonSelectQuery, "")
+}
+
+func (djRepo *DeliveryJobDBRepository) getJobsForStatusAndDeltaWithCustomQuery(status data.JobStatus, delta time.Duration, useStatusChangedAt bool, jobQueryBase string, jobAlias string) []*data.DeliveryJob {
 	jobs := make([]*data.DeliveryJob, 0)
 	page := data.NewPagination(nil, nil)
 	if delta > 0 {
@@ -186,8 +192,16 @@ func (djRepo *DeliveryJobDBRepository) getJobsForStatusAndDelta(status data.JobS
 	if useStatusChangedAt {
 		dateCol = "statusChangedAt"
 	}
+	orderBy := largePageSizeWithOrder
+	aliasPrefix := ""
+	if len(jobAlias) > 0 {
+		orderBy = getOrderByClauseWithAlias(jobAlias, LIMIT_100_SUFFIX)
+		aliasPrefix = jobAlias + "."
+	}
+	commonBaseQuery := jobQueryBase + fmt.Sprintf(" %sstatus = ? AND  %s%s <= ?", aliasPrefix, aliasPrefix, dateCol)
+	log.Debug().Msgf("JobsForStatusAndDeltaWithCustomQuery for status %s common query: %s", status, commonBaseQuery)
 	for more {
-		baseQuery := jobCommonSelectQuery + " status = ? AND " + dateCol + " <= ?" + getPaginationQueryFragmentWithConfigurablePageSize(page, true, largePageSizeWithOrder)
+		baseQuery := commonBaseQuery + getPaginationQueryFragmentWithConfigurablePageSizeWithAlias(page, true, orderBy, jobAlias)
 		pageJobs, pagination, err := djRepo.getJobs(baseQuery, nil, nil, appendWithPaginationArgs(page, status, time.Now().Add(delta)))
 		if err == nil {
 			jobs = append(jobs, pageJobs...)
@@ -227,6 +241,15 @@ func (djRepo *DeliveryJobDBRepository) RequeueDeadJobsForConsumer(consumer *data
 	return err
 }
 
+// RequeueDeadJob queues up a dead job
+func (djRepo *DeliveryJobDBRepository) RequeueDeadJob(job *data.DeliveryJob) (err error) {
+	currentTime := time.Now()
+	err = transactionalWrites(djRepo.db, func(tx *sql.Tx) error {
+		return inTransactionExec(tx, emptyOps, "UPDATE job SET status = ?, statusChangedAt = ?, updatedAt = ?, retryAttemptCount = ? WHERE id like ? and status = ?", args2SliceFnWrapper(data.JobQueued, currentTime, currentTime, 0, job.ID, data.JobDead), 1)
+	})
+	return err
+}
+
 // GetJobsForConsumer retrieves DeliveryJob created for delivery to a customer and it has to be filtered by a specific status
 func (djRepo *DeliveryJobDBRepository) GetJobsForConsumer(consumer *data.Consumer, jobStatus data.JobStatus, page *data.Pagination) ([]*data.DeliveryJob, *data.Pagination, error) {
 	if page == nil || (page.Next != nil && page.Previous != nil) {
@@ -250,8 +273,11 @@ func (djRepo *DeliveryJobDBRepository) GetJobsInflightSince(delta time.Duration)
 }
 
 // GetJobsReadyForInflightSince retrieves jobs in queued status and earliestNextAttemptAt < `now`-delta
-func (djRepo *DeliveryJobDBRepository) GetJobsReadyForInflightSince(delta time.Duration) []*data.DeliveryJob {
-	return djRepo.getJobsForStatusAndDelta(data.JobQueued, delta, false)
+func (djRepo *DeliveryJobDBRepository) GetJobsReadyForInflightSince(delta time.Duration, retryThreshold int) []*data.DeliveryJob {
+	query := fmt.Sprintf(`SELECT b.id as id, messageId, b.consumerId as consumerId, status, dispatchReceivedAt, retryAttemptCount, statusChangedAt, earliestNextAttemptAt, b.createdAt as createdAt, b.updatedAt as updatedAt, priority, incrementalTimeout
+FROM job as b join consumer as c on b.consumerId = c.id
+WHERE (c.type = %d OR retryAttemptCount >= %d) AND`, data.PushConsumer, retryThreshold)
+	return djRepo.getJobsForStatusAndDeltaWithCustomQuery(data.JobQueued, delta, false, query, "b")
 }
 
 // GetByID loads the delivery job with specified id if it exists, else returns an error
@@ -269,6 +295,53 @@ func (djRepo *DeliveryJobDBRepository) GetByID(id string) (job *data.DeliveryJob
 		job.Listener, err = djRepo.consumerRepository.GetByID(consumerID)
 	}
 	return job, err
+}
+
+type Channel_ID string
+type Consumer_ID string
+
+func (djRepo *DeliveryJobDBRepository) GetJobStatusCountsGroupedByConsumer() (map[Channel_ID]map[Consumer_ID][]*data.StatusCount[data.JobStatus], error) {
+	type statusRow struct {
+		channelId  string
+		consumerId string
+		status     data.JobStatus
+		count      int
+		oldest     string
+		newest     string
+	}
+	rows := make([]*statusRow, 0)
+	query := `SELECT c.channelId, j.consumerId, j.status, count(j.id), min(j.statusChangedAt), max(j.statusChangedAt)
+FROM job j JOIN consumer c on j.consumerId = c.id
+GROUP BY c.channelId, j.consumerId, j.status`
+	scanStatusCount := func() []interface{} {
+		statusCount := &statusRow{}
+		rows = append(rows, statusCount)
+		return []interface{}{&statusCount.channelId, &statusCount.consumerId, &statusCount.status, &statusCount.count, &statusCount.oldest, &statusCount.newest}
+	}
+	err := queryRows(djRepo.db, query, nilArgs, scanStatusCount)
+	log.Info().Msg("Query: " + query + "; Status rows: " + strconv.Itoa(len(rows)))
+	result := make(map[Channel_ID]map[Consumer_ID][]*data.StatusCount[data.JobStatus])
+	if err == nil {
+		for _, row := range rows {
+			channelID := Channel_ID(row.channelId)
+			consumerID := Consumer_ID(row.consumerId)
+			if _, ok := result[channelID]; !ok {
+				result[channelID] = make(map[Consumer_ID][]*data.StatusCount[data.JobStatus])
+			}
+			if _, ok := result[channelID][consumerID]; !ok {
+				result[channelID][consumerID] = make([]*data.StatusCount[data.JobStatus], 0)
+			}
+			result[channelID][consumerID] = append(result[channelID][consumerID], &data.StatusCount[data.JobStatus]{
+				Status:              row.status,
+				Count:               row.count,
+				OldestItemTimestamp: row.oldest,
+				NewestItemTimestamp: row.newest,
+			})
+		}
+	}
+	// The following log is for local dev/testing only
+	// log.Info().Msg("Result: " + fmt.Sprint(result))
+	return result, err
 }
 
 // NewDeliveryJobRepository creates a new instance of DeliveryJobRepository

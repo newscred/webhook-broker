@@ -2,18 +2,22 @@ package controllers
 
 import (
 	"database/sql"
+	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/newscred/webhook-broker/storage"
 	"github.com/newscred/webhook-broker/storage/data"
+	"github.com/rs/zerolog/log"
 )
 
 const (
 	messageIDParamKey    = "messageId"
 	messagePath          = channelPath + "/message/:" + messageIDParamKey
 	messagesPath         = channelPath + "/messages"
+	messagesStatusPath   = channelPath + "/messages-status"
 	dlqPath              = consumerPath + "/dlq"
 	requeueFormParamName = "requeue"
 )
@@ -26,10 +30,20 @@ type DeliveryJobModel struct {
 	StatusChangedAt  time.Time
 }
 
+type HyperlinkedDeliveryJobModel struct {
+	DeliveryJobModel
+	MessageURL    string
+	ChannelURL    string
+	ConsumerURL   string
+	ProducerURL   string
+	JobRequeueURL string
+}
+
 // DeadDeliveryJobModel is a DeliveryJobModel with reference to its message and to be used for DLQ
 type DeadDeliveryJobModel struct {
 	DeliveryJobModel
-	MessageURL string
+	MessageURL    string
+	JobRequeueURL string
 }
 
 // DLQList represents the list of jobs that are dead
@@ -49,6 +63,15 @@ type MessageModel struct {
 	Status       string
 	Jobs         []*DeliveryJobModel
 	Headers      data.HeadersMap
+}
+
+type TheCount struct {
+	Count int
+	Links map[string]string
+}
+
+type StatusCount struct {
+	Counts map[string]TheCount
 }
 
 func newMessageModel(message *data.Message, jobs ...*data.DeliveryJob) *MessageModel {
@@ -78,12 +101,16 @@ func newDeliveryJobModel(job *data.DeliveryJob) *DeliveryJobModel {
 	}
 }
 
-func newDeadDeliveryJobs(msgController EndpointController, jobs ...*data.DeliveryJob) []*DeadDeliveryJobModel {
+func newDeadDeliveryJobs(msgController EndpointController, jobRequeueController EndpointController, jobs ...*data.DeliveryJob) []*DeadDeliveryJobModel {
 	result := make([]*DeadDeliveryJobModel, 0, len(jobs))
 	for _, job := range jobs {
-		messageURL := msgController.FormatAsRelativeLink(httprouter.Param{Key: channelIDPathParamKey, Value: job.Message.BroadcastedTo.ChannelID},
+		channelIDParam := httprouter.Param{Key: channelIDPathParamKey, Value: job.Message.BroadcastedTo.ChannelID}
+		messageURL := msgController.FormatAsRelativeLink(channelIDParam,
 			httprouter.Param{Key: messageIDParamKey, Value: job.Message.MessageID})
-		result = append(result, &DeadDeliveryJobModel{DeliveryJobModel: *newDeliveryJobModel(job), MessageURL: messageURL})
+		jobRequeueURL := jobRequeueController.FormatAsRelativeLink(channelIDParam,
+			httprouter.Param{Key: consumerIDPathParamKey, Value: job.Listener.ConsumerID},
+			httprouter.Param{Key: jobIDPathParamKey, Value: job.ID.String()})
+		result = append(result, &DeadDeliveryJobModel{DeliveryJobModel: *newDeliveryJobModel(job), MessageURL: messageURL, JobRequeueURL: jobRequeueURL})
 	}
 	return result
 }
@@ -163,7 +190,8 @@ func (messagesController *MessagesController) FormatAsRelativeLink(params ...htt
 // Get implements GET /channel/:channelId/messages
 func (messagesController *MessagesController) Get(w http.ResponseWriter, r *http.Request, param httprouter.Params) {
 	channelID := param.ByName(channelIDPathParamKey)
-	messages, resultPagination, err := messagesController.MessageRepo.GetMessagesForChannel(channelID, getPagination(r))
+	statusFilters := extractMsgStatusFilters(r)
+	messages, resultPagination, err := messagesController.MessageRepo.GetMessagesForChannel(channelID, getPagination(r), statusFilters...)
 	if err != nil {
 		switch err {
 		case sql.ErrNoRows:
@@ -182,16 +210,79 @@ func (messagesController *MessagesController) Get(w http.ResponseWriter, r *http
 	writeJSON(w, data)
 }
 
+func extractMsgStatusFilters(r *http.Request) []data.MsgStatus {
+	statusFilterStrings := []string{}
+	temp, ok := r.URL.Query()["status"]
+	if ok {
+		statusFilterStrings = temp
+	}
+	statusFilters := make([]data.MsgStatus, 0, len(statusFilterStrings))
+	for _, statusString := range statusFilterStrings {
+		status, err := strconv.Atoi(statusString)
+		if err == nil {
+			statusFilters = append(statusFilters, data.MsgStatus(status))
+		}
+	}
+	log.Info().Msg(strconv.Itoa(len(statusFilters)))
+	return statusFilters
+}
+
+type MessagesStatusController struct {
+	MessagesController EndpointController
+	MessageRepo        storage.MessageRepository
+}
+
+// NewMessagesStatusController initializes the controller for messages in a channel
+func NewMessagesStatusController(msgsController *MessagesController, msgRepo storage.MessageRepository) *MessagesStatusController {
+	return &MessagesStatusController{MessagesController: msgsController, MessageRepo: msgRepo}
+}
+
+// GetPath returns the endpoint's path
+func (messagesStatusController *MessagesStatusController) GetPath() string {
+	return messagesStatusPath
+}
+
+// FormatAsRelativeLink Format as relative URL of this resource based on the params
+func (messagesStatusController *MessagesStatusController) FormatAsRelativeLink(params ...httprouter.Param) string {
+	return formatURL(params, messagesStatusPath, channelIDPathParamKey)
+}
+
+// Get implements GET /channel/:channelId/messages-status
+func (messagesStatusController *MessagesStatusController) Get(w http.ResponseWriter, r *http.Request, param httprouter.Params) {
+	channelID := param.ByName(channelIDPathParamKey)
+	log.Debug().Msgf("Channel ID: %s", channelID)
+	statusCount, err := messagesStatusController.MessageRepo.GetMessageStatusCountsByChannel(channelID)
+	log.Debug().Msgf("Status Count: %v, %v", statusCount, err)
+	if err == nil {
+		statusCountOuput := &StatusCount{}
+		statusCountOuput.Counts = make(map[string]TheCount)
+		for _, count := range statusCount {
+			statusString := count.Status.String()
+			statusCountOuput.Counts[statusString] = TheCount{
+				Count: count.Count,
+				Links: map[string]string{
+					"messages": fmt.Sprintf("%s?status=%d", messagesStatusController.MessagesController.FormatAsRelativeLink(httprouter.Param{Key: channelIDPathParamKey, Value: channelID}), count.Status.GetValue()),
+				},
+			}
+		}
+		writeJSON(w, statusCountOuput)
+	} else {
+		log.Error().Err(err)
+		writeErr(w, err)
+	}
+}
+
 // DLQController represents the GET and POST endpoint for reading dead and requeuing all dead messages for delivery.
 type DLQController struct {
-	MessageController EndpointController
-	DeliveryJobRepo   storage.DeliveryJobRepository
-	ConsumerRepo      storage.ConsumerRepository
+	MessageController    EndpointController
+	DeliveryJobRepo      storage.DeliveryJobRepository
+	ConsumerRepo         storage.ConsumerRepository
+	JobRequeueController EndpointController
 }
 
 // NewDLQController retrieves the controller for DLQ list and requeue endpoints
-func NewDLQController(msgController *MessageController, djRepo storage.DeliveryJobRepository, consumerRepo storage.ConsumerRepository) *DLQController {
-	return &DLQController{MessageController: msgController, DeliveryJobRepo: djRepo, ConsumerRepo: consumerRepo}
+func NewDLQController(msgController *MessageController, jobRequeueController *JobRequeueController, djRepo storage.DeliveryJobRepository, consumerRepo storage.ConsumerRepository) *DLQController {
+	return &DLQController{MessageController: msgController, JobRequeueController: jobRequeueController, DeliveryJobRepo: djRepo, ConsumerRepo: consumerRepo}
 }
 
 // GetPath returns the endpoint's path
@@ -210,7 +301,7 @@ func (controller *DLQController) Get(w http.ResponseWriter, r *http.Request, par
 	if consumer != nil {
 		deadJobs, resultPagination, err := controller.DeliveryJobRepo.GetJobsForConsumer(consumer, data.JobDead, getPagination(r))
 		if err == nil {
-			data := &DLQList{DeadJobs: newDeadDeliveryJobs(controller.MessageController, deadJobs...), Pages: getPaginationLinks(r, resultPagination)}
+			data := &DLQList{DeadJobs: newDeadDeliveryJobs(controller.MessageController, controller.JobRequeueController, deadJobs...), Pages: getPaginationLinks(r, resultPagination)}
 			writeJSON(w, data)
 		} else {
 			writeErr(w, err)

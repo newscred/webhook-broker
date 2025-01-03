@@ -16,18 +16,20 @@ const (
 
 // ChannelController is for /channel/:prodId
 type ChannelController struct {
-	ChannelRepo       storage.ChannelRepository
-	ConsumersEndpoint EndpointController
-	MessagesEndpoint  EndpointController
-	BroadcastEndpoint EndpointController
+	ChannelRepo            storage.ChannelRepository
+	ConsumersEndpoint      EndpointController
+	MessagesEndpoint       EndpointController
+	BroadcastEndpoint      EndpointController
+	MessagesStatusEndpoint EndpointController
 }
 
 // ChannelModel represents the Channel data
 type ChannelModel struct {
 	MsgStakeholder
-	ConsumersURL string
-	MessagesURL  string
-	BroadcastURL string
+	ConsumersURL      string
+	MessagesURL       string
+	BroadcastURL      string
+	MessagesStatusURL string
 }
 
 // Get implements the /channel/:prodId GET endpoint
@@ -58,9 +60,10 @@ func (channelController *ChannelController) Put(w http.ResponseWriter, r *http.R
 func (channelController *ChannelController) getChannelModel(channel *data.Channel) *ChannelModel {
 	channelIDParam := httprouter.Param{Key: channelIDPathParamKey, Value: channel.ChannelID}
 	return &ChannelModel{MsgStakeholder: *getMessageStakeholder(channel.ChannelID, &channel.MessageStakeholder),
-		ConsumersURL: channelController.ConsumersEndpoint.FormatAsRelativeLink(channelIDParam),
-		MessagesURL:  channelController.MessagesEndpoint.FormatAsRelativeLink(channelIDParam),
-		BroadcastURL: channelController.BroadcastEndpoint.FormatAsRelativeLink(channelIDParam)}
+		ConsumersURL:      channelController.ConsumersEndpoint.FormatAsRelativeLink(channelIDParam),
+		MessagesURL:       channelController.MessagesEndpoint.FormatAsRelativeLink(channelIDParam),
+		BroadcastURL:      channelController.BroadcastEndpoint.FormatAsRelativeLink(channelIDParam),
+		MessagesStatusURL: channelController.MessagesStatusEndpoint.FormatAsRelativeLink(channelIDParam)}
 }
 
 // GetPath returns the endpoint's path
@@ -105,8 +108,8 @@ func (channelsController *ChannelsController) FormatAsRelativeLink(params ...htt
 }
 
 // NewChannelController initialize new channels controller
-func NewChannelController(consumersController *ConsumersController, messagesController *MessagesController, broadcastController *BroadcastController, channelRepo storage.ChannelRepository) *ChannelController {
-	return &ChannelController{ChannelRepo: channelRepo, ConsumersEndpoint: consumersController, MessagesEndpoint: messagesController, BroadcastEndpoint: broadcastController}
+func NewChannelController(consumersController *ConsumersController, messagesController *MessagesController, broadcastController *BroadcastController, messagesStatusController *MessagesStatusController, channelRepo storage.ChannelRepository) *ChannelController {
+	return &ChannelController{ChannelRepo: channelRepo, ConsumersEndpoint: consumersController, MessagesEndpoint: messagesController, BroadcastEndpoint: broadcastController, MessagesStatusEndpoint: messagesStatusController}
 }
 
 // NewChannelsController initialize new channels controller

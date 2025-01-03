@@ -84,19 +84,25 @@ func (rdbmsDataAccessor *RelationalDBDataAccessor) Close() {
 }
 
 type orderByClause string
+type limitOption string
 
 const (
 	insertStatement                               = "INSERT INTO app (id, seedData, appStatus) VALUES (?, ?, ?)"
 	selectStatement                               = "SELECT seedData, appStatus FROM app WHERE id = 1"
 	startInitUpdateStatement                      = `UPDATE app SET seedData = ?, appStatus = ? WHERE id = 1 AND appStatus != ?`
 	completeInitUpdateStatement                   = `UPDATE app SET appStatus = ? WHERE id = 1 AND appStatus = ?`
-	optimisticLockInitAppErrMsg                   = "Initializing began in another app in the meantime"
-	optimisticLockCompleteAppErrMsg               = "Initializing not started so can not complete"
+	optimisticLockInitAppErrMsg                   = "initializing began in another app in the meantime"
+	optimisticLockCompleteAppErrMsg               = "initializing not started so can not complete"
+	LIMIT_25_SUFFIX                 limitOption   = " LIMIT 25"
+	LIMIT_50_SUFFIX                 limitOption   = " LIMIT 50"
+	LIMIT_100_SUFFIX                limitOption   = " LIMIT 100"
+	LIMIT_500_SUFFIX                limitOption   = " LIMIT 500"
+	baseOrderByWithPrefixFmtClause  orderByClause = "ORDER BY %s.createdAt desc, %s.id desc %s"
 	baseOrderByClause               orderByClause = "ORDER BY createdAt desc, id desc"
-	pageSizeWithOrder               orderByClause = baseOrderByClause + " LIMIT 25"
-	mediumPageSizeWithOrder         orderByClause = baseOrderByClause + " LIMIT 50"
-	largePageSizeWithOrder          orderByClause = baseOrderByClause + " LIMIT 100"
-	extraLargePageSizeWithOrder     orderByClause = baseOrderByClause + " LIMIT 500"
+	pageSizeWithOrder               orderByClause = baseOrderByClause + orderByClause(LIMIT_25_SUFFIX)
+	mediumPageSizeWithOrder         orderByClause = baseOrderByClause + orderByClause(LIMIT_50_SUFFIX)
+	largePageSizeWithOrder          orderByClause = baseOrderByClause + orderByClause(LIMIT_100_SUFFIX)
+	extraLargePageSizeWithOrder     orderByClause = baseOrderByClause + orderByClause(LIMIT_500_SUFFIX)
 )
 
 var (
@@ -105,18 +111,23 @@ var (
 	// ErrOptimisticAppComplete represents the Error when app complete attempted from not initializing state
 	ErrOptimisticAppComplete = errors.New(optimisticLockCompleteAppErrMsg)
 	// ErrAppInitializing is returned when app is being initialized by another thread.
-	ErrAppInitializing = errors.New("App is in initializing")
+	ErrAppInitializing = errors.New("app is in initializing")
 	// ErrNoDataChangeFromInitialized is returned when initialization is attempted without any seed data change while app has been initialized
-	ErrNoDataChangeFromInitialized = errors.New("No data change on initialized App")
+	ErrNoDataChangeFromInitialized = errors.New("no data change on initialized App")
 	// ErrCompleteWhileNotBeingInitialized is returned when complete is called without being initialized
-	ErrCompleteWhileNotBeingInitialized = errors.New("App not initializing to complete initializing")
+	ErrCompleteWhileNotBeingInitialized = errors.New("app not initializing to complete initializing")
 	// ErrNoRowsUpdated is returned when a UPDATE query does not change any row which is unexpected
-	ErrNoRowsUpdated = errors.New("No rows updated on UPDATE query")
+	ErrNoRowsUpdated = errors.New("no rows updated on UPDATE query")
 	// ErrInvalidStateToSave is returned when a data is not in a state we can send it to the repo as
-	ErrInvalidStateToSave = errors.New("Data model in invalid state to be stored")
+	ErrInvalidStateToSave = errors.New("data model in invalid state to be stored")
 	// ErrPaginationDeadlock is returned if both after and before is provided in pagination
-	ErrPaginationDeadlock = errors.New("Can not decide on pagination direction! Both after and before provided or pagination is nil")
+	ErrPaginationDeadlock = errors.New("can not decide on pagination direction! Both after and before provided or pagination is nil")
 )
+
+// GetOrderByClauseWithAlias Returns order by clause with choice of limit option and alias
+func getOrderByClauseWithAlias(alias string, limitPhrase limitOption) orderByClause {
+	return orderByClause(fmt.Sprintf(string(baseOrderByWithPrefixFmtClause), alias, alias, string(limitPhrase)))
+}
 
 // AppDBRepository is the repository to access App data
 type AppDBRepository struct {
@@ -347,15 +358,23 @@ var (
 	}
 
 	getPaginationQueryFragmentWithConfigurablePageSize = func(page *data.Pagination, append bool, orderByQueryClause orderByClause) string {
+		return getPaginationQueryFragmentWithConfigurablePageSizeWithAlias(page, append, orderByQueryClause, "")
+	}
+
+	getPaginationQueryFragmentWithConfigurablePageSizeWithAlias = func(page *data.Pagination, append bool, orderByQueryClause orderByClause, alias string) string {
 		query := " "
+		aliasPrefix := ""
+		if len(alias) > 0 {
+			aliasPrefix = alias + "."
+		}
 		if page.Next != nil {
 			if append {
 				query = query + "AND "
 			} else {
 				query = query + "WHERE "
 			}
-			query = query + "id < '" + page.Next.ID + "' "
-			query = query + "AND createdAt <= ? "
+			query = query + fmt.Sprintf("%sid < '", aliasPrefix) + page.Next.ID + "' "
+			query = query + fmt.Sprintf("AND %screatedAt <= ? ", aliasPrefix)
 		}
 		if page.Previous != nil {
 			if append {
@@ -363,8 +382,8 @@ var (
 			} else {
 				query = query + "WHERE "
 			}
-			query = query + "id > '" + page.Previous.ID + "' "
-			query = query + "AND createdAt >= ? "
+			query = query + fmt.Sprintf("%sid > '", aliasPrefix) + page.Previous.ID + "' "
+			query = query + fmt.Sprintf("AND %screatedAt >= ? ", aliasPrefix)
 		}
 		query = query + string(orderByQueryClause)
 		return query

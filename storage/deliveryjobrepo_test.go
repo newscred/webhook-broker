@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"slices"
 	"sort"
 	"testing"
 	"time"
@@ -284,7 +285,7 @@ func TestStatusUpdatesForJob(t *testing.T) {
 }
 
 func TestStatusBasedJobsListing(t *testing.T) {
-	t.Run("SuccessRetryList", func(t *testing.T) {
+	t.Run("RetryListQueryError", func(t *testing.T) {
 		t.Parallel()
 		var buf bytes.Buffer
 		oldLogger := log.Logger
@@ -301,32 +302,44 @@ func TestStatusBasedJobsListing(t *testing.T) {
 		assert.Contains(t, buf.String(), errString)
 
 	})
+	pullConsumer, err := data.NewConsumer(channel1, "test-pull-consumer", "token", callbackURL, data.PullConsumerStr)
+	assert.Nil(t, err)
+	_, err = getConsumerRepo().Store(pullConsumer)
+	assert.Nil(t, err)
 	djRepo := getDeliverJobRepository()
 	msgRepo := getMessageRepository()
 	message := getMessageForJob()
 	msgRepo.Create(message)
 	jobs := getDeliveryJobsInFixture(message)
-	err := djRepo.DispatchMessage(message, jobs...)
-	djRepo.MarkJobInflight(jobs[0])
+	err = djRepo.DispatchMessage(message, jobs...)
+	inflightJob := jobs[0]
+	for _, job := range jobs {
+		if job.Listener.Type != data.PullConsumer {
+			inflightJob = job
+			break
+		}
+	}
+	djRepo.MarkJobInflight(inflightJob)
 	assert.Nil(t, err)
 	time.Sleep(configuration.RationalDelay + 1)
 	t.Run("SuccessInflightRecoveryList", func(t *testing.T) {
-		t.Parallel()
 		thisJobs := djRepo.GetJobsInflightSince(configuration.RationalDelay)
 		assert.LessOrEqual(t, 1, len(thisJobs))
 		found := false
 		for _, job := range thisJobs {
-			if job.ID == jobs[0].ID {
+			if job.ID == inflightJob.ID {
 				found = true
 			}
 		}
 		assert.True(t, found)
 	})
 	t.Run("SuccessRetryList", func(t *testing.T) {
-		t.Parallel()
-		thisJobs := djRepo.GetJobsReadyForInflightSince(configuration.RationalDelay)
+		thisJobs := djRepo.GetJobsReadyForInflightSince(configuration.RationalDelay, 4)
 		assert.LessOrEqual(t, len(jobs)-1, len(thisJobs))
 		found := false
+		for _, thisJob := range thisJobs {
+			assert.True(t, thisJob.Listener.Type == data.PushConsumer)
+		}
 		for index := 1; index < len(jobs); index++ {
 			for _, job := range thisJobs {
 				if job.ID == jobs[index].ID {
@@ -447,6 +460,19 @@ func TestRequeueDeadJobsForConsumer(t *testing.T) {
 	jobs := getDeliveryJobsInFixture(message)
 	err = djRepo.DispatchMessage(message, jobs...)
 	testJobs := []*data.DeliveryJob{jobs[5], jobs2[5]}
+
+	t.Run("RequeueDeadJob", func(t *testing.T) {
+		sampleTestJob := jobs[5]
+		err := djRepo.MarkJobInflight(sampleTestJob)
+		assert.Nil(t, err)
+		err = djRepo.MarkJobDead(sampleTestJob)
+		assert.Nil(t, err)
+		err = djRepo.RequeueDeadJob(sampleTestJob)
+		assert.Nil(t, err)
+		err = djRepo.RequeueDeadJob(sampleTestJob)
+		assert.NotNil(t, err)
+	})
+
 	for _, testJob := range testJobs {
 		err := djRepo.MarkJobInflight(testJob)
 		assert.Nil(t, err)
@@ -508,4 +534,45 @@ func TestUpdateJobTimeout(t *testing.T) {
 		assert.GreaterOrEqual(t, dJob.UpdatedAt, oldTime)
 
 	})
+}
+
+func TestGetJobStatusCountsGroupedByConsumer(t *testing.T) {
+	djRepo := getDeliverJobRepository()
+	result, err := djRepo.GetJobStatusCountsGroupedByConsumer()
+	assert.Nil(t, err)
+	assert.Equal(t, 1, len(result))
+	// The following is an output from a sample run
+	// This is predictable since consumer ids are in alphabetical order in IDs
+	// Also since this is the last test and not parallel the state after the
+	// the package tests are executed should be same
+	// `map[channel1-for-consumer:
+	// 	map[ctjsidj3occ10ad6kjq0:[QUEUED: 9 INFLIGHT: 1]
+	// 		ctjsidj3occ10ad6kjqg:[QUEUED: 9 INFLIGHT: 1]
+	// 		ctjsidj3occ10ad6kjr0:[QUEUED: 9 DEAD: 1]
+	// 		ctjsidj3occ10ad6kjrg:[QUEUED: 9 DELIVERED: 1]
+	// 		ctjsidj3occ10ad6kjs0:[QUEUED: 10]
+	// 		ctjsidj3occ10ad6kjsg:[QUEUED: 8 INFLIGHT: 2]
+	// 		ctjsidj3occ10ad6kjt0:[QUEUED: 10]
+	// 		ctjsidj3occ10ad6kjtg:[QUEUED: 9 INFLIGHT: 1]
+	// 		ctjsidj3occ10ad6kju0:[QUEUED: 10]
+	// 		ctjsidj3occ10ad6kjug:[QUEUED: 10]]]`
+	channelID := Channel_ID(`channel1-for-consumer`)
+	assert.Equal(t, 10, len(result[channelID]))
+	consumerIds := make([]Consumer_ID, 0, len(result[channelID]))
+	for consumerID := range result[channelID] {
+		consumerIds = append(consumerIds, consumerID)
+	}
+	slices.Sort(consumerIds)
+	assert.Equal(t, data.JobQueued, result[channelID][consumerIds[0]][0].Status)
+	assert.Equal(t, 9, result[channelID][consumerIds[0]][0].Count)
+	assert.Equal(t, data.JobInflight, result[channelID][consumerIds[0]][1].Status)
+	assert.Equal(t, 1, result[channelID][consumerIds[0]][1].Count)
+	assert.Equal(t, data.JobQueued, result[channelID][consumerIds[1]][0].Status)
+	assert.Equal(t, 9, result[channelID][consumerIds[1]][0].Count)
+	assert.Equal(t, data.JobDead, result[channelID][consumerIds[2]][1].Status)
+	assert.Equal(t, 1, result[channelID][consumerIds[2]][1].Count)
+	assert.Equal(t, data.JobDelivered, result[channelID][consumerIds[3]][1].Status)
+	assert.Equal(t, 1, result[channelID][consumerIds[3]][1].Count)
+	assert.Equal(t, 10, result[channelID][consumerIds[4]][0].Count)
+	assert.Equal(t, data.JobQueued, result[channelID][consumerIds[4]][0].Status)
 }

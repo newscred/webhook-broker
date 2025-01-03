@@ -22,6 +22,10 @@ import (
 	"github.com/influxdata/tdigest"
 	"github.com/julienschmidt/httprouter"
 	"github.com/rs/xid"
+
+	"database/sql"
+
+	_ "github.com/go-sql-driver/mysql" // MySQL driver
 )
 
 type deadDeliveryJobModel struct {
@@ -120,6 +124,15 @@ func checkPort(port int) (err error) {
 		err = netErr
 	}
 	return err
+}
+
+func connectToMySQL(connectionString string) (*sql.DB, error) {
+	db, err := sql.Open("mysql", connectionString)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to MySQL: %w", err)
+	}
+
+	return db, nil
 }
 
 func consumerController(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
@@ -441,6 +454,8 @@ func main() {
 	testJobPullFlow()
 	resetHandlers()
 	testDLQFlow()
+	resetHandlers()
+	testPruning()
 }
 
 func testBasicObjectCreation(portString string) {
@@ -519,7 +534,7 @@ func testConsumerTypeCreation(portString string) {
 			// must return bad request for invalid consumer type
 			if resp.StatusCode != http.StatusBadRequest {
 				log.Println("Error: invalid status code for wrong consumer type")
-				os.Exit(4)
+				os.Exit(24)
 			}
 			continue
 		}
@@ -636,13 +651,13 @@ func testJobPullFlow() {
 
 	channelID := pullChannelID
 	jobIDs := make([]xid.ID, limit)
-	time.Sleep(3 * time.Second)
+	time.Sleep(5 * time.Second)
 	for index := pushConsumerCount; index < pushConsumerCount+pullConsumerCount; index++ {
 		indexString := strconv.Itoa(index)
 		consumerID := consumerIDPrefix + indexString
 		data := getQueuedJobs(channelID, consumerID, limit)
 		if len(data.Result) != limit {
-			log.Println("queued jobs count mismatch for consumer", consumerID)
+			log.Println(fmt.Sprintf("queued jobs count mismatch for consumer %d vs %d", len(data.Result), limit), consumerID)
 			os.Exit(18)
 		}
 		for i := 0; i < limit; i++ {
@@ -727,7 +742,7 @@ func testDLQFlow() {
 		log.Println("error broadcasting message", err)
 		os.Exit(7)
 	}
-	timeoutDuration := (1 + 2 + 3 + 4 + 5 + 10) * time.Second
+	timeoutDuration := (1 + 2 + 3 + 4 + 5 + 20) * time.Second
 	if waitTimeout(wg, timeoutDuration) {
 		log.Println("Timed out waiting for wait group after", timeoutDuration)
 		os.Exit(5)
@@ -805,4 +820,62 @@ func testDLQFlow() {
 			os.Exit(13)
 		}
 	}
+}
+
+func testPruning() {
+	// Subtract message created date by 2 days
+	// TODO Copied from the integration test configuration, consider rather reading it from the config file directly to avoid copying of the URL
+	connectionString := "webhook_broker:zxc909zxc@tcp(mysql:3306)/webhook-broker?charset=utf8mb4&collation=utf8mb4_0900_ai_ci&parseTime=true&multiStatements=true"
+	db, err := connectToMySQL(connectionString)
+	if err != nil {
+		log.Fatal(err) // Handle error appropriately
+	}
+	defer db.Close()
+	// Check messages count - pre-pruning
+	var messageCount int
+	err = db.QueryRow("SELECT COUNT(*) FROM message").Scan(&messageCount)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("Number of messages before prune %d\n", messageCount)
+	_, err = db.Exec("UPDATE message SET createdAt = DATE_SUB(createdAt, INTERVAL 2 DAY), receivedAt = DATE_SUB(receivedAt, INTERVAL 2 DAY)")
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println("Updated message createdAt to -2 days")
+	_, err = db.Exec("UPDATE job SET status = 1003 WHERE status = 1001 AND consumerId IN (SELECT id FROM consumer WHERE type = 0);")
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println("Pull jobs converted to delivered")
+	// Sleep for the pruning to take place
+	time.Sleep(15 * time.Second)
+	// Check messages count - post pruning or pruning in progress
+	var postPruningMessageCount int
+	err = db.QueryRow("SELECT COUNT(*) FROM message").Scan(&postPruningMessageCount)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("Number of messages after prune started %d\n", postPruningMessageCount)
+	if postPruningMessageCount >= messageCount {
+		log.Println("No messages have been deleted from pruning even after waiting 30s+")
+		os.Exit(31)
+	}
+	// Check export links
+	prunerURL := "http://webhook-broker-pruner/"
+	resp, err := client.Get(prunerURL) // Use the existing client for the call
+	if err != nil {
+		log.Fatal("Error calling pruner endpoint:", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatal("Error reading pruner response:", err)
+	}
+
+	if !strings.Contains(string(body), "w7b6_intg_test") {
+		log.Fatal("Expected string 'w7b6_intg_test' not found in pruner response")
+	}
+	//TODO Check for the contents of the file to ensure it is exporting the right thing in right format
 }

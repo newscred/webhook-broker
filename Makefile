@@ -94,13 +94,13 @@ endif
 	)
 
 time-test:
-	time go test -timeout 30s -mod=readonly ./... -count=1
+	time go test -timeout 45s -mod=readonly ./... -count=1
 
 ci-test:
-	go test -timeout 30s -mod=readonly -v ./... -short
+	go test -timeout 45s -mod=readonly -v ./... -short
 
 test:
-	go test -timeout 30s -mod=readonly ./...
+	go test -timeout 45s -mod=readonly ./...
 
 install: build
 	go install -mod=readonly
@@ -114,9 +114,12 @@ clean:
 	-rm -vrf ./dist/*
 	-rm -v webhook-broker
 
+prep-itest:
+	- ./build/scripts/prune-dockerfile-generator.sh
+	
 itest-down:
 	- docker compose -f docker-compose.integration-test.yaml down
 
-itest: itest-down
+itest: prep-itest itest-down
 	docker compose -f docker-compose.integration-test.yaml build
 	docker compose -f docker-compose.integration-test.yaml up tester

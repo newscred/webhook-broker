@@ -27,6 +27,7 @@ const (
 	headerMessageID       = "X-Broker-Message-ID"
 	headerMetadataHeaders = "X-Broker-Metadata-Headers"
 	headerRequestID       = "X-Request-ID"
+	headerUserAgent       = "User-Agent"
 	requestIDLogFieldKey  = "requestId"
 	jobIDLogFieldKey      = "jobId"
 )
@@ -82,10 +83,10 @@ var deliverJob = func(w *Worker, job *Job) {
 		logger.Debug().Msg("delivered job")
 		err = w.djRepo.MarkJobDelivered(job.Data)
 	} else if job.Data.RetryAttemptCount >= uint(w.brokerConfig.GetMaxRetry()) {
-		logger.Debug().Err(err).Msg("job marked dead")
+		logger.Debug().Err(err).Msgf("job marked dead; message: %s, channel: %s, consumer: %s, job: %s", job.Data.Message.MessageID, job.Data.Message.BroadcastedTo.ChannelID, job.Data.Listener.ConsumerID, job.Data.ID.String())
 		err = w.djRepo.MarkJobDead(job.Data)
 	} else {
-		logger.Debug().Err(err).Msg("schedule for retry job ")
+		logger.Debug().Err(err).Msgf("schedule for retry job; message: %s, channel: %s, consumer: %s, job: %s", job.Data.Message.MessageID, job.Data.Message.BroadcastedTo.ChannelID, job.Data.Listener.ConsumerID, job.Data.ID.String())
 		err = w.djRepo.MarkJobRetry(job.Data, w.earliestDelta(job.Data.RetryAttemptCount+1))
 	}
 	if err != nil {
@@ -118,7 +119,7 @@ func (w *Worker) earliestDelta(retryAttempt uint) time.Duration {
 	return computeEarliestDelta(retryAttempt, w.brokerConfig)
 }
 
-var callConsumer = func(httpClient *http.Client, requestID string, logger zerolog.Logger, job *Job) (err error) {
+var callConsumer = func(worker *Worker, requestID string, logger zerolog.Logger, job *Job) (err error) {
 	var req *http.Request
 	req, err = http.NewRequest(http.MethodPost, job.Data.Listener.CallbackURL, strings.NewReader(job.Data.Message.Payload))
 	if err == nil {
@@ -128,7 +129,8 @@ var callConsumer = func(httpClient *http.Client, requestID string, logger zerolo
 		req.Header.Set(headerBrokerPriority, strconv.Itoa(int(job.Priority)))
 		req.Header.Set(headerChannelID, job.Data.Message.BroadcastedTo.ChannelID)
 		req.Header.Set(headerConsumerID, job.Data.Listener.ConsumerID)
-		req.Header.Set(headerConsumerToken, job.Data.Listener.Token)
+		req.Header.Set(worker.consumerConnectionConfig.GetTokenRequestHeaderName(), job.Data.Listener.Token)
+		req.Header.Set(headerUserAgent, worker.consumerConnectionConfig.GetUserAgent())
 		req.Header.Set(headerRequestID, requestID)
 		req.Header.Set(headerMessageID, message.MessageID)
 		metadataHeaderNames := []string{}
@@ -142,6 +144,7 @@ var callConsumer = func(httpClient *http.Client, requestID string, logger zerolo
 		req.Header.Add(headerMetadataHeaders, strings.Join(metadataHeaderNames, ","))
 
 		var resp *http.Response
+		httpClient := worker.httpClient
 		resp, err = httpClient.Do(req)
 		if err == nil {
 			defer resp.Body.Close()
@@ -171,7 +174,7 @@ func (w *Worker) executeJob(requestID string, logger zerolog.Logger, job *Job) (
 			err = errors.New("panic in executeJob")
 		}
 	}()
-	return callConsumer(w.httpClient, requestID, logger, job)
+	return callConsumer(w, requestID, logger, job)
 }
 
 // IsWorking retrieves whether the work is active
