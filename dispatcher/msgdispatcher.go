@@ -314,6 +314,7 @@ type Configuration struct {
 	MsgRepo                  storage.MessageRepository
 	BrokerConfig             config.BrokerConfig
 	ConsumerConnectionConfig config.ConsumerConnectionConfig
+	MetricsCollector         *MetricsContainer
 }
 
 // NewMessageDispatcher retrieves new instance of MessageDispatcher
@@ -331,10 +332,10 @@ func NewMessageDispatcher(configuration *Configuration) MessageDispatcher {
 	msgRepo := configuration.MsgRepo
 	lockRepo := configuration.LockRepo
 	dispatcherImpl := &MessageDispatcherImpl{djRepo: djRepo, consumerRepo: consumerRepo, msgRepo: msgRepo, dispatcherStop: make(chan bool),
-		workerPool: make(chan chan *Job, brokerConfig.GetMaxWorkers()), jobPriorityQueue: NewJobPriorityQueue(), messageRecoverWorkerStop: make(chan bool),
-		jobQueue: make(chan *Job, brokerConfig.GetMaxMessageQueueSize()), rationalDelay: brokerConfig.GetRationalDelay(), lockRepo: lockRepo,
-		recoveryWorkersEnabled: brokerConfig.IsRecoveryWorkersEnabled(), jobRecoverStaleInflightWorkerStop: make(chan bool), jobRecoverRetryWorkerStop: make(chan bool),
-		brokerConfig: brokerConfig}
+		workerPool: make(chan chan *Job, brokerConfig.GetMaxWorkers()), jobPriorityQueue: NewJobPriorityQueue(configuration.MetricsCollector.QueuedJobCount),
+		messageRecoverWorkerStop: make(chan bool), jobQueue: make(chan *Job, brokerConfig.GetMaxMessageQueueSize()),
+		rationalDelay: brokerConfig.GetRationalDelay(), lockRepo: lockRepo, recoveryWorkersEnabled: brokerConfig.IsRecoveryWorkersEnabled(),
+		jobRecoverStaleInflightWorkerStop: make(chan bool), jobRecoverRetryWorkerStop: make(chan bool), brokerConfig: brokerConfig}
 	workers := make([]*Worker, brokerConfig.GetMaxWorkers())
 	for i := 0; i < len(workers); i++ {
 		worker := NewWorker(dispatcherImpl.workerPool, consumerConfig, brokerConfig, djRepo)

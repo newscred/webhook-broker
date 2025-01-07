@@ -32,7 +32,7 @@ var (
 	routerInitializer sync.Once
 	server            *http.Server
 	// ControllerInjector for binding controllers
-	ControllerInjector = wire.NewSet(ConfigureAPI, NewRouter, NewStatusController, NewProducersController, NewProducerController, NewChannelController, NewChannelsController, NewConsumerController, NewConsumersController, NewJobsController, NewJobController, NewBroadcastController, NewMessageController, NewMessagesController, NewMessagesStatusController, NewDLQController, NewJobRequeueController, NewJobStatusController, wire.Struct(new(Controllers), "StatusController", "ProducersController", "ProducerController", "ChannelController", "ConsumerController", "ConsumersController", "JobsController", "JobController", "BroadcastController", "MessageController", "MessagesController", "DLQController", "ChannelsController", "MessagesStatusController", "JobRequeueController", "JobStatusController"))
+	ControllerInjector = wire.NewSet(ConfigureAPI, NewRouter, NewStatusController, NewProducersController, NewProducerController, NewChannelController, NewChannelsController, NewConsumerController, NewConsumersController, NewJobsController, NewJobController, NewBroadcastController, NewMessageController, NewMessagesController, NewMessagesStatusController, NewDLQController, NewJobRequeueController, NewJobStatusController, wire.Struct(new(Controllers), "StatusController", "ProducersController", "ProducerController", "ChannelController", "ConsumerController", "ConsumersController", "JobsController", "JobController", "BroadcastController", "MessageController", "MessagesController", "DLQController", "ChannelsController", "MessagesStatusController", "JobRequeueController", "JobStatusController", "MetricsHandler"))
 	// ErrUnsupportedMediaType is returned when client does not provide appropriate `Content-Type` header
 	ErrUnsupportedMediaType = errors.New("Media type not supported")
 	// ErrConditionalFailed is returned when update is missing `If-Unmodified-Since` header
@@ -76,6 +76,7 @@ type (
 		MessagesStatusController *MessagesStatusController
 		JobRequeueController     *JobRequeueController
 		JobStatusController      *JobStatusController
+		MetricsHandler           http.Handler
 	}
 
 	// ServerLifecycleListener listens to key server lifecycle error
@@ -217,6 +218,7 @@ func NewRouter(controllers *Controllers) *httprouter.Router {
 	apiRouter.Handler(http.MethodGet, "/debug/pprof/heap", pprof.Handler("heap"))
 	apiRouter.Handler(http.MethodGet, "/debug/pprof/threadcreate", pprof.Handler("threadcreate"))
 	apiRouter.Handler(http.MethodGet, "/debug/pprof/block", pprof.Handler("block"))
+	apiRouter.Handler(http.MethodGet, "/metrics", controllers.MetricsHandler)
 	setupAPIRoutes(apiRouter, controllers.StatusController, controllers.ProducersController, controllers.ProducerController, controllers.ChannelController,
 		controllers.ConsumerController, controllers.ConsumersController, controllers.JobsController, controllers.JobController, controllers.BroadcastController, controllers.MessageController,
 		controllers.MessagesController, controllers.DLQController, controllers.ChannelsController, controllers.MessagesStatusController, controllers.JobRequeueController,

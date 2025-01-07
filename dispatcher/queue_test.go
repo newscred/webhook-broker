@@ -12,7 +12,7 @@ import (
 
 func TestPriorityQueueBasic(t *testing.T) {
 	rand.Seed(time.Now().Unix())
-	pq := NewJobPriorityQueue()
+	pq := NewJobPriorityQueue(counter.QueuedJobCount)
 	priorities := rand.Perm(100)
 
 	for _, priority := range priorities {
@@ -39,8 +39,7 @@ func BenchmarkPriorityQueue(b *testing.B) {
 func stressPriorityQueue() {
 	MaxQueueSize := 100000
 	contentType := "application/json"
-
-	pq := NewJobPriorityQueue()
+	pq := NewJobPriorityQueue(counter.QueuedJobCount)
 	for i := 0; i < MaxQueueSize; i++ {
 		priority := i % 3
 		messagePayload := strconv.Itoa(priority)

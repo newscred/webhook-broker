@@ -3,6 +3,7 @@ package dispatcher
 import (
 	"container/heap"
 	"sync"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type jobs []*Job
@@ -36,6 +37,7 @@ func (jbs *jobs) Pop() any {
 
 type PriorityQueue struct {
 	jobs jobs
+	queuedCounter prometheus.Gauge
 	mu   sync.Mutex
 }
 
@@ -49,16 +51,18 @@ func (pq *PriorityQueue) Enqueue(job *Job) {
 	pq.mu.Lock()
 	defer pq.mu.Unlock()
 	heap.Push(&pq.jobs, job)
+	pq.queuedCounter.Inc()
 }
 
 // Dequeue pops the item next in order
 func (pq *PriorityQueue) Dequeue() *Job {
 	pq.mu.Lock()
 	defer pq.mu.Unlock()
+	pq.queuedCounter.Dec()
 	return heap.Pop(&pq.jobs).(*Job)
 }
 
 // NewJobPriorityQueue initializes a priority queue for Jobs
-func NewJobPriorityQueue() *PriorityQueue {
-	return &PriorityQueue{}
+func NewJobPriorityQueue(queuedCounter prometheus.Gauge) *PriorityQueue {
+	return &PriorityQueue{queuedCounter: queuedCounter}
 }
