@@ -49,6 +49,7 @@ func GetHTTPServer(cliConfig *config.CLIConfig) (*HTTPServiceContainer, error) {
 	consumersController := controllers.NewConsumersController(consumerController, consumerRepository)
 	messagesController := controllers.NewMessagesController(messageController, messageRepository)
 	lockRepository := newLockRepository(dataAccessor)
+	metricsContainer := dispatcher.NewMetricsContainer()
 	configuration := &dispatcher.Configuration{
 		DeliveryJobRepo:          deliveryJobRepository,
 		ConsumerRepo:             consumerRepository,
@@ -56,6 +57,7 @@ func GetHTTPServer(cliConfig *config.CLIConfig) (*HTTPServiceContainer, error) {
 		BrokerConfig:             configConfig,
 		ConsumerConnectionConfig: configConfig,
 		MsgRepo:                  messageRepository,
+		MetricsCollector:         metricsContainer,
 	}
 	messageDispatcher := dispatcher.NewMessageDispatcher(configuration)
 	broadcastController := controllers.NewBroadcastController(channelRepository, messageRepository, producerRepository, messageDispatcher)
@@ -65,6 +67,7 @@ func GetHTTPServer(cliConfig *config.CLIConfig) (*HTTPServiceContainer, error) {
 	jobController := controllers.NewJobController(messageController, channelController, producerController, consumerController, channelRepository, consumerRepository, deliveryJobRepository)
 	channelsController := controllers.NewChannelsController(channelRepository, channelController)
 	jobStatusController := controllers.NewJobStatusController(deliveryJobRepository)
+	handler := dispatcher.NewPrometheusHandler()
 	controllersControllers := &controllers.Controllers{
 		StatusController:         statusController,
 		ProducersController:      producersController,
@@ -82,6 +85,7 @@ func GetHTTPServer(cliConfig *config.CLIConfig) (*HTTPServiceContainer, error) {
 		MessagesStatusController: messagesStatusController,
 		JobRequeueController:     jobRequeueController,
 		JobStatusController:      jobStatusController,
+		MetricsHandler:           handler,
 	}
 	router := controllers.NewRouter(controllersControllers)
 	server := controllers.ConfigureAPI(configConfig, serverLifecycleListenerImpl, router)

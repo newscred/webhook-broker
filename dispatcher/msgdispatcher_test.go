@@ -44,6 +44,7 @@ var (
 	configuration        *config.Config
 	server               *http.Server
 	consumerHandler      map[string]func(string, http.ResponseWriter, *http.Request)
+	counter              = NewMetricsContainer()
 )
 
 func TestMain(m *testing.M) {
@@ -189,6 +190,7 @@ func getCompleteDispatcherConfiguration(msgRepo storage.MessageRepository, djRep
 		ConsumerConnectionConfig: consumerConfig,
 		LockRepo:                 lockRepo,
 		MsgRepo:                  msgRepo,
+		MetricsCollector:         counter,
 	}
 }
 

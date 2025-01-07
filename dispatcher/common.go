@@ -7,7 +7,7 @@ import (
 
 var (
 	// DispatcherInjector is the injector for the Dispatcher module
-	DispatcherInjector = wire.NewSet(NewMessageDispatcher, wire.Struct(new(Configuration), "DeliveryJobRepo", "ConsumerRepo", "LockRepo", "BrokerConfig", "ConsumerConnectionConfig", "MsgRepo"))
+	DispatcherInjector = wire.NewSet(NewMessageDispatcher, wire.Struct(new(Configuration), "DeliveryJobRepo", "ConsumerRepo", "LockRepo", "BrokerConfig", "ConsumerConnectionConfig", "MsgRepo", "MetricsCollector"))
 )
 
 // Job represents the job to be run
