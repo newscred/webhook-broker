@@ -1,0 +1,725 @@
+openapi: 3.0.0
+info:
+  title: Webhook Broker API
+  description: This is a fully HTTP-based Pub/Sub Broker designed to simplify system architecture in SOA or Microservice architecture.
+  version: 1.0.0
+paths:
+  /producers:
+    get:
+      summary: Get list of producers
+      tags:
+        - Producers
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListResult'
+        '400':
+          description: Bad request
+  /producer/{producerId}:
+    get:
+      summary: Get a specific producer
+      tags:
+        - Producers
+      parameters:
+        - name: producerId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MsgStakeholder'
+        '404':
+          description: Producer not found
+    put:
+      summary: Update a specific producer
+      tags:
+        - Producers
+      parameters:
+        - name: producerId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                token:
+                  type: string
+                name:
+                  type: string
+      responses:
+        '200':
+          description: Successful update
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MsgStakeholder'
+        '400':
+          description: Bad request
+        '404':
+          description: Producer not found
+  /channels:
+    get:
+      summary: Get list of channels
+      tags:
+        - Channels
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListResult'
+        '400':
+          description: Bad request
+  /channel/{channelId}:
+    get:
+      summary: Get a specific channel
+      tags:
+        - Channels
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelModel'
+        '404':
+          description: Channel not found
+    put:
+      summary: Update a specific channel
+      tags:
+        - Channels
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                token:
+                  type: string
+                name:
+                  type: string
+      responses:
+        '200':
+          description: Successful update
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelModel'
+        '400':
+          description: Bad request
+        '404':
+          description: Channel not found
+  /channel/{channelId}/consumers:
+    get:
+      summary: Get list of consumers for a channel
+      tags:
+        - Consumers
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListResult'
+        '400':
+          description: Bad request
+  /channel/{channelId}/consumer/{consumerId}:
+    get:
+      summary: Get a specific consumer
+      tags:
+        - Consumers
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: consumerId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsumerModel'
+        '404':
+          description: Consumer not found
+    put:
+      summary: Update a specific consumer
+      tags:
+        - Consumers
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: consumerId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                token:
+                  type: string
+                name:
+                  type: string
+                callbackUrl:
+                  type: string
+                type:
+                  type: string
+      responses:
+        '200':
+          description: Successful update
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsumerModel'
+        '400':
+          description: Bad request
+        '404':
+          description: Consumer not found
+    delete:
+      summary: Delete a specific consumer
+      tags:
+        - Consumers
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: consumerId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Successful deletion
+        '404':
+          description: Consumer not found
+  /_status:
+    get:
+      summary: Get application status
+      tags:
+        - Status
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppData'
+        '500':
+          description: Internal server error
+  /job-status:
+    get:
+      summary: Get job status counts grouped by consumer
+      tags:
+        - Status
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobStatus'
+        '500':
+          description: Internal server error
+  /channel/{channelId}/consumer/{consumerId}/queued-jobs:
+    get:
+      summary: Get queued jobs for a consumer
+      tags:
+        - Jobs
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: consumerId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 25
+            maximum: 100
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobListResult'
+        '400':
+          description: Bad request
+  /channel/{channelId}/consumer/{consumerId}/job/{jobId}/requeue-dead-job:
+    post:
+      summary: Requeue a dead job for a consumer
+      tags:
+        - Jobs
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: consumerId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '202':
+          description: Job requeued successfully
+        '400':
+          description: Bad request
+        '404':
+          description: Job not found
+  /channel/{channelId}/consumer/{consumerId}/job/{jobId}:
+    get:
+      summary: Get a specific job
+      tags:
+        - Jobs
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: consumerId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HyperlinkedDeliveryJobModel'
+        '404':
+          description: Job not found
+    post:
+      summary: Update a specific job
+      tags:
+        - Jobs
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: consumerId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                NextState:
+                  type: string
+                IncrementalTimeout:
+                  type: integer
+      responses:
+        '202':
+          description: Job updated successfully
+        '400':
+          description: Bad request
+        '404':
+          description: Job not found
+  /channel/{channelId}/broadcast:
+    post:
+      summary: Broadcast a message to a channel
+      tags:
+        - Broadcast
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+      responses:
+        '201':
+          description: Message broadcasted successfully
+        '400':
+          description: Bad request
+        '409':
+          description: Conflict - Duplicate message ID
+  /channel/{channelId}/message/{messageId}:
+    get:
+      summary: Get a specific message
+      tags:
+        - Messages
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: messageId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageModel'
+        '404':
+          description: Message not found
+  /channel/{channelId}/messages:
+    get:
+      summary: Get list of messages for a channel
+      tags:
+        - Messages
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListResult'
+        '400':
+          description: Bad request
+  /channel/{channelId}/messages-status:
+    get:
+      summary: Get message status counts for a channel
+      tags:
+        - Messages
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusCount'
+        '500':
+          description: Internal server error
+  /channel/{channelId}/consumer/{consumerId}/dlq:
+    get:
+      summary: Get dead letter queue for a consumer
+      tags:
+        - DLQ
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: consumerId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DLQList'
+        '404':
+          description: Consumer not found
+    post:
+      summary: Requeue dead jobs for a consumer
+      tags:
+        - DLQ
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: consumerId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                requeue:
+                  type: string
+      responses:
+        '202':
+          description: Dead jobs requeued successfully
+        '400':
+          description: Bad request
+        '404':
+          description: Consumer not found
+components:
+  schemas:
+    MsgStakeholder:
+      type: object
+      properties:
+        ID:
+          type: string
+        Name:
+          type: string
+        Token:
+          type: string
+        ChangedAt:
+          type: string
+          format: date-time
+    ListResult:
+      type: object
+      properties:
+        Result:
+          type: array
+          items:
+            type: string
+        Pages:
+          type: object
+          additionalProperties:
+            type: string
+    ChannelModel:
+      type: object
+      properties:
+        MsgStakeholder:
+          $ref: '#/components/schemas/MsgStakeholder'
+        ConsumersURL:
+          type: string
+        MessagesURL:
+          type: string
+        BroadcastURL:
+          type: string
+        MessagesStatusURL:
+          type: string
+    ConsumerModel:
+      type: object
+      properties:
+        MsgStakeholder:
+          $ref: '#/components/schemas/MsgStakeholder'
+        CallbackURL:
+          type: string
+        DeadLetterQueueURL:
+          type: string
+        Type:
+          type: string
+    AppData:
+      type: object
+      properties:
+        SeedData:
+          type: object
+        AppStatus:
+          type: object
+    JobStatus:
+      type: object
+      properties:
+        <add properties here as per your exact schema>
+    JobListResult:
+      type: object
+      properties:
+        Result:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueuedDeliveryJobModel'
+    QueuedDeliveryJobModel:
+      type: object
+      properties:
+        ID:
+          type: string
+        Priority:
+          type: integer
+        IncrementalTimeout:
+          type: integer
+        Message:
+          $ref: '#/components/schemas/QueuedMessageModel'
+    QueuedMessageModel:
+      type: object
+      properties:
+        MessageID:
+          type: string
+        Payload:
+          type: string
+        Headers:
+          type: object
+        ContentType:
+          type: string
+    HyperlinkedDeliveryJobModel:
+      type: object
+      properties:
+        DeliveryJobModel:
+          $ref: '#/components/schemas/DeliveryJobModel'
+        MessageURL:
+          type: string
+        ChannelURL:
+          type: string
+        ConsumerURL:
+          type: string
+        ProducerURL:
+          type: string
+        JobRequeueURL:
+          type: string
+    DeliveryJobModel:
+      type: object
+      properties:
+        ListenerEndpoint:
+          type: string
+        ListenerName:
+          type: string
+        Status:
+          type: string
+        StatusChangedAt:
+          type: string
+          format: date-time
+    MessageModel:
+      type: object
+      properties:
+        ID:
+          type: string
+        Payload:
+          type: string
+        ContentType:
+          type: string
+        ProducedBy:
+          type: string
+        ReceivedAt:
+          type: string
+          format: date-time
+        DispatchedAt:
+          type: string
+          format: date-time
+        Status:
+          type: string
+        Jobs:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeliveryJobModel'
+        Headers:
+          type: object
+    StatusCount:
+      type: object
+      properties:
+        Counts:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/TheCount'
+    TheCount:
+      type: object
+      properties:
+        Count:
+          type: integer
+        Links:
+          type: object
+          additionalProperties:
+            type: string
+    DLQList:
+      type: object
+      properties:
+        DeadJobs:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeadDeliveryJobModel'
+        Pages:
+          type: object
+          additionalProperties:
+            type: string
+    DeadDeliveryJobModel:
+      type: object
+      properties:
+        DeliveryJobModel:
+          $ref: '#/components/schemas/DeliveryJobModel'
+        MessageURL:
+          type: string
+        JobRequeueURL:
+          type: string
