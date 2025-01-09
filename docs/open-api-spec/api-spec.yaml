@@ -567,6 +567,7 @@ components:
           type: array
           items:
             type: string
+            format: uri
         Pages:
           type: object
           additionalProperties:
@@ -578,12 +579,16 @@ components:
           $ref: '#/components/schemas/MsgStakeholder'
         ConsumersURL:
           type: string
+          format: uri
         MessagesURL:
           type: string
+          format: uri
         BroadcastURL:
           type: string
+          format: uri
         MessagesStatusURL:
           type: string
+          format: uri
     ConsumerModel:
       type: object
       properties:
@@ -591,8 +596,10 @@ components:
           $ref: '#/components/schemas/MsgStakeholder'
         CallbackURL:
           type: string
+          format: uri
         DeadLetterQueueURL:
           type: string
+          format: uri
         Type:
           type: string
     AppData:
@@ -642,19 +649,25 @@ components:
           $ref: '#/components/schemas/DeliveryJobModel'
         MessageURL:
           type: string
+          format: uri
         ChannelURL:
           type: string
+          format: uri
         ConsumerURL:
           type: string
+          format: uri
         ProducerURL:
           type: string
+          format: uri
         JobRequeueURL:
           type: string
+          format: uri
     DeliveryJobModel:
       type: object
       properties:
         ListenerEndpoint:
           type: string
+          format: uri
         ListenerName:
           type: string
         Status:
@@ -721,5 +734,9 @@ components:
           $ref: '#/components/schemas/DeliveryJobModel'
         MessageURL:
           type: string
+          format: uri
         JobRequeueURL:
           type: string
+          format: uri
+          nullable: true
+          minLength: 0
