@@ -44,7 +44,25 @@ As part of this project we are committed to maintain a [terraform module](https:
 
 ### Helm Chart
 
-As part of the Terraform configuration, we deploy Webhook Broker using a [Helm Chart](https://artifacthub.io/packages/helm/imytech/webhook-broker-chart) maintained within [this repo](./deploy-pkg/webhook-broker-chart/README.md).
+As part of the Terraform configuration, we deploy Webhook Broker using a Helm Chart maintained within [this repo](./deploy-pkg/webhook-broker-chart/README.md).
+
+To use this chart, you need the Helm S3 plugin.
+```bash
+helm plugin install https://github.com/hypnoglow/helm-s3.git
+```
+Now, add the Helm repository from the public S3 bucket:
+```bash
+helm repo add optimizely-helm-charts s3://optimizely-helm-charts/public/stable
+```
+To ensure you have the latest charts:
+```bash
+helm repo update
+```
+Install the chart using the following command:
+```bash
+helm install webhook-broker optimizely-helm-charts/webhook-broker-chart --namespace my-namespace --values my-custom-values.yaml
+```
+This chart is highly configurable. To see the full list of configurable parameters and their default values, refer to [values.yaml](./deploy-pkg/webhook-broker-chart/values.yaml).
 
 ### DIY - Use Docker Image
 
