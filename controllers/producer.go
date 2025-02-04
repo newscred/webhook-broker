@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/julienschmidt/httprouter"
@@ -108,7 +109,8 @@ func (prodController *ProducerController) Put(w http.ResponseWriter, r *http.Req
 
 func checkFormContentType(r *http.Request, w http.ResponseWriter) bool {
 	validRequest := true
-	if r.Header.Get(headerContentType) != formDataContentTypeHeaderValue {
+	contentType, _, _ := strings.Cut(r.Header.Get(headerContentType), ";")
+	if contentType != formDataContentTypeHeaderValue {
 		validRequest = false
 		writeUnsupportedMediaType(w)
 	}
