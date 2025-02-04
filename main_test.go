@@ -31,7 +31,7 @@ const (
 	configFilePath             = "./testdatadir/webhook-broker.main.cfg"
 	configFilePath2            = "./testdatadir/webhook-broker.main-2.cfg"
 	notificationInitialContent = `[http]
-	listener=:12345	
+	listener=:12345
 	`
 	notificationDifferentContent = `[http]
 	listener=:8080
@@ -39,7 +39,7 @@ const (
 )
 
 func TestGetAppVersion(t *testing.T) {
-	assert.Equal(t, string(GetAppVersion()), "0.2-alpha-early-access.4")
+	assert.Equal(t, string(GetAppVersion()), "0.2.0")
 }
 
 var mainFunctionBreaker = func(stop *chan os.Signal) {
