@@ -6,7 +6,7 @@ require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/fsnotify/fsnotify v1.8.0
 	github.com/go-ini/ini v1.67.0
-	github.com/go-sql-driver/mysql v1.8.1
+	github.com/go-sql-driver/mysql v1.9.1
 	github.com/golang-migrate/migrate/v4 v4.17.1
 	github.com/google/wire v0.6.0
 	github.com/julienschmidt/httprouter v1.3.0
