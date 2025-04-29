@@ -66,12 +66,12 @@ This chart is highly configurable. To see the full list of configurable paramete
 
 ### DIY - Use Docker Image
 
-Our docker images are host in 2 repositories (to be updated) -
-
-1. [Docker Hub](https://hub.docker.com/repository/docker/imyousuf/webhook-broker)
-2. [Github Docker Registry](https://github.com/users/imyousuf/packages/container/package/webhook-broker)
-
-The difference being Docker Hub will have images for builds from `main` branch whenever a commit is pushed to the branch. Whereas Github registry will only contain releases. The distinction is made so that docker hub can be used for continuous deployment whereas Github Docker Registry for stable releases. The docker [compose file](https://github.com/imyousuf/webhook-broker/blob/main/docker-compose.integration-test.yaml) for integration test gives a good idea how about to setup an environment using docker images and how to configure it through volume mount.
+Our docker images are hosted in (to be updated) -
+1. [Amazon ECR Public Gallery](https://gallery.ecr.aws/optimizely/webhook-broker)
+<!-- 1. [Docker Hub](https://hub.docker.com/repository/docker/imyousuf/webhook-broker)
+2. [Github Docker Registry](https://github.com/users/imyousuf/packages/container/package/webhook-broker) -->
+<!-- The difference being Docker Hub will have images for builds from `main` branch whenever a commit is pushed to the branch. Whereas Github registry will only contain releases. The distinction is made so that docker hub can be used for continuous deployment whereas Github Docker Registry for stable releases. -->
+The docker [compose file](https://github.com/imyousuf/webhook-broker/blob/main/docker-compose.integration-test.yaml) for integration test gives a good idea how about to setup an environment using docker images and how to configure it through volume mount.
 
 ### DIY - Build and Use
 
