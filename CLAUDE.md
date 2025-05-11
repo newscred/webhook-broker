@@ -118,40 +118,113 @@ curl -v localhost:18181/channel/sample-channel/broadcast -X POST \
 
 ## Implementation Guide for Issue #55: Scheduled Messages
 
-Issue #55 requires implementing scheduled message delivery. New features:
+For detailed implementation information, please refer to the technical specification document at `/docs/tech-specs/scheduled-message-spec.md`.
 
-1. Add `dispatchDate` field to messages to specify future delivery time
-2. Support for recurring schedules:
-   - Optional `cron` expression for recurring delivery
-   - `times` parameter for specific number of recurrences
-   - `until` parameter for time-bound recurrences (mutually exclusive with `times`)
+## Architecture Notes for Future Feature Development
 
-### Implementation Steps:
+When implementing new features in webhook-broker, follow these architectural patterns:
 
-1. Add a new model `ScheduledMessage` with fields:
-   - Base message fields (same as regular messages)
-   - `dispatchDate` (required) - when to deliver the message
-   - `cron` (optional) - cron expression for recurring delivery
-   - `times` (optional) - number of recurrences (if `cron` is specified)
-   - `until` (optional) - end date for recurrences (if `cron` is specified)
+### Adding a New Entity
 
-2. Schema changes:
-   - Add new table for scheduled messages
-   - Add necessary indices for efficient querying
+1. **Database Schema**:
+   - Create migration files in `/migration/sqls/` with proper sequencing
+   - Include necessary indices and foreign key constraints
+   - Migration file should have both `.up.sql` and `.down.sql` versions
 
-3. API changes:
-   - Add endpoint for creating scheduled messages
-   - Add endpoint for canceling scheduled messages
-   - Add endpoint for listing scheduled messages
+2. **Data Model**:
+   - Define model struct in `/storage/data/` directory
+   - Include `BasePaginateable` for common fields (ID, created/updated timestamps)
+   - Implement `QuickFix()` and `IsInValidState()` methods
+   - Define appropriate enum types for status fields with string conversions
 
-4. Scheduler implementation:
-   - Background worker to scan for messages due for delivery
-   - Logic to handle recurring messages based on cron expression
-   - Tracking of delivery count for messages with `times` parameter
+3. **Repository Layer**:
+   - Define repository interface in `/storage/dataaccess.go`
+   - Implement in dedicated file (e.g., `/storage/entitynamerepo.go`)
+   - Add getter to `DataAccessor` interface
+   - Implement getter in `RelationalDBDataAccessor`
+   - Update `RDBMSStorageInternalInjector` wire set in `storage/rdbms.go`
+   - Add field to `RelationalDBDataAccessor` struct
 
-### Notes for Development:
+4. **Controller Layer**:
+   - Create controller(s) in `/controllers/` directory
+   - Implement appropriate HTTP methods (Get, Post, Put, Delete) as needed
+   - Add to `Controllers` struct in `router.go`
+   - Add to `ControllerInjector` wire set
+   - Include in `setupAPIRoutes` function
 
-- Database schema changes will require migration scripts in `/migration/sqls`
-- Controller changes should follow existing patterns in `/controllers`
-- New repository interfaces and implementations will be needed in `/storage`
-- Scheduler should be integrated with the existing dispatcher system
+5. **Background Services**:
+   - Create new package similar to `/dispatcher` if needed
+   - Implement lifecycle methods (Start/Stop)
+   - Add service to `HTTPServiceContainer` in `main.go`
+   - Handle graceful startup/shutdown
+
+### Dependency Injection
+
+1. **Wire Integration**:
+   - Follow existing patterns in `wire.go` and `wire_gen.go`
+   - Add components to appropriate wire sets
+   - Keep field names consistent between structs and wire sets
+   - Create provider functions as needed
+
+2. **Controller Registration**:
+   - Update `Controllers` struct in `router.go`
+   - Add to `ControllerInjector` wire set
+   - Add controller initialization in wire generation chain
+
+3. **Repository Integration**:
+   - Update `RDBMSStorageInternalInjector` in `storage/rdbms.go`
+   - Add necessary provider functions
+   - Ensure field names match exactly in wire struct annotations
+
+### Testing Requirements
+
+1. **Unit Tests**:
+   - Create `_test.go` files for all new components
+   - Follow existing test patterns (setup, execution, assertions)
+   - Use mocks where appropriate
+   - Test edge cases and error conditions
+
+2. **Integration Tests**:
+   - Extend the integration test suite in `/integration-test/main.go`
+   - Add test function to `main()` to be executed with other tests
+   - Verify end-to-end functionality
+   - Include appropriate error case testing
+
+3. **Mock Generation**:
+   - Create mocks for interfaces in `/storage/mocks/` or similar directories
+   - Use mocks for unit testing controllers and services
+
+These patterns should be followed for all new features to maintain consistency with the existing architecture.
+
+## AI-Generated Code Guidelines
+
+When AI agents (like Claude) generate code for this project, the code should be properly formatted according to these guidelines:
+
+1. **Code Attribution**: Always include an attribution comment at the end of the file or significant code block:
+   ```go
+   // Generated with assistance from Claude AI
+   ```
+
+2. **Code Style**:
+   - Follow Go idioms and conventions
+   - Use consistent naming with the rest of the codebase
+   - Avoid unnecessary comments that don't add value
+   - Maintain proper indentation (tabs for Go code)
+   - Organize imports according to standard Go practices
+
+3. **Documentation**:
+   - Include proper godoc-style comments for exported functions and types
+   - Document complex logic with concise, clear comments
+   - Ensure error handling is properly documented
+
+4. **Error Handling**:
+   - Always handle errors appropriately
+   - Use existing error patterns from the codebase
+   - Do not suppress errors or use empty catch blocks
+
+5. **Testing**:
+   - Include unit tests for all new functionality
+   - Follow the existing test patterns in the codebase
+   - Ensure test coverage for edge cases and error conditions
+
+AI agents should focus on code quality and consistency with existing patterns rather than adding explanatory comments about what the code does unless specifically requested.

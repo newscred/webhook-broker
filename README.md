@@ -148,6 +148,7 @@ The Tech Specs are good place to understand the implementation details -
 
 - [Base Release Specs](./docs/tech-specs/basic-spec.md)
 - [Pull Based Consumer Specs](./docs/tech-specs/pull-consumer-spec.md)
+- [Scheduled Message Specs](./docs/tech-specs/scheduled-message-spec.md)
 
 ## Contributors
 
