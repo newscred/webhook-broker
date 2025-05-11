@@ -33,14 +33,15 @@ type MigrationConfig struct {
 
 // RelationalDBDataAccessor represents the DataAccessor implementation for RDBMS
 type RelationalDBDataAccessor struct {
-	appRepository         AppRepository
-	producerRepository    ProducerRepository
-	channelRepository     ChannelRepository
-	consumerRepository    ConsumerRepository
-	messageRepository     MessageRepository
-	deliveryJobRepository DeliveryJobRepository
-	lockRepository        LockRepository
-	db                    *sql.DB
+	appRepository              AppRepository
+	producerRepository         ProducerRepository
+	channelRepository          ChannelRepository
+	consumerRepository         ConsumerRepository
+	messageRepository          MessageRepository
+	deliveryJobRepository      DeliveryJobRepository
+	lockRepository             LockRepository
+	scheduledMessageRepository ScheduledMessageRepository
+	db                         *sql.DB
 }
 
 // GetAppRepository returns the AppRepository to be used for App ops
@@ -76,6 +77,11 @@ func (rdbmsDataAccessor *RelationalDBDataAccessor) GetDeliveryJobRepository() De
 // GetLockRepository retrieves the LockRepository to be used for Lock ops
 func (rdbmsDataAccessor *RelationalDBDataAccessor) GetLockRepository() LockRepository {
 	return rdbmsDataAccessor.lockRepository
+}
+
+// GetScheduledMessageRepository retrieves the ScheduledMessageRepository to be used for ScheduledMessage ops
+func (rdbmsDataAccessor *RelationalDBDataAccessor) GetScheduledMessageRepository() ScheduledMessageRepository {
+	return rdbmsDataAccessor.scheduledMessageRepository
 }
 
 // Close closes the connection to DB
@@ -199,7 +205,7 @@ var (
 	// ErrDBConnectionNeverInitialized is returned when same NewDataAccessor is called the first time and it failed to connec to DB; in all subsequent calls the accessor will remain nil
 	ErrDBConnectionNeverInitialized = errors.New("DB Connection never initialized")
 	// RDBMSStorageInternalInjector injector for data storage related implementation
-	RDBMSStorageInternalInjector = wire.NewSet(GetConnectionPool, GetDefaultCacheTTLDuration, NewLockRepository, NewAppRepository, NewProducerRepository, NewCachedProducerRepository, NewChannelRepository, NewCachedChannelRepository, NewConsumerRepository, NewCachedConsumerRepository, NewMessageRepository, NewDeliveryJobRepository, wire.Struct(new(RelationalDBDataAccessor), "db", "appRepository", "producerRepository", "channelRepository", "consumerRepository", "messageRepository", "deliveryJobRepository", "lockRepository"), wire.Bind(new(DataAccessor), new(*RelationalDBDataAccessor)))
+	RDBMSStorageInternalInjector = wire.NewSet(GetConnectionPool, GetDefaultCacheTTLDuration, NewLockRepository, NewAppRepository, NewProducerRepository, NewCachedProducerRepository, NewChannelRepository, NewCachedChannelRepository, NewConsumerRepository, NewCachedConsumerRepository, NewMessageRepository, NewDeliveryJobRepository, NewScheduledMessageRepository, wire.Struct(new(RelationalDBDataAccessor), "db", "appRepository", "producerRepository", "channelRepository", "consumerRepository", "messageRepository", "deliveryJobRepository", "lockRepository", "scheduledMessageRepository"), wire.Bind(new(DataAccessor), new(*RelationalDBDataAccessor)))
 )
 
 func GetDefaultCacheTTLDuration() time.Duration {
