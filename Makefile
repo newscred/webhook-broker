@@ -59,7 +59,7 @@ dep-tools:
 	go install github.com/google/wire/cmd/wire@v0.6.0
 ifneq ($(OS),Alpine Linux)
 	go install github.com/golang-migrate/migrate/v4/cmd/migrate@v4.15.2
-	go install github.com/vektra/mockery/v2@v2.46.3
+	go install github.com/vektra/mockery/v2@v2.53.3
 endif
 
 build-docker-image:
