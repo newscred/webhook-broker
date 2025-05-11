@@ -31,8 +31,56 @@ If the use case seems overlapping with RabbitMQ, AWS SQS, Celery or similar serv
 1. Development and deployment is easier since everything is just Web APIs
 1. With HTTP2 there is the advantage of multiplexing request/response hence better network utilization between server and client.
 1. Easy use of "prioritized" message queues
-1. Guaranteed delivery of message at least once (push and not polling)
+1. Guaranteed delivery of message at least once
 1. Ease of new queue/topic setup
+
+## Choosing webhook-broker vs. Other Message Brokers
+
+When comparing webhook-broker to other message brokers, consider these advantages:
+
+### When to choose webhook-broker:
+
+1. **HTTP-based architectures** - Perfect for systems already using REST/HTTP as their primary communication protocol
+
+2. **High-volume message processing** - Well-suited for high-throughput scenarios, leveraging MySQL's scalability and Go's efficient concurrency model
+
+3. **Dual consumption models** - Uniquely supports both push and pull consumer patterns:
+   - Push delivery for real-time event processing
+   - Pull-based consumption for rate-limiting and controlled processing
+   - Allows consumers to choose their preferred model based on workload characteristics
+
+4. **Simplified architecture** - Eliminates the need for separate webapp and worker applications:
+   - Consumers can be regular HTTP endpoints in your existing services
+   - No separate worker processes or daemons required
+   - Reduces deployment complexity and infrastructure requirements
+
+5. **Lower Total Cost of Ownership (TCO)** - Significantly reduces costs across multiple dimensions:
+   - Leverages existing HTTP and MySQL expertise in your team
+   - Fewer components to manage and monitor
+   - Simplified infrastructure with familiar technologies
+   - Reduced training costs for operations and development teams
+
+6. **Enterprise messaging needs** - Provides enterprise features like dead letter queues, message priorities, and at-least-once delivery guarantees
+
+7. **Simplified deployment** - Offers a straightforward deployment model that integrates with standard web infrastructure
+
+8. **Consistent scaling patterns** - Both broker and consumers follow standard web application scaling patterns:
+   - Scale horizontally using familiar load balancing techniques
+   - Consistent monitoring, deployment, and scaling strategies across your entire stack
+   - No need to learn specialized scaling approaches for messaging components
+   - Simplifies capacity planning and infrastructure management
+
+9. **Multi-tenant environments** - Proven capabilities in multi-tenant SaaS applications with high reliability requirements
+
+### When other message brokers might be better:
+
+1. **Specialized protocol requirements** - When you specifically need non-HTTP protocols like MQTT, AMQP, or STOMP
+
+2. **Complex exchange patterns** - For extremely sophisticated routing topologies beyond basic channel/topic models
+
+3. **Existing broker investment** - When you have significant investment and expertise in a specific messaging platform that meets your needs
+
+4. **Streaming-centric architecture** - For systems primarily built around streaming data models rather than discrete messaging
 
 ## Install & Usage
 
