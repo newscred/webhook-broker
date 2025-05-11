@@ -34,3 +34,5 @@ integration-test/integration-test
 *.ovpn
 webhook-broker-chart-*.tgz
 testDockerfile
+
+**/.claude/settings.local.json

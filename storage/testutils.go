@@ -9,6 +9,8 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// testDB is already declared in rdbms_test.go
+
 const (
 	samplePayload          = "some payload"
 	sampleContentType      = "a content type"
@@ -115,3 +117,5 @@ func SetupPruneableMessageFixture(dataAccessor DataAccessor, channel *data.Chann
 	}
 	return msg, jobs
 }
+
+// NOTE: We're handling the setup in the test functions themselves
