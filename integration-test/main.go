@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"math"
 	"net"
@@ -304,7 +303,7 @@ func createConsumers(baseURI string) int {
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusBadRequest {
-			respBody, _ := ioutil.ReadAll(resp.Body)
+			respBody, _ := io.ReadAll(resp.Body)
 			log.Println("response", resp.Status, string(respBody))
 			return 0
 		}
@@ -332,7 +331,7 @@ func broadcastMessage(channelID string, sendCount int) (err error) {
 		} else {
 			defer resp.Body.Close()
 			if resp.StatusCode != http.StatusCreated {
-				respBody, _ := ioutil.ReadAll(resp.Body)
+				respBody, _ := io.ReadAll(resp.Body)
 				log.Println("error broadcasting message", resp.StatusCode, string(respBody))
 				err = errDuringCreation
 			}
@@ -380,7 +379,7 @@ func addConsumerVerified(expectedEventCount int, assert bool, simulateFailures i
 				}
 			}()
 			if assert {
-				body, _ := ioutil.ReadAll(r.Body)
+				body, _ := io.ReadAll(r.Body)
 				if string(body) != payload {
 					consumerAssertionFailed = true
 					log.Println("error - assertion failed for", s)
@@ -527,7 +526,7 @@ func testConsumerTypeCreation(portString string) {
 			continue
 		}
 		defer resp.Body.Close()
-		respBody, _ := ioutil.ReadAll(resp.Body)
+		respBody, _ := io.ReadAll(resp.Body)
 		log.Println("response", resp.Status, string(respBody))
 
 		if tt.passedConsumerType == "wrongType" {
@@ -615,7 +614,7 @@ func testJobPullFlow() {
 			os.Exit(14)
 		}
 		defer resp.Body.Close()
-		body, _ := ioutil.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body)
 		err = json.Unmarshal(body, &queuedJobs)
 		if err != nil {
 			log.Println(err)
@@ -725,7 +724,7 @@ func testDLQFlow() {
 				log.Println("Recovered in DLQ Flow", r)
 			}
 		}()
-		body, _ := ioutil.ReadAll(r.Body)
+		body, _ := io.ReadAll(r.Body)
 		if string(body) != payload {
 			consumerAssertionFailed = true
 			log.Println("error - assertion failed for", s)
@@ -765,7 +764,7 @@ func testDLQFlow() {
 		log.Println(err)
 		os.Exit(8)
 	}
-	body, _ := ioutil.ReadAll(resp.Body)
+	body, _ := io.ReadAll(resp.Body)
 	log.Println("BODY", string(body))
 	decoder := json.NewDecoder(bytes.NewBuffer(body))
 	dlq := &dlqList{}
@@ -791,7 +790,7 @@ func testDLQFlow() {
 				log.Println("Recovered", r)
 			}
 		}()
-		body, _ := ioutil.ReadAll(r.Body)
+		body, _ := io.ReadAll(r.Body)
 		if string(body) != payload {
 			consumerAssertionFailed = true
 			log.Println("error - assertion failed for", s)
@@ -869,7 +868,7 @@ func testPruning() {
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Fatal("Error reading pruner response:", err)
 	}

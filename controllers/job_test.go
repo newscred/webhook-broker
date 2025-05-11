@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
@@ -422,7 +422,7 @@ func TestJobControllerPost_Success(t *testing.T) {
 
 			// THE POST ENDPOINT TESTS
 			bodyString := "{\"NextState\": \"" + transition.next.String() + "\"}"
-			requestBody := ioutil.NopCloser(strings.NewReader(bodyString))
+			requestBody := io.NopCloser(strings.NewReader(bodyString))
 			req, err = http.NewRequest(http.MethodPost, testURI, requestBody)
 			assert.NoError(t, err)
 
@@ -460,7 +460,7 @@ func TestJobControllerPost_TransitionFailure(t *testing.T) {
 		testName := "400 Bad Request " + job.Status.String() + " to " + invalidNextState.String()
 		t.Run(testName, func(t *testing.T) {
 			bodyString := "{\"NextState\": \"" + invalidNextState.String() + "\"}"
-			requestBody := ioutil.NopCloser(strings.NewReader(bodyString))
+			requestBody := io.NopCloser(strings.NewReader(bodyString))
 			req, err := http.NewRequest(http.MethodPost, testURI, requestBody)
 			assert.NoError(t, err)
 
@@ -517,7 +517,7 @@ func TestJobControllerPost_Error(t *testing.T) {
 		t.Log(testURI)
 
 		bodyString := "{\"NextState\": \"INFLIGHT\"}"
-		requestBody := ioutil.NopCloser(strings.NewReader(bodyString))
+		requestBody := io.NopCloser(strings.NewReader(bodyString))
 		req, err := http.NewRequest(http.MethodPost, testURI, requestBody)
 		assert.NoError(t, err)
 
@@ -537,7 +537,7 @@ func TestJobControllerPost_Error(t *testing.T) {
 		t.Log(testURI)
 
 		bodyString := "{\"NextState\": \"INFLIGHT\"}"
-		requestBody := ioutil.NopCloser(strings.NewReader(bodyString))
+		requestBody := io.NopCloser(strings.NewReader(bodyString))
 		req, err := http.NewRequest(http.MethodPost, testURI, requestBody)
 		assert.NoError(t, err)
 
@@ -559,7 +559,7 @@ func TestJobControllerPost_Error(t *testing.T) {
 		t.Log(testURI)
 
 		bodyString := "{\"NextState\": \"INFLIGHT\"}"
-		requestBody := ioutil.NopCloser(strings.NewReader(bodyString))
+		requestBody := io.NopCloser(strings.NewReader(bodyString))
 		req, err := http.NewRequest(http.MethodPost, testURI, requestBody)
 		assert.NoError(t, err)
 
@@ -582,7 +582,7 @@ func TestJobControllerPost_Error(t *testing.T) {
 		t.Log(testURI)
 
 		bodyString := "{\"NextState\": \"INFLIGHT\"}"
-		requestBody := ioutil.NopCloser(strings.NewReader(bodyString))
+		requestBody := io.NopCloser(strings.NewReader(bodyString))
 		req, err := http.NewRequest(http.MethodPost, testURI, requestBody)
 		assert.NoError(t, err)
 
@@ -605,7 +605,7 @@ func TestJobControllerPost_Error(t *testing.T) {
 		t.Log(testURI)
 
 		bodyString := "{\"NextState\": \"INFLIGHT\"}"
-		requestBody := ioutil.NopCloser(strings.NewReader(bodyString))
+		requestBody := io.NopCloser(strings.NewReader(bodyString))
 		req, err := http.NewRequest(http.MethodPost, testURI, requestBody)
 		assert.NoError(t, err)
 
@@ -629,7 +629,7 @@ func TestJobControllerPost_Error(t *testing.T) {
 		t.Log(testURI)
 
 		bodyString := "{\"NextState\": \"INFLIGHT\"}"
-		requestBody := ioutil.NopCloser(strings.NewReader(bodyString))
+		requestBody := io.NopCloser(strings.NewReader(bodyString))
 		req, err := http.NewRequest(http.MethodPost, testURI, requestBody)
 		assert.NoError(t, err)
 
@@ -656,7 +656,7 @@ func TestJobControllerPost_Error(t *testing.T) {
 		t.Log(testURI)
 
 		bodyString := "{\"NextState\": \"INFLIGHT\"}"
-		requestBody := ioutil.NopCloser(strings.NewReader(bodyString))
+		requestBody := io.NopCloser(strings.NewReader(bodyString))
 		req, err := http.NewRequest(http.MethodPost, testURI, requestBody)
 		assert.NoError(t, err)
 
@@ -683,7 +683,7 @@ func TestJobControllerPost_Error(t *testing.T) {
 		t.Log(testURI)
 
 		bodyString := "{\"\"}"
-		requestBody := ioutil.NopCloser(strings.NewReader(bodyString))
+		requestBody := io.NopCloser(strings.NewReader(bodyString))
 		req, err := http.NewRequest(http.MethodPost, testURI, requestBody)
 		assert.NoError(t, err)
 
@@ -709,7 +709,7 @@ func TestJobControllerPost_Error(t *testing.T) {
 		t.Log(testURI)
 
 		bodyString := "{\"NextState\": \"invalid-state\"}"
-		requestBody := ioutil.NopCloser(strings.NewReader(bodyString))
+		requestBody := io.NopCloser(strings.NewReader(bodyString))
 		req, err := http.NewRequest(http.MethodPost, testURI, requestBody)
 		assert.NoError(t, err)
 
@@ -753,7 +753,7 @@ func TestJobControllerPost_Timeout_DifferentTime(t *testing.T) {
 			t.Log(testURI)
 
 			bodyString := "{\"NextState\": \"" + test.next.String() + "\",\"IncrementalTimeout\":" + strconv.Itoa(int(test.timeout)) + "}"
-			requestBody := ioutil.NopCloser(strings.NewReader(bodyString))
+			requestBody := io.NopCloser(strings.NewReader(bodyString))
 			req, err := http.NewRequest(http.MethodPost, testURI, requestBody)
 			assert.NoError(t, err)
 
@@ -803,7 +803,7 @@ func TestJobControllerPost_TimeoutValid(t *testing.T) {
 		t.Run(testName, func(t *testing.T) {
 
 			bodyString := "{\"NextState\": \"" + test.next.String() + "\",\"IncrementalTimeout\":" + strconv.FormatUint(uint64(test.timeout), 10) + "}"
-			requestBody := ioutil.NopCloser(strings.NewReader(bodyString))
+			requestBody := io.NopCloser(strings.NewReader(bodyString))
 			req, err := http.NewRequest(http.MethodPost, testURI, requestBody)
 			assert.NoError(t, err)
 
@@ -841,7 +841,7 @@ func TestJobControllerPost_TransitionFailureTimeout(t *testing.T) {
 		testName := "400 Bad Request " + job.Status.String() + " to " + invalidNextState.String()
 		t.Run(testName, func(t *testing.T) {
 			bodyString := "{\"NextState\": \"" + invalidNextState.String() + "\",\"IncrementalTimeout\":" + strconv.FormatUint(uint64(timeout), 10) + "}"
-			requestBody := ioutil.NopCloser(strings.NewReader(bodyString))
+			requestBody := io.NopCloser(strings.NewReader(bodyString))
 			req, err := http.NewRequest(http.MethodPost, testURI, requestBody)
 			assert.NoError(t, err)
 

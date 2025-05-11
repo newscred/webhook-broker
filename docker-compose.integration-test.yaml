@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   mysql8:
     image: mysql:8
@@ -12,7 +10,7 @@ services:
     ports:
       - "45060:3306"
     healthcheck:
-      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
+      test: ["CMD", "mysql","-h", "localhost", "-u", "root", "-proot", "-e", "SELECT 1"]
       interval: 30s
       timeout: 20s
       retries: 10
@@ -21,6 +19,7 @@ services:
       brokeritest:
         aliases:
           - "mysql8"
+          - "mysql"
 
 
   ibroker:
@@ -32,8 +31,6 @@ services:
     depends_on:
       mysql8:
         condition: service_healthy
-    links:
-      - mysql8:mysql
     ports:
       - "31818:8080"
     healthcheck:
@@ -60,8 +57,6 @@ services:
     depends_on:
       ibroker:
         condition: service_healthy
-    links:
-      - mysql8:mysql
     ports:
       - "30080:80"
     networks:
@@ -76,10 +71,8 @@ services:
     depends_on:
       ibroker:
         condition: service_healthy
-    links:
-      - ibroker:webhook-broker
-      - mysql8:mysql
-      - ipruner:webhook-broker-pruner
+      ipruner:
+        condition: service_started
     networks:
       brokeritest:
         aliases:

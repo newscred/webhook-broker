@@ -100,7 +100,7 @@ ci-test:
 	go test -timeout 45s -mod=readonly -v ./... -short
 
 test:
-	go test -timeout 45s -mod=readonly ./...
+	go test -v -timeout 45s -mod=readonly ./...
 
 install: build
 	go install -mod=readonly
@@ -115,7 +115,7 @@ clean:
 	-rm -v webhook-broker
 
 prep-itest:
-	- ./build/scripts/prune-dockerfile-generator.sh
+	if [ ! -f prune-integration-test.Dockerfile ]; then ./build/scripts/prune-dockerfile-generator.sh; fi
 	
 itest-down:
 	- docker compose -f docker-compose.integration-test.yaml down

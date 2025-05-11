@@ -3,7 +3,7 @@ package controllers
 import (
 	"bytes"
 	"database/sql"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -65,7 +65,7 @@ func TestBroadcastControllerPost(t *testing.T) {
 		testURI := controller.FormatAsRelativeLink(getRouterParam("broadcast-channel-404"))
 		req, _ := http.NewRequest("POST", testURI, nil)
 		bodyString := "test message body"
-		req.Body = ioutil.NopCloser(strings.NewReader(bodyString))
+		req.Body = io.NopCloser(strings.NewReader(bodyString))
 		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
 		priority := 11
 		req.Header.Add(headerPriority, strconv.Itoa(priority))
@@ -88,7 +88,7 @@ func TestBroadcastControllerPost(t *testing.T) {
 		testURI := controller.FormatAsRelativeLink(getRouterParam(consumerTestChannel.ChannelID))
 		req, _ := http.NewRequest("POST", testURI, nil)
 		bodyString := "test message body"
-		req.Body = ioutil.NopCloser(strings.NewReader(bodyString))
+		req.Body = io.NopCloser(strings.NewReader(bodyString))
 		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
 		priority := 11
 		req.Header.Add(headerPriority, strconv.Itoa(priority))
@@ -111,7 +111,7 @@ func TestBroadcastControllerPost(t *testing.T) {
 		testURI := controller.FormatAsRelativeLink(getRouterParam(consumerTestChannel.ChannelID))
 		req, _ := http.NewRequest("POST", testURI, nil)
 		bodyString := "test message body"
-		req.Body = ioutil.NopCloser(strings.NewReader(bodyString))
+		req.Body = io.NopCloser(strings.NewReader(bodyString))
 		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
 		priority := 11
 		req.Header.Add(headerPriority, strconv.Itoa(priority))
@@ -132,7 +132,7 @@ func TestBroadcastControllerPost(t *testing.T) {
 		testURI := controller.FormatAsRelativeLink(getRouterParam(consumerTestChannel.ChannelID))
 		req, _ := http.NewRequest("POST", testURI, nil)
 		bodyString := "test message body"
-		req.Body = ioutil.NopCloser(strings.NewReader(bodyString))
+		req.Body = io.NopCloser(strings.NewReader(bodyString))
 		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
 		priority := 11
 		req.Header.Add(headerPriority, strconv.Itoa(priority))
@@ -155,7 +155,7 @@ func TestBroadcastControllerPost(t *testing.T) {
 		testURI := controller.FormatAsRelativeLink(getRouterParam(consumerTestChannel.ChannelID))
 		req, _ := http.NewRequest("POST", testURI, nil)
 		bodyString := "test message body"
-		req.Body = ioutil.NopCloser(strings.NewReader(bodyString))
+		req.Body = io.NopCloser(strings.NewReader(bodyString))
 		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
 		priority := 11
 		req.Header.Add(headerPriority, strconv.Itoa(priority))
@@ -206,7 +206,7 @@ func TestBroadcastControllerPost(t *testing.T) {
 		testURI := controller.FormatAsRelativeLink(getRouterParam(consumerTestChannel.ChannelID))
 		req, _ := http.NewRequest("POST", testURI, nil)
 		bodyString := "test message body"
-		req.Body = ioutil.NopCloser(strings.NewReader(bodyString))
+		req.Body = io.NopCloser(strings.NewReader(bodyString))
 		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
 		priority := 11
 		req.Header.Add(headerPriority, strconv.Itoa(priority))
@@ -243,7 +243,7 @@ func TestBroadcastControllerPost(t *testing.T) {
 		testURI := controller.FormatAsRelativeLink(getRouterParam(consumerTestChannel.ChannelID))
 		req, _ := http.NewRequest("POST", testURI, nil)
 		bodyString := "test message body"
-		req.Body = ioutil.NopCloser(strings.NewReader(bodyString))
+		req.Body = io.NopCloser(strings.NewReader(bodyString))
 		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
 		priority := 11
 		req.Header.Add(headerPriority, strconv.Itoa(priority))
@@ -272,7 +272,7 @@ func TestBroadcastControllerPost(t *testing.T) {
 		testURI := controller.FormatAsRelativeLink(getRouterParam(consumerTestChannel.ChannelID))
 		req, _ := http.NewRequest("POST", testURI, nil)
 		bodyString := "test message body"
-		req.Body = ioutil.NopCloser(strings.NewReader(bodyString))
+		req.Body = io.NopCloser(strings.NewReader(bodyString))
 		priority := 11
 		req.Header.Add(headerPriority, strconv.Itoa(priority))
 		req.Header.Add(headerChannelToken, consumerTestChannel.Token)
@@ -302,7 +302,7 @@ func TestBroadcastControllerPost(t *testing.T) {
 		testURI := controller.FormatAsRelativeLink(getRouterParam(consumerTestChannel.ChannelID))
 		req, _ := http.NewRequest("POST", testURI, nil)
 		bodyString := "test message body"
-		req.Body = ioutil.NopCloser(strings.NewReader(bodyString))
+		req.Body = io.NopCloser(strings.NewReader(bodyString))
 		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
 		req.Header.Add(headerChannelToken, consumerTestChannel.Token)
 		indexString := "0"
@@ -331,7 +331,7 @@ func TestBroadcastControllerPost(t *testing.T) {
 		testURI := controller.FormatAsRelativeLink(getRouterParam(consumerTestChannel.ChannelID))
 		req, _ := http.NewRequest("POST", testURI, nil)
 		bodyString := "test message body"
-		req.Body = ioutil.NopCloser(strings.NewReader(bodyString))
+		req.Body = io.NopCloser(strings.NewReader(bodyString))
 		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
 		req.Header.Add(headerChannelToken, consumerTestChannel.Token)
 		indexString := "0"
@@ -366,7 +366,7 @@ func TestBroadcastControllerPost(t *testing.T) {
 		testURI := controller.FormatAsRelativeLink(getRouterParam(consumerTestChannel.ChannelID))
 		req, _ := http.NewRequest("POST", testURI, nil)
 		bodyString := "test message body"
-		req.Body = ioutil.NopCloser(strings.NewReader(bodyString))
+		req.Body = io.NopCloser(strings.NewReader(bodyString))
 		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
 		req.Header.Add(headerChannelToken, consumerTestChannel.Token)
 		indexString := "0"
@@ -395,7 +395,7 @@ func TestBroadcastControllerPost(t *testing.T) {
 		testURI := controller.FormatAsRelativeLink(getRouterParam(consumerTestChannel.ChannelID))
 		req, _ := http.NewRequest("POST", testURI, nil)
 		bodyString := "test message body"
-		req.Body = ioutil.NopCloser(strings.NewReader(bodyString))
+		req.Body = io.NopCloser(strings.NewReader(bodyString))
 		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
 		req.Header.Add(headerChannelToken, consumerTestChannel.Token)
 		indexString := "0"
