@@ -61,7 +61,18 @@ API endpoints:
 - `GET /channel/{channelId}/scheduled-message/{messageId}` to get a specific scheduled message
 - `GET /channel/{channelId}/messages-status` includes counts of scheduled messages
 
-The scheduler runs as a background service, checking periodically for messages due for delivery.
+### Scheduler Implementation Details
+
+The scheduler runs as a background service, checking periodically for messages due for delivery. Key implementation details:
+
+- The scheduler runs in a single goroutine that processes batches of messages
+- Each tick interval (default: 5 seconds), the scheduler checks for messages ready for dispatch
+- The scheduler processes up to 100 messages per tick (configurable via `schedulerBatchSize`)
+- Messages are processed in chronological order by their scheduled time (oldest first)
+- Each message is dispatched in its own goroutine for concurrent processing
+- If more than 100 messages are ready, subsequent batches will be processed in future ticks
+- If processing a batch takes longer than the tick interval, the next tick will start immediately after the current batch completes
+- The scheduler will never process overlapping batches, ensuring consistent database state
 
 ## Configuration management
 

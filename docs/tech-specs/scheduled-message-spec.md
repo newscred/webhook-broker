@@ -260,13 +260,21 @@ CREATE INDEX `idx_scheduled_message_next_dispatch` ON `scheduled_message` (`stat
 3. **Processing Loop**:
    ```go
    func (scheduler *MessageScheduler) processScheduledMessages() {
-       // Get batches of messages ready for dispatch (where dispatchSchedule <= now and status == SCHEDULED)
-       messages := scheduler.scheduledMessageRepo.GetMessagesReadyForDispatch(batchSize)
+       // Get batch of messages ready for dispatch (where dispatchSchedule <= now and status == SCHEDULED)
+       // Limited to schedulerBatchSize (default: 100) messages per iteration
+       messages := scheduler.scheduledMessageRepo.GetMessagesReadyForDispatch(scheduler.config.GetSchedulerBatchSize())
+
+       // If there are more than schedulerBatchSize messages ready, they will be processed in subsequent iterations
+       // The repository orders by dispatchSchedule ASC to ensure oldest messages are processed first
 
        // Process each message concurrently
        for _, scheduledMsg := range messages {
            go scheduler.dispatchMessage(scheduledMsg)
        }
+
+       // Once this method returns, the scheduler goroutine returns to the select statement
+       // If processing took longer than the tick interval, the next tick will be processed immediately
+       // This prevents overlapping batch processing while maximizing throughput
    }
    ```
 
@@ -317,11 +325,19 @@ CREATE INDEX `idx_scheduled_message_next_dispatch` ON `scheduled_message` (`stat
 
 #### Concurrency and Performance
 
-- Independent goroutines dispatch each scheduled message concurrently
-- The scheduler uses a rate-limited approach to avoid excessive database load
-- Index on (status, dispatchDate) optimizes query performance
+- The scheduler background process runs in a single goroutine, processing batches sequentially
+- Each batch retrieves a maximum of 100 messages (configurable via `schedulerBatchSize`) per execution
+- Messages are selected in chronological order by scheduled dispatch time (oldest first)
+- Independent goroutines dispatch each scheduled message concurrently within a batch
+- This approach provides controlled parallelism:
+  - The scheduler will never run overlapping batch queries, preventing database overload
+  - Individual messages are processed concurrently for maximum throughput
+  - If more than 100 messages are ready for dispatch, subsequent batches process them in future ticks
+  - If processing a batch takes longer than the tick interval (default: 5 seconds), the next tick will start immediately after the current batch completes
+- The index on (status, dispatchDate) optimizes query performance
 - The scheduled message ID is preserved as the actual message ID for tracking continuity
-- The scheduler is designed to work correctly in a multi-instance deployment scenario
+- The scheduler is designed to work correctly in a multi-instance deployment scenario through database locking
+- This batch processing design balances throughput with resource usage, ensuring consistent system performance even during high-volume periods
 
 ## Error Handling
 
