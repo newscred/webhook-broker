@@ -390,6 +390,12 @@ func (m *MockedDataAccessor) Close() {
 	m.Called()
 }
 
+// GetScheduledMessageRepository mocks the GetScheduledMessageRepository method.
+func (m *MockedDataAccessor) GetScheduledMessageRepository() ScheduledMessageRepository {
+	args := m.Called()
+	return args.Get(0).(ScheduledMessageRepository)
+}
+
 func TestGetMessagesFromBeforeDurationThatAreCompletelyDelivered(t *testing.T) {
 	msgRepo := getMessageRepository()
 
@@ -398,6 +404,7 @@ func TestGetMessagesFromBeforeDurationThatAreCompletelyDelivered(t *testing.T) {
 		dataAccessor := new(MockedDataAccessor)
 		dataAccessor.On("GetMessageRepository").Return(msgRepo)
 		dataAccessor.On("GetDeliveryJobRepository").Return(getDeliverJobRepository())
+		dataAccessor.On("GetScheduledMessageRepository").Return(getScheduledMessageRepository())
 		msg, _ := SetupPruneableMessageFixture(dataAccessor, channelForPrune, producer1, pruneConsumers, 50)
 		pruneAbleMessages := msgRepo.GetMessagesFromBeforeDurationThatAreCompletelyDelivered(40*time.Second, 1000)
 		assert.Equal(t, 1, len(pruneAbleMessages))
@@ -406,6 +413,7 @@ func TestGetMessagesFromBeforeDurationThatAreCompletelyDelivered(t *testing.T) {
 		iterLength := 110
 		msgIds := make([]string, iterLength+1)
 		for i := 0; i < iterLength; i++ {
+			dataAccessor.On("GetScheduledMessageRepository").Return(getScheduledMessageRepository())
 			msg, _ := SetupPruneableMessageFixture(dataAccessor, channelForPrune, producer1, pruneConsumers, 50)
 			msgIds[i] = msg.MessageID
 		}

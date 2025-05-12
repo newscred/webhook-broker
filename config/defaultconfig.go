@@ -32,6 +32,10 @@ recovery-workers-enabled=true
 token-header-name=X-Broker-Consumer-Token
 user-agent=Webhook Message Broker
 connection-timeout-in-seconds=30
+[scheduler]
+scheduler-interval-ms=5000
+min-schedule-delay-minutes=2
+scheduler-batch-size=100
 [prune]
 export-node-name=
 message-retention-days=0

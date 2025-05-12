@@ -25,6 +25,7 @@ ADD storage ./storage
 ADD dispatcher ./dispatcher
 ADD utils ./utils
 ADD prune ./prune
+ADD scheduler ./scheduler
 
 RUN make build
 RUN make test

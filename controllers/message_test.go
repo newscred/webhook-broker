@@ -418,8 +418,22 @@ func TestDLQRequeue(t *testing.T) {
 func TestMessagesStatusController_Get(t *testing.T) {
 	channelID := "sample-channel"
 	msgRepo := new(storagemocks.MessageRepository)
+	scheduledMsgRepo := new(storagemocks.ScheduledMessageRepository)
 	djRepo := new(storagemocks.DeliveryJobRepository)
-	msgsStatusController := NewMessagesStatusController(NewMessagesController(NewMessageController(msgRepo, djRepo), msgRepo), msgRepo)
+
+	// Create controllers
+	msgController := NewMessageController(msgRepo, djRepo)
+	msgsController := NewMessagesController(msgController, msgRepo)
+
+	// Create a proper ScheduledMessagesController for testing
+	channelRepo := new(storagemocks.ChannelRepository)
+	scheduledMsgsController := NewScheduledMessagesController(scheduledMsgRepo, channelRepo)
+
+	// Prepare scheduled message mock with default empty responses for all tests
+	scheduledMsgRepo.On("GetScheduledMessageStatusCountsByChannel", channelID).Return([]*data.StatusCount[data.ScheduledMsgStatus]{}, nil).Maybe()
+	scheduledMsgRepo.On("GetNextScheduledMessageTime", channelID).Return(nil, nil).Maybe()
+
+	msgsStatusController := NewMessagesStatusController(msgsController, scheduledMsgsController, msgRepo, scheduledMsgRepo)
 
 	router := httprouter.New()
 	router.GET(messagesStatusPath, msgsStatusController.Get)
@@ -441,7 +455,7 @@ func TestMessagesStatusController_Get(t *testing.T) {
 		router.ServeHTTP(rr, req)
 
 		assert.Equal(t, http.StatusOK, rr.Code)
-		expected := `{"Counts": {}}`
+		expected := `{"counts": {}}`
 		assert.JSONEq(t, expected, rr.Body.String())
 		msgRepo.AssertExpectations(t)
 	})
@@ -459,7 +473,7 @@ func TestMessagesStatusController_Get(t *testing.T) {
 		router.ServeHTTP(rr, req)
 
 		assert.Equal(t, http.StatusOK, rr.Code)
-		expected := `{"Counts": {"ACKNOWLEDGED": {"Count": 2, "Links": {"messages": "/channel/sample-channel/messages?status=101"}}, "DISPATCHED": {"Count": 5, "Links": {"messages": "/channel/sample-channel/messages?status=102"}}}}`
+		expected := `{"counts": {"ACKNOWLEDGED": {"Count": 2, "Links": {"messages": "/channel/sample-channel/messages?status=101"}}, "DISPATCHED": {"Count": 5, "Links": {"messages": "/channel/sample-channel/messages?status=102"}}}}`
 		assert.JSONEq(t, expected, rr.Body.String())
 
 		msgRepo.AssertExpectations(t)

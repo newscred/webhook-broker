@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -42,6 +41,24 @@ func TestGetAppVersion(t *testing.T) {
 	assert.Equal(t, string(GetAppVersion()), "0.3.0-dev")
 }
 
+var waitForPort = func(portNum int) {
+	timeout := time.After(5 * time.Second)
+	for {
+		select {
+		case <-timeout:
+			return
+		default:
+			conn, err := net.Dial("tcp", fmt.Sprintf(":%d", portNum))
+			if err == nil {
+				conn.Close()
+				return
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+
+}
+
 var mainFunctionBreaker = func(stop *chan os.Signal) {
 	go func() {
 		waitForStatusEndpoint(":8080")
@@ -68,7 +85,7 @@ var waitForStatusEndpoint = func(portString string) {
 var configChangeRestartMainFnBreaker = func(stop *chan os.Signal) {
 	go func() {
 		waitForStatusEndpoint(":12345")
-		ioutil.WriteFile(configFilePath, []byte(notificationDifferentContent), 0644)
+		os.WriteFile(configFilePath, []byte(notificationDifferentContent), 0644)
 		time.Sleep(1 * time.Millisecond)
 		fmt.Println("called mainFnBreaker")
 		mainFunctionBreaker(stop)
@@ -87,7 +104,10 @@ func TestMainFunc(t *testing.T) {
 	}
 	osReleaseStr := string(osRelease)
 	isWSL2 := strings.Contains(osReleaseStr, "microsoft") && strings.Contains(osReleaseStr, "-microsoft")
+	waitForPort(8080)
+	time.Sleep(100 * time.Millisecond)
 	t.Run("GetAppErr", func(t *testing.T) {
+		t.Log("!!GetAppErr!!")
 		oldExit := exit
 		oldArgs := os.Args
 		oldGetApp := getApp
@@ -108,6 +128,7 @@ func TestMainFunc(t *testing.T) {
 					t.Fail()
 				}
 			}()
+			waitForPort(8080)
 			main()
 		}()
 		defer func() {
@@ -162,7 +183,7 @@ func TestMainFunc(t *testing.T) {
 		oldLogger := log.Logger
 		log.Logger = log.Output(&buf)
 		oldArgs := os.Args
-		ioutil.WriteFile(configFilePath, []byte(notificationInitialContent), 0644)
+		os.WriteFile(configFilePath, []byte(notificationInitialContent), 0644)
 		os.Args = []string{"webhook-broker", "-migrate", "./migration/sqls/", "-config", configFilePath}
 		oldNotify := controllers.NotifyOnInterrupt
 		controllers.NotifyOnInterrupt = configChangeRestartMainFnBreaker
@@ -198,7 +219,7 @@ func TestMainFunc(t *testing.T) {
 		if isWSL2 {
 			t.Skip("Skipping test on WSL2")
 		}
-		ioutil.WriteFile(configFilePath2, []byte(notificationInitialContent), 0644)
+		os.WriteFile(configFilePath2, []byte(notificationInitialContent), 0644)
 		oldArgs := os.Args
 		os.Args = []string{"webhook-broker", "-migrate", "./migration/sqls/", "-config", configFilePath2, "-stop-on-conf-change"}
 		defer func() {
@@ -212,7 +233,7 @@ func TestMainFunc(t *testing.T) {
 		}()
 		go func() {
 			waitForStatusEndpoint(":12345")
-			ioutil.WriteFile(configFilePath2, []byte(notificationDifferentContent), 0644)
+			os.WriteFile(configFilePath2, []byte(notificationDifferentContent), 0644)
 			wg.Done()
 		}()
 		wg.Wait()
@@ -416,7 +437,7 @@ func TestSetupLog(t *testing.T) {
 		log.Print("unit test debug")
 		log.Info().Msg("unit test info")
 		log.Error().Msg("unit test error")
-		dat, err := ioutil.ReadFile(testLogFile)
+		dat, err := os.ReadFile(testLogFile)
 		assert.Nil(t, err)
 		assert.Contains(t, string(dat), "unit test debug")
 		assert.Contains(t, string(dat), "unit test info")
@@ -426,7 +447,7 @@ func TestSetupLog(t *testing.T) {
 		log.Print("unit test debug")
 		log.Info().Msg("unit test info")
 		log.Error().Msg("unit test error")
-		dat, err := ioutil.ReadFile(testLogFile)
+		dat, err := os.ReadFile(testLogFile)
 		assert.Nil(t, err)
 		assert.NotContains(t, string(dat), "unit test debug")
 		assert.Contains(t, string(dat), "unit test info")
@@ -436,7 +457,7 @@ func TestSetupLog(t *testing.T) {
 		log.Print("unit test debug")
 		log.Info().Msg("unit test info")
 		log.Error().Msg("unit test error")
-		dat, err := ioutil.ReadFile(testLogFile)
+		dat, err := os.ReadFile(testLogFile)
 		assert.Nil(t, err)
 		assert.NotContains(t, string(dat), "unit test debug")
 		assert.NotContains(t, string(dat), "unit test info")

@@ -3,7 +3,6 @@ package config
 import (
 	"bytes"
 	"errors"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"strconv"
@@ -38,7 +37,7 @@ var (
 )
 
 func writeToFile(filePath, content string) (err error) {
-	err = ioutil.WriteFile(filePath, []byte(content), 0644)
+	err = os.WriteFile(filePath, []byte(content), 0644)
 	return err
 }
 

@@ -17,6 +17,7 @@ type DataAccessor interface {
 	GetMessageRepository() MessageRepository
 	GetDeliveryJobRepository() DeliveryJobRepository
 	GetLockRepository() LockRepository
+	GetScheduledMessageRepository() ScheduledMessageRepository
 	Close()
 }
 
@@ -91,4 +92,16 @@ type LockRepository interface {
 	TryLock(lock *data.Lock) error
 	ReleaseLock(lock *data.Lock) error
 	TimeoutLocks(threshold time.Duration) error
+}
+
+// ScheduledMessageRepository allows storage operations over ScheduledMessage
+type ScheduledMessageRepository interface {
+	Create(message *data.ScheduledMessage) error
+	Get(channelID string, messageID string) (*data.ScheduledMessage, error)
+	GetByID(id string) (*data.ScheduledMessage, error)
+	MarkDispatched(message *data.ScheduledMessage) error
+	GetMessagesReadyForDispatch(limit int) []*data.ScheduledMessage
+	GetScheduledMessagesForChannel(channelID string, page *data.Pagination, statusFilters ...data.ScheduledMsgStatus) ([]*data.ScheduledMessage, *data.Pagination, error)
+	GetScheduledMessageStatusCountsByChannel(channelID string) ([]*data.StatusCount[data.ScheduledMsgStatus], error)
+	GetNextScheduledMessageTime(channelID string) (*time.Time, error)
 }

@@ -3,7 +3,7 @@ package dispatcher
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"sort"
 	"strconv"
@@ -150,7 +150,7 @@ var callConsumer = func(worker *Worker, requestID string, logger zerolog.Logger,
 			defer resp.Body.Close()
 			code := resp.StatusCode
 			if code < 200 || code > 299 {
-				errBody, rErr := ioutil.ReadAll(resp.Body)
+				errBody, rErr := io.ReadAll(resp.Body)
 				var errString string
 				if rErr == nil {
 					errString = string(errBody)

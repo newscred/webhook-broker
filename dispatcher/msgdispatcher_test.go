@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -348,7 +348,7 @@ func TestMessageDispatcherImplDispatch(t *testing.T) {
 				assert.Equal(t, consumerToken, r.Header.Get(headerConsumerToken))
 				assert.Equal(t, msg.MessageID, r.Header.Get(headerMessageID))
 				assert.Greater(t, len(r.Header.Get(headerRequestID)), 12)
-				body, err := ioutil.ReadAll(r.Body)
+				body, err := io.ReadAll(r.Body)
 				assert.Nil(t, err)
 				assert.Equal(t, messagePayload, string(body))
 				if s == "consumer-0" {

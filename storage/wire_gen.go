@@ -35,15 +35,17 @@ func GetNewDataAccessor(dbConfig config.RelationalDatabaseConfig, migrationConf 
 	messageRepository := NewMessageRepository(sqlDB, channelRepository, producerRepository)
 	deliveryJobRepository := NewDeliveryJobRepository(sqlDB, messageRepository, consumerRepository)
 	lockRepository := NewLockRepository(sqlDB)
+	scheduledMessageRepository := NewScheduledMessageRepository(sqlDB, channelRepository, producerRepository)
 	relationalDBDataAccessor := &RelationalDBDataAccessor{
-		db:                    sqlDB,
-		appRepository:         appRepository,
-		producerRepository:    producerRepository,
-		channelRepository:     channelRepository,
-		consumerRepository:    consumerRepository,
-		messageRepository:     messageRepository,
-		deliveryJobRepository: deliveryJobRepository,
-		lockRepository:        lockRepository,
+		db:                         sqlDB,
+		appRepository:              appRepository,
+		producerRepository:         producerRepository,
+		channelRepository:          channelRepository,
+		consumerRepository:         consumerRepository,
+		messageRepository:          messageRepository,
+		deliveryJobRepository:      deliveryJobRepository,
+		lockRepository:             lockRepository,
+		scheduledMessageRepository: scheduledMessageRepository,
 	}
 	return relationalDBDataAccessor, nil
 }

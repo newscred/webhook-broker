@@ -1,14 +1,14 @@
 package main
 
 import (
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strconv"
 )
 
 func brokerDispatch(w http.ResponseWriter, r *http.Request) {
 	var jobQueue = InitializeJobQueue()
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	defer r.Body.Close()
 	if err == nil {
 		priorityValue := r.Header.Get("X-Broker-Message-Priority")

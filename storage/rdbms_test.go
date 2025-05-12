@@ -37,9 +37,10 @@ func TestMain(m *testing.M) {
 		SetupForConsumerTests()
 		SetupForMessageTests()
 		SetupForDeliveryJobTests()
+		SetupForScheduledMessageTests()
+		defer testDB.Close()
 		m.Run()
 	}
-	testDB.Close()
 }
 
 func dbPanicDeferAssert(t *testing.T) {
@@ -54,8 +55,9 @@ var (
 
 func TestGetNewDataAccessor(t *testing.T) {
 	// Clear DB before starting test
-	os.Remove("./webhook-broker.sqlite3")
+	os.Remove("./webhook-broker-da-test.sqlite3")
 	configuration, _ := config.GetAutoConfiguration()
+	configuration.DBConnectionURL = "webhook-broker-da-test.sqlite3?_foreign_keys=on"
 	t.Run("DBConnectionErr", func(t *testing.T) {
 		dataAccessorInitializer = sync.Once{}
 		oldGetDB := getDB

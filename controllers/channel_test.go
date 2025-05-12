@@ -164,7 +164,20 @@ func TestCachedChannelGet(t *testing.T) {
 
 func getNewChannelController(channelRepo storage.ChannelRepository) *ChannelController {
 	bc, _ := getNewBroadcastController(messageRepo)
-	return NewChannelController(NewConsumersController(NewConsumerController(nil, nil, getDLQControllerWithMockedRepo()), nil), getMessagesController(), bc, NewMessagesStatusController(getMessagesController(), messageRepo), channelRepo)
+
+	// Create mock for ScheduledMessageRepository
+	scheduledMsgRepo := new(storagemocks.ScheduledMessageRepository)
+
+	// Create minimal ScheduledMessagesController
+	scheduledMsgsController := getScheduledMessagesController()
+
+	return NewChannelController(
+		NewConsumersController(NewConsumerController(nil, nil, getDLQControllerWithMockedRepo()), nil),
+		getMessagesController(),
+		bc,
+		NewMessagesStatusController(getMessagesController(), scheduledMsgsController, messageRepo, scheduledMsgRepo),
+		channelRepo,
+	)
 }
 
 func TestChannelPut(t *testing.T) {

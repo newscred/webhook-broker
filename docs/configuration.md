@@ -61,9 +61,19 @@ This section contains configuration pertaining to the broker app attempting to d
 | user-agent | Webhook Message Broker | The `User-Agent` header value when connecting to consumer |
 | connection-timeout-in-seconds | 30 | Maximum time to provided consumers to finish the processing of the job. Anything more than 30 please consider using something like SQS, RabbitMQ etc. since maintaining long HTTP connection is risky. |
 
+## Section - Scheduler Configuration: `[scheduler]`
+
+This section configures the scheduled message feature, which allows producers to send messages with a future delivery time.
+
+| Name | Default Value | Description |
+|---|---|---|
+| `scheduler-interval-ms` | 5000 | How frequently (in milliseconds) the scheduler checks for scheduled messages that are due for delivery. Lower values reduce delivery latency but increase database load. |
+| `min-schedule-delay-minutes` | 2 | Minimum required delay (in minutes) for scheduled messages. Messages cannot be scheduled less than this time in the future. |
+| `scheduler-batch-size` | 100 | Maximum number of scheduled messages to process per scheduler iteration. Limits database load and memory usage during peak periods. |
+
 ## Section - Prune Configuration: `[prune]`
 
-This section configures the pruning of delivered messages.  Pruning can target a local filesystem and optionally a remote cloud storage service.
+This section configures the pruning of delivered messages. Pruning can target a local filesystem and optionally a remote cloud storage service.
 
 | Name | Default Value | Description |
 |---|---|---|

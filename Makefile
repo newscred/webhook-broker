@@ -59,7 +59,7 @@ dep-tools:
 	go install github.com/google/wire/cmd/wire@v0.6.0
 ifneq ($(OS),Alpine Linux)
 	go install github.com/golang-migrate/migrate/v4/cmd/migrate@v4.15.2
-	go install github.com/vektra/mockery/v2@v2.46.3
+	go install github.com/vektra/mockery/v2@v2.53.3
 endif
 
 build-docker-image:
@@ -100,7 +100,7 @@ ci-test:
 	go test -timeout 45s -mod=readonly -v ./... -short
 
 test:
-	go test -timeout 45s -mod=readonly ./...
+	go test -v -timeout 45s -mod=readonly ./...
 
 install: build
 	go install -mod=readonly
@@ -115,7 +115,7 @@ clean:
 	-rm -v webhook-broker
 
 prep-itest:
-	- ./build/scripts/prune-dockerfile-generator.sh
+	if [ ! -f prune-integration-test.Dockerfile ]; then ./build/scripts/prune-dockerfile-generator.sh; fi
 	
 itest-down:
 	- docker compose -f docker-compose.integration-test.yaml down
