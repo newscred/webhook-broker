@@ -48,6 +48,7 @@ func GetHTTPServer(cliConfig *config.CLIConfig) (*HTTPServiceContainer, error) {
 	consumerController := controllers.NewConsumerController(channelRepository, consumerRepository, dlqController)
 	consumersController := controllers.NewConsumersController(consumerController, consumerRepository)
 	messagesController := controllers.NewMessagesController(messageController, messageRepository)
+	scheduledMessageRepository := newScheduledMessageRepository(dataAccessor)
 	lockRepository := newLockRepository(dataAccessor)
 	metricsContainer := dispatcher.NewMetricsContainer()
 	configuration := &dispatcher.Configuration{
@@ -60,32 +61,36 @@ func GetHTTPServer(cliConfig *config.CLIConfig) (*HTTPServiceContainer, error) {
 		MetricsCollector:         metricsContainer,
 	}
 	messageDispatcher := dispatcher.NewMessageDispatcher(configuration)
-	broadcastController := controllers.NewBroadcastController(channelRepository, messageRepository, producerRepository, messageDispatcher)
-	messagesStatusController := controllers.NewMessagesStatusController(messagesController, messageRepository)
+	broadcastController := controllers.NewBroadcastController(channelRepository, messageRepository, producerRepository, scheduledMessageRepository, messageDispatcher)
+	scheduledMessagesController := controllers.NewScheduledMessagesController(scheduledMessageRepository, channelRepository)
+	messagesStatusController := controllers.NewMessagesStatusController(messagesController, scheduledMessagesController, messageRepository, scheduledMessageRepository)
 	channelController := controllers.NewChannelController(consumersController, messagesController, broadcastController, messagesStatusController, channelRepository)
 	jobsController := controllers.NewJobsController(channelRepository, consumerRepository, deliveryJobRepository)
 	jobController := controllers.NewJobController(messageController, channelController, producerController, consumerController, channelRepository, consumerRepository, deliveryJobRepository)
 	channelsController := controllers.NewChannelsController(channelRepository, channelController)
 	jobStatusController := controllers.NewJobStatusController(deliveryJobRepository)
+	scheduledMessageController := controllers.NewScheduledMessageController(scheduledMessageRepository, channelRepository)
 	handler := dispatcher.NewPrometheusHandler()
 	controllersControllers := &controllers.Controllers{
-		StatusController:         statusController,
-		ProducersController:      producersController,
-		ProducerController:       producerController,
-		ChannelController:        channelController,
-		ConsumerController:       consumerController,
-		ConsumersController:      consumersController,
-		JobsController:           jobsController,
-		JobController:            jobController,
-		BroadcastController:      broadcastController,
-		MessageController:        messageController,
-		MessagesController:       messagesController,
-		DLQController:            dlqController,
-		ChannelsController:       channelsController,
-		MessagesStatusController: messagesStatusController,
-		JobRequeueController:     jobRequeueController,
-		JobStatusController:      jobStatusController,
-		MetricsHandler:           handler,
+		StatusController:            statusController,
+		ProducersController:         producersController,
+		ProducerController:          producerController,
+		ChannelController:           channelController,
+		ConsumerController:          consumerController,
+		ConsumersController:         consumersController,
+		JobsController:              jobsController,
+		JobController:               jobController,
+		BroadcastController:         broadcastController,
+		MessageController:           messageController,
+		MessagesController:          messagesController,
+		DLQController:               dlqController,
+		ChannelsController:          channelsController,
+		MessagesStatusController:    messagesStatusController,
+		JobRequeueController:        jobRequeueController,
+		JobStatusController:         jobStatusController,
+		ScheduledMessageController:  scheduledMessageController,
+		ScheduledMessagesController: scheduledMessagesController,
+		MetricsHandler:              handler,
 	}
 	router := controllers.NewRouter(controllersControllers)
 	server := controllers.ConfigureAPI(configConfig, serverLifecycleListenerImpl, router)

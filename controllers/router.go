@@ -32,7 +32,7 @@ var (
 	routerInitializer sync.Once
 	server            *http.Server
 	// ControllerInjector for binding controllers
-	ControllerInjector = wire.NewSet(ConfigureAPI, NewRouter, NewStatusController, NewProducersController, NewProducerController, NewChannelController, NewChannelsController, NewConsumerController, NewConsumersController, NewJobsController, NewJobController, NewBroadcastController, NewMessageController, NewMessagesController, NewMessagesStatusController, NewDLQController, NewJobRequeueController, NewJobStatusController, wire.Struct(new(Controllers), "StatusController", "ProducersController", "ProducerController", "ChannelController", "ConsumerController", "ConsumersController", "JobsController", "JobController", "BroadcastController", "MessageController", "MessagesController", "DLQController", "ChannelsController", "MessagesStatusController", "JobRequeueController", "JobStatusController", "MetricsHandler"))
+	ControllerInjector = wire.NewSet(ConfigureAPI, NewRouter, NewStatusController, NewProducersController, NewProducerController, NewChannelController, NewChannelsController, NewConsumerController, NewConsumersController, NewJobsController, NewJobController, NewBroadcastController, NewMessageController, NewMessagesController, NewMessagesStatusController, NewDLQController, NewJobRequeueController, NewJobStatusController, NewScheduledMessageController, NewScheduledMessagesController, wire.Struct(new(Controllers), "StatusController", "ProducersController", "ProducerController", "ChannelController", "ConsumerController", "ConsumersController", "JobsController", "JobController", "BroadcastController", "MessageController", "MessagesController", "DLQController", "ChannelsController", "MessagesStatusController", "JobRequeueController", "JobStatusController", "ScheduledMessageController", "ScheduledMessagesController", "MetricsHandler"))
 	// ErrUnsupportedMediaType is returned when client does not provide appropriate `Content-Type` header
 	ErrUnsupportedMediaType = errors.New("Media type not supported")
 	// ErrConditionalFailed is returned when update is missing `If-Unmodified-Since` header
@@ -60,23 +60,25 @@ const (
 type (
 	// Controllers represents factory object containing all the controllers
 	Controllers struct {
-		StatusController         *StatusController
-		ProducersController      *ProducersController
-		ProducerController       *ProducerController
-		ChannelController        *ChannelController
-		ChannelsController       *ChannelsController
-		ConsumerController       *ConsumerController
-		ConsumersController      *ConsumersController
-		JobsController           *JobsController
-		JobController            *JobController
-		BroadcastController      *BroadcastController
-		MessageController        *MessageController
-		MessagesController       *MessagesController
-		DLQController            *DLQController
-		MessagesStatusController *MessagesStatusController
-		JobRequeueController     *JobRequeueController
-		JobStatusController      *JobStatusController
-		MetricsHandler           http.Handler
+		StatusController            *StatusController
+		ProducersController         *ProducersController
+		ProducerController          *ProducerController
+		ChannelController           *ChannelController
+		ChannelsController          *ChannelsController
+		ConsumerController          *ConsumerController
+		ConsumersController         *ConsumersController
+		JobsController              *JobsController
+		JobController               *JobController
+		BroadcastController         *BroadcastController
+		MessageController           *MessageController
+		MessagesController          *MessagesController
+		DLQController               *DLQController
+		MessagesStatusController    *MessagesStatusController
+		JobRequeueController        *JobRequeueController
+		JobStatusController         *JobStatusController
+		ScheduledMessageController  *ScheduledMessageController
+		ScheduledMessagesController *ScheduledMessagesController
+		MetricsHandler              http.Handler
 	}
 
 	// ServerLifecycleListener listens to key server lifecycle error
@@ -222,7 +224,7 @@ func NewRouter(controllers *Controllers) *httprouter.Router {
 	setupAPIRoutes(apiRouter, controllers.StatusController, controllers.ProducersController, controllers.ProducerController, controllers.ChannelController,
 		controllers.ConsumerController, controllers.ConsumersController, controllers.JobsController, controllers.JobController, controllers.BroadcastController, controllers.MessageController,
 		controllers.MessagesController, controllers.DLQController, controllers.ChannelsController, controllers.MessagesStatusController, controllers.JobRequeueController,
-		controllers.JobStatusController)
+		controllers.JobStatusController, controllers.ScheduledMessageController, controllers.ScheduledMessagesController)
 	return apiRouter
 }
 

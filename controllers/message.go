@@ -228,13 +228,21 @@ func extractMsgStatusFilters(r *http.Request) []data.MsgStatus {
 }
 
 type MessagesStatusController struct {
-	MessagesController EndpointController
-	MessageRepo        storage.MessageRepository
+	MessagesController          EndpointController
+	ScheduledMessagesController EndpointController
+	MessageRepo                 storage.MessageRepository
+	ScheduledMessageRepo        storage.ScheduledMessageRepository
 }
 
 // NewMessagesStatusController initializes the controller for messages in a channel
-func NewMessagesStatusController(msgsController *MessagesController, msgRepo storage.MessageRepository) *MessagesStatusController {
-	return &MessagesStatusController{MessagesController: msgsController, MessageRepo: msgRepo}
+func NewMessagesStatusController(msgsController *MessagesController, scheduledMsgsController *ScheduledMessagesController,
+	msgRepo storage.MessageRepository, scheduledMsgRepo storage.ScheduledMessageRepository) *MessagesStatusController {
+	return &MessagesStatusController{
+		MessagesController:          msgsController,
+		ScheduledMessagesController: scheduledMsgsController,
+		MessageRepo:                 msgRepo,
+		ScheduledMessageRepo:        scheduledMsgRepo,
+	}
 }
 
 // GetPath returns the endpoint's path
@@ -251,25 +259,69 @@ func (messagesStatusController *MessagesStatusController) FormatAsRelativeLink(p
 func (messagesStatusController *MessagesStatusController) Get(w http.ResponseWriter, r *http.Request, param httprouter.Params) {
 	channelID := param.ByName(channelIDPathParamKey)
 	log.Debug().Msgf("Channel ID: %s", channelID)
+
+	// Get regular message counts
 	statusCount, err := messagesStatusController.MessageRepo.GetMessageStatusCountsByChannel(channelID)
 	log.Debug().Msgf("Status Count: %v, %v", statusCount, err)
-	if err == nil {
-		statusCountOuput := &StatusCount{}
-		statusCountOuput.Counts = make(map[string]TheCount)
-		for _, count := range statusCount {
-			statusString := count.Status.String()
-			statusCountOuput.Counts[statusString] = TheCount{
-				Count: count.Count,
-				Links: map[string]string{
-					"messages": fmt.Sprintf("%s?status=%d", messagesStatusController.MessagesController.FormatAsRelativeLink(httprouter.Param{Key: channelIDPathParamKey, Value: channelID}), count.Status.GetValue()),
-				},
-			}
-		}
-		writeJSON(w, statusCountOuput)
-	} else {
-		log.Error().Err(err)
+	if err != nil {
+		log.Error().Err(err).Msg("Error getting message status counts")
 		writeErr(w, err)
+		return
 	}
+
+	// Get scheduled message counts
+	scheduledStatusCount, err := messagesStatusController.ScheduledMessageRepo.GetScheduledMessageStatusCountsByChannel(channelID)
+	log.Debug().Msgf("Scheduled Status Count: %v, %v", scheduledStatusCount, err)
+	if err != nil {
+		log.Error().Err(err).Msg("Error getting scheduled message status counts")
+		writeErr(w, err)
+		return
+	}
+
+	// Get next scheduled message time
+	nextScheduledTime, err := messagesStatusController.ScheduledMessageRepo.GetNextScheduledMessageTime(channelID)
+	if err != nil {
+		log.Error().Err(err).Msg("Error getting next scheduled message time")
+		writeErr(w, err)
+		return
+	}
+
+	// Build response with both regular and scheduled message counts
+	statusCountOutput := &StatusCount{}
+	statusCountOutput.Counts = make(map[string]TheCount)
+
+	// Add regular message counts
+	for _, count := range statusCount {
+		statusString := count.Status.String()
+		statusCountOutput.Counts[statusString] = TheCount{
+			Count: count.Count,
+			Links: map[string]string{
+				"messages": fmt.Sprintf("%s?status=%d", messagesStatusController.MessagesController.FormatAsRelativeLink(httprouter.Param{Key: channelIDPathParamKey, Value: channelID}), count.Status.GetValue()),
+			},
+		}
+	}
+
+	// Add scheduled message counts with distinct keys
+	for _, count := range scheduledStatusCount {
+		statusString := "SCHEDULED_" + count.Status.String()
+		statusCountOutput.Counts[statusString] = TheCount{
+			Count: count.Count,
+			Links: map[string]string{
+				"messages": fmt.Sprintf("%s?status=%d", messagesStatusController.ScheduledMessagesController.FormatAsRelativeLink(httprouter.Param{Key: channelIDPathParamKey, Value: channelID}), count.Status.GetValue()),
+			},
+		}
+	}
+
+	// Add next scheduled message time if available
+	responseData := map[string]interface{}{
+		"counts": statusCountOutput.Counts,
+	}
+
+	if nextScheduledTime != nil {
+		responseData["next_scheduled_message_at"] = nextScheduledTime
+	}
+
+	writeJSON(w, responseData)
 }
 
 // DLQController represents the GET and POST endpoint for reading dead and requeuing all dead messages for delivery.
