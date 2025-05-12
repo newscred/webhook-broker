@@ -97,7 +97,11 @@ curl -v localhost:18181/channel/sample-channel/broadcast -X POST \
    - Configuration loading and validation
    - Default configuration values
 
-5. **Prune** (`/prune`)
+5. **Scheduler** (`/scheduler`)
+   - Scheduled message delivery management
+   - Periodic checking of messages due for delivery
+
+6. **Prune** (`/prune`)
    - Message pruning and archiving functionality
 
 ### Key Workflows
@@ -116,9 +120,10 @@ curl -v localhost:18181/channel/sample-channel/broadcast -X POST \
    - Messages can be in ACKNOWLEDGED or DISPATCHED state
    - Jobs can be in QUEUED, INFLIGHT, DELIVERED, or DEAD state
 
-## Implementation Guide for Issue #55: Scheduled Messages
-
-For detailed implementation information, please refer to the technical specification document at `/docs/tech-specs/scheduled-message-spec.md`.
+4. **Scheduled Messages**:
+   - Messages can be scheduled for future delivery using the `X-Broker-Scheduled-For` header
+   - Scheduler service periodically checks for messages due for delivery
+   - When scheduled time is reached, messages are dispatched through normal flow
 
 ## Architecture Notes for Future Feature Development
 
