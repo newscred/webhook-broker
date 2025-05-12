@@ -124,6 +124,13 @@ For detailed implementation information, please refer to the technical specifica
 
 When implementing new features in webhook-broker, follow these architectural patterns:
 
+### Important Note on Generated Files
+
+NEVER edit wire_gen.go files directly as they are auto-generated. Instead:
+- Make changes to the injector sets, provider functions, or wire.go files
+- Run the wire tool to regenerate wire_gen.go
+- Generated files should only be modified by their respective generation tools
+
 ### Adding a New Entity
 
 1. **Database Schema**:

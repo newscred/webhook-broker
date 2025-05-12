@@ -73,7 +73,7 @@ var (
 	loadConfiguration = defaultLoadFunc
 	errDBDialect      = errors.New("DB Dialect not supported")
 	// ConfigInjector sets up configuration related bindings
-	ConfigInjector = wire.NewSet(GetConfigurationFromCLIConfig, wire.Bind(new(SeedDataConfig), new(*Config)), wire.Bind(new(HTTPConfig), new(*Config)), wire.Bind(new(RelationalDatabaseConfig), new(*Config)), wire.Bind(new(LogConfig), new(*Config)), wire.Bind(new(BrokerConfig), new(*Config)), wire.Bind(new(ConsumerConnectionConfig), new(*Config)))
+	ConfigInjector = wire.NewSet(GetConfigurationFromCLIConfig, wire.Bind(new(SeedDataConfig), new(*Config)), wire.Bind(new(HTTPConfig), new(*Config)), wire.Bind(new(RelationalDatabaseConfig), new(*Config)), wire.Bind(new(LogConfig), new(*Config)), wire.Bind(new(BrokerConfig), new(*Config)), wire.Bind(new(ConsumerConnectionConfig), new(*Config)), wire.Bind(new(SchedulerConfig), new(*Config)))
 )
 
 var currentUser = user.Current
@@ -123,6 +123,10 @@ type Config struct {
 	RemoteExportURL         *url.URL
 	RemoteFilePrefix        string
 	MaxArchiveFileSizeInMB  uint
+	// Scheduler configuration
+	SchedulerIntervalMs     uint
+	MinScheduleDelayMinutes uint
+	SchedulerBatchSize      uint
 }
 
 // GetLogLevel returns the log level as per the configuration
@@ -338,6 +342,7 @@ func GetConfigurationFromParseConfig(cfg *ini.File) (*Config, error) {
 	setupConsumerConnectionConfiguration(cfg, configuration)
 	setupBrokerConfiguration(cfg, configuration)
 	setupMessagePruningConfiguration(cfg, configuration)
+	setupSchedulerConfiguration(cfg, configuration)
 	if validationErr := validateConfigurationState(configuration); validationErr != nil {
 		return EmptyConfigurationForError, validationErr
 	}
@@ -644,4 +649,18 @@ func setupBrokerConfiguration(cfg *ini.File, configuration *Config) {
 		backoffDelays = append(backoffDelays, time.Duration(parsedBackoff)*time.Second)
 	}
 	configuration.RetryBackoffDelays = backoffDelays
+}
+
+func setupSchedulerConfiguration(cfg *ini.File, configuration *Config) {
+	schedulerSection, err := cfg.GetSection("scheduler")
+	if err != nil {
+		return
+	}
+	schedulerIntervalMs := schedulerSection.Key("scheduler-interval-ms").MustUint(DefaultSchedulerIntervalMs)
+	minScheduleDelayMinutes := schedulerSection.Key("min-schedule-delay-minutes").MustUint(DefaultMinScheduleDelayMinutes)
+	schedulerBatchSize := schedulerSection.Key("scheduler-batch-size").MustUint(uint(DefaultSchedulerBatchSize))
+
+	configuration.SchedulerIntervalMs = schedulerIntervalMs
+	configuration.MinScheduleDelayMinutes = minScheduleDelayMinutes
+	configuration.SchedulerBatchSize = schedulerBatchSize
 }
