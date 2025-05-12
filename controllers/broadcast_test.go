@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/rs/zerolog/log"
 
@@ -24,16 +25,24 @@ import (
 )
 
 var (
-	messageRepo storage.MessageRepository
+	messageRepo          storage.MessageRepository
+	scheduledMessageRepo storage.ScheduledMessageRepository
 )
 
 func BroadcastTestSetup() {
 	messageRepo = storage.NewMessageRepository(db, channelRepo, producerRepo)
+	scheduledMessageRepo = storage.NewScheduledMessageRepository(db, channelRepo, producerRepo)
 }
 
 func getNewBroadcastController(msgRepo storage.MessageRepository) (*BroadcastController, *dispatchermocks.MessageDispatcher) {
 	mockDispatcher := new(dispatchermocks.MessageDispatcher)
-	return NewBroadcastController(channelRepo, msgRepo, producerRepo, mockDispatcher), mockDispatcher
+	mockScheduledMsgRepo := new(storagemocks.ScheduledMessageRepository)
+	return NewBroadcastController(channelRepo, msgRepo, producerRepo, mockScheduledMsgRepo, mockDispatcher), mockDispatcher
+}
+
+func getNewBroadcastControllerWithScheduledRepo(msgRepo storage.MessageRepository, scheduledMsgRepo storage.ScheduledMessageRepository) (*BroadcastController, *dispatchermocks.MessageDispatcher) {
+	mockDispatcher := new(dispatchermocks.MessageDispatcher)
+	return NewBroadcastController(channelRepo, msgRepo, producerRepo, scheduledMsgRepo, mockDispatcher), mockDispatcher
 }
 
 type mockCloser struct {
@@ -426,4 +435,149 @@ func setupAsyncDispatchMock(mockDispatcher *dispatchermocks.MessageDispatcher, m
 		wg.Done()
 	})
 	return &wg
+}
+
+func TestScheduledMessageFunctionality(t *testing.T) {
+	t.Run("InvalidScheduledDateTime", func(t *testing.T) {
+		t.Parallel()
+		msgRepo := new(storagemocks.MessageRepository)
+		scheduledMsgRepo := new(storagemocks.ScheduledMessageRepository)
+		controller, mockDispatcher := getNewBroadcastControllerWithScheduledRepo(msgRepo, scheduledMsgRepo)
+		testRouter := createTestRouter(controller)
+		testURI := controller.FormatAsRelativeLink(getRouterParam(consumerTestChannel.ChannelID))
+		req, _ := http.NewRequest("POST", testURI, nil)
+		bodyString := "test scheduled message body"
+		req.Body = io.NopCloser(strings.NewReader(bodyString))
+		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
+		req.Header.Add(headerChannelToken, consumerTestChannel.Token)
+		producerID := listTestProducerIDPrefix + "0"
+		req.Header.Add(headerProducerID, producerID)
+		req.Header.Add(headerProducerToken, successfulGetTestToken+" - 0")
+
+		// Set an invalid date format
+		req.Header.Add(headerScheduledFor, "2023-13-32T25:61:99")
+
+		rr := httptest.NewRecorder()
+		testRouter.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusBadRequest, rr.Code)
+		msgRepo.AssertExpectations(t)
+		scheduledMsgRepo.AssertExpectations(t)
+		mockDispatcher.AssertExpectations(t)
+	})
+
+	t.Run("ScheduledTimeTooClose", func(t *testing.T) {
+		t.Parallel()
+		msgRepo := new(storagemocks.MessageRepository)
+		scheduledMsgRepo := new(storagemocks.ScheduledMessageRepository)
+		controller, mockDispatcher := getNewBroadcastControllerWithScheduledRepo(msgRepo, scheduledMsgRepo)
+		testRouter := createTestRouter(controller)
+		testURI := controller.FormatAsRelativeLink(getRouterParam(consumerTestChannel.ChannelID))
+		req, _ := http.NewRequest("POST", testURI, nil)
+		bodyString := "test scheduled message body"
+		req.Body = io.NopCloser(strings.NewReader(bodyString))
+		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
+		req.Header.Add(headerChannelToken, consumerTestChannel.Token)
+		producerID := listTestProducerIDPrefix + "0"
+		req.Header.Add(headerProducerID, producerID)
+		req.Header.Add(headerProducerToken, successfulGetTestToken+" - 0")
+
+		// Set a time less than the minimum delay
+		tooSoon := time.Now().Add(1 * time.Minute)
+		req.Header.Add(headerScheduledFor, tooSoon.Format(time.RFC3339))
+
+		rr := httptest.NewRecorder()
+		testRouter.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusPreconditionFailed, rr.Code)
+		msgRepo.AssertExpectations(t)
+		scheduledMsgRepo.AssertExpectations(t)
+		mockDispatcher.AssertExpectations(t)
+	})
+
+	t.Run("SuccessfulScheduledMessage", func(t *testing.T) {
+		t.Parallel()
+		msgRepo := new(storagemocks.MessageRepository)
+		scheduledMsgRepo := new(storagemocks.ScheduledMessageRepository)
+		controller, mockDispatcher := getNewBroadcastControllerWithScheduledRepo(msgRepo, scheduledMsgRepo)
+		testRouter := createTestRouter(controller)
+		testURI := controller.FormatAsRelativeLink(getRouterParam(consumerTestChannel.ChannelID))
+		req, _ := http.NewRequest("POST", testURI, nil)
+		bodyString := "test scheduled message body"
+		req.Body = io.NopCloser(strings.NewReader(bodyString))
+		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
+		req.Header.Add(headerChannelToken, consumerTestChannel.Token)
+		priority := 5
+		req.Header.Add(headerPriority, strconv.Itoa(priority))
+		producerID := listTestProducerIDPrefix + "0"
+		req.Header.Add(headerProducerID, producerID)
+		req.Header.Add(headerProducerToken, successfulGetTestToken+" - 0")
+		messageID := "scheduled-test-message-id"
+		req.Header.Add(headerMessageID, messageID)
+
+		// Set a valid future time
+		scheduledTime := time.Now().Add(10 * time.Minute)
+		req.Header.Add(headerScheduledFor, scheduledTime.Format(time.RFC3339))
+
+		matcher := func(msg *data.ScheduledMessage) bool {
+			return msg.Priority == uint(priority) &&
+				msg.ContentType == formDataContentTypeHeaderValue &&
+				msg.Payload == bodyString &&
+				msg.Status == data.ScheduledMsgStatusScheduled &&
+				msg.BroadcastedTo.ChannelID == consumerTestChannel.ChannelID &&
+				msg.ProducedBy.ProducerID == producerID &&
+				msg.IsInValidState() &&
+				msg.MessageID == messageID &&
+				!msg.DispatchSchedule.IsZero()
+		}
+
+		scheduledMsgRepo.On("Create", mock.MatchedBy(matcher)).Return(nil)
+
+		rr := httptest.NewRecorder()
+		testRouter.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusCreated, rr.Code)
+		location := rr.Header().Get(headerLocation)
+		assert.Contains(t, location, "/channel/"+consumerTestChannel.ChannelID+"/scheduled-message/"+messageID)
+
+		msgRepo.AssertExpectations(t)
+		scheduledMsgRepo.AssertExpectations(t)
+		mockDispatcher.AssertExpectations(t)
+	})
+
+	t.Run("ScheduledMessageDuplicateID", func(t *testing.T) {
+		t.Parallel()
+		msgRepo := new(storagemocks.MessageRepository)
+		scheduledMsgRepo := new(storagemocks.ScheduledMessageRepository)
+		controller, mockDispatcher := getNewBroadcastControllerWithScheduledRepo(msgRepo, scheduledMsgRepo)
+		testRouter := createTestRouter(controller)
+		testURI := controller.FormatAsRelativeLink(getRouterParam(consumerTestChannel.ChannelID))
+		req, _ := http.NewRequest("POST", testURI, nil)
+		bodyString := "test scheduled message body"
+		req.Body = io.NopCloser(strings.NewReader(bodyString))
+		req.Header.Add(headerContentType, formDataContentTypeHeaderValue)
+		req.Header.Add(headerChannelToken, consumerTestChannel.Token)
+		producerID := listTestProducerIDPrefix + "0"
+		req.Header.Add(headerProducerID, producerID)
+		req.Header.Add(headerProducerToken, successfulGetTestToken+" - 0")
+		messageID := "duplicate-scheduled-message-id"
+		req.Header.Add(headerMessageID, messageID)
+
+		// Set a valid future time
+		scheduledTime := time.Now().Add(10 * time.Minute)
+		req.Header.Add(headerScheduledFor, scheduledTime.Format(time.RFC3339))
+
+		scheduledMsgRepo.On("Create", mock.MatchedBy(func(msg *data.ScheduledMessage) bool {
+			return msg.MessageID == messageID
+		})).Return(storage.ErrDuplicateScheduledMessageIDForChannel)
+
+		rr := httptest.NewRecorder()
+		testRouter.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusConflict, rr.Code)
+
+		msgRepo.AssertExpectations(t)
+		scheduledMsgRepo.AssertExpectations(t)
+		mockDispatcher.AssertExpectations(t)
+	})
 }

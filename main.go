@@ -341,8 +341,12 @@ func newLockRepository(dataAccessor storage.DataAccessor) storage.LockRepository
 	return dataAccessor.GetLockRepository()
 }
 
+func newScheduledMessageRepository(dataAccessor storage.DataAccessor) storage.ScheduledMessageRepository {
+	return dataAccessor.GetScheduledMessageRepository()
+}
+
 var (
 	httpServiceContainerInjectorSet = wire.NewSet(wire.Struct(new(HTTPServiceContainer), "Configuration", "Server", "DataAccessor", "Listener", "Dispatcher"))
 	configInjectorSet               = wire.NewSet(httpServiceContainerInjectorSet, NewServerListener, GetMigrationConfig, wire.Bind(new(controllers.ServerLifecycleListener), new(*ServerLifecycleListenerImpl)), config.ConfigInjector)
-	relationalDBWithControllerSet   = wire.NewSet(controllers.ControllerInjector, storage.GetNewDataAccessor, newLockRepository, newDeliveryJobRepository, newAppRepository, newChannelRepository, newProducerRepository, newConsumerRepository, newMessageRepository, dispatcher.MetricsInjector, dispatcher.DispatcherInjector)
+	relationalDBWithControllerSet   = wire.NewSet(controllers.ControllerInjector, storage.GetNewDataAccessor, newLockRepository, newDeliveryJobRepository, newAppRepository, newChannelRepository, newProducerRepository, newConsumerRepository, newMessageRepository, newScheduledMessageRepository, dispatcher.MetricsInjector, dispatcher.DispatcherInjector)
 )
