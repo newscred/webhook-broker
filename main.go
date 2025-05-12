@@ -21,6 +21,7 @@ import (
 	"github.com/newscred/webhook-broker/controllers"
 	"github.com/newscred/webhook-broker/dispatcher"
 	"github.com/newscred/webhook-broker/prune"
+	"github.com/newscred/webhook-broker/scheduler"
 	"github.com/newscred/webhook-broker/storage"
 	"github.com/newscred/webhook-broker/storage/data"
 	"github.com/newscred/webhook-broker/utils"
@@ -52,6 +53,7 @@ type HTTPServiceContainer struct {
 	DataAccessor  storage.DataAccessor
 	Listener      *ServerLifecycleListenerImpl
 	Dispatcher    dispatcher.MessageDispatcher
+	Scheduler     scheduler.MessageScheduler
 }
 
 var (
@@ -273,7 +275,13 @@ func startWebhookBroker(inConfig *config.CLIConfig) {
 		log.Print("Configuration in Use : " + buf.String())
 		// Setup Log Output
 		setupLogger(httpServiceContainer.Configuration)
+
+		// Start the scheduler
+		httpServiceContainer.Scheduler.Start()
+
 		<-httpServiceContainer.Listener.shutdownListener
+
+		httpServiceContainer.Scheduler.Stop()
 		httpServiceContainer.Dispatcher.Stop()
 	}
 	inConfig.StopWatcher()
@@ -346,7 +354,7 @@ func newScheduledMessageRepository(dataAccessor storage.DataAccessor) storage.Sc
 }
 
 var (
-	httpServiceContainerInjectorSet = wire.NewSet(wire.Struct(new(HTTPServiceContainer), "Configuration", "Server", "DataAccessor", "Listener", "Dispatcher"))
+	httpServiceContainerInjectorSet = wire.NewSet(wire.Struct(new(HTTPServiceContainer), "Configuration", "Server", "DataAccessor", "Listener", "Dispatcher", "Scheduler"))
 	configInjectorSet               = wire.NewSet(httpServiceContainerInjectorSet, NewServerListener, GetMigrationConfig, wire.Bind(new(controllers.ServerLifecycleListener), new(*ServerLifecycleListenerImpl)), config.ConfigInjector)
-	relationalDBWithControllerSet   = wire.NewSet(controllers.ControllerInjector, storage.GetNewDataAccessor, newLockRepository, newDeliveryJobRepository, newAppRepository, newChannelRepository, newProducerRepository, newConsumerRepository, newMessageRepository, newScheduledMessageRepository, dispatcher.MetricsInjector, dispatcher.DispatcherInjector)
+	relationalDBWithControllerSet   = wire.NewSet(controllers.ControllerInjector, storage.GetNewDataAccessor, newLockRepository, newDeliveryJobRepository, newAppRepository, newChannelRepository, newProducerRepository, newConsumerRepository, newMessageRepository, newScheduledMessageRepository, dispatcher.MetricsInjector, dispatcher.DispatcherInjector, scheduler.SchedulerInjector)
 )

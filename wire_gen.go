@@ -10,6 +10,7 @@ import (
 	"github.com/newscred/webhook-broker/config"
 	"github.com/newscred/webhook-broker/controllers"
 	"github.com/newscred/webhook-broker/dispatcher"
+	"github.com/newscred/webhook-broker/scheduler"
 	"github.com/newscred/webhook-broker/storage"
 )
 
@@ -94,12 +95,15 @@ func GetHTTPServer(cliConfig *config.CLIConfig) (*HTTPServiceContainer, error) {
 	}
 	router := controllers.NewRouter(controllersControllers)
 	server := controllers.ConfigureAPI(configConfig, serverLifecycleListenerImpl, router)
+	schedulerConfiguration := scheduler.NewSchedulerConfiguration(scheduledMessageRepository, messageRepository, messageDispatcher, lockRepository, configConfig)
+	messageScheduler := scheduler.NewMessageScheduler(schedulerConfiguration)
 	httpServiceContainer := &HTTPServiceContainer{
 		Configuration: configConfig,
 		Server:        server,
 		DataAccessor:  dataAccessor,
 		Listener:      serverLifecycleListenerImpl,
 		Dispatcher:    messageDispatcher,
+		Scheduler:     messageScheduler,
 	}
 	return httpServiceContainer, nil
 }
