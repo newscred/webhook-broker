@@ -29,9 +29,39 @@ docker-compose up broker
 # once up try the following curl -
 curl -v localhost:18181/channel/sample-channel/broadcast -X POST -H "X-Broker-Channel-Token: sample-channel-token" -H "X-Broker-Producer-Token: sample-producer-token" -H "X-Broker-Producer-ID: sample-producer" -H "Content-Type: application/json" --data '{"test": "Hello World!"}'
 # It wont deliver message anywhere since default sample-consumer's callback URL is invalid
+
+# To send a scheduled message (to be delivered in the future):
+curl -v localhost:18181/channel/sample-channel/broadcast -X POST \
+  -H "X-Broker-Channel-Token: sample-channel-token" \
+  -H "X-Broker-Producer-Token: sample-producer-token" \
+  -H "X-Broker-Producer-ID: sample-producer" \
+  -H "X-Broker-Scheduled-For: 2025-12-31T23:59:59Z" \
+  -H "Content-Type: application/json" \
+  --data '{"test": "Scheduled message"}'
+# Note: The scheduled time must be at least 2 minutes in the future (configurable)
+
+# To list scheduled messages for a channel:
+curl -v localhost:18181/channel/sample-channel/scheduled-messages
 ```
 
 Also note that for testing in docker, you will need the code to be built every time you change code.
+
+## Scheduled Messages
+
+The webhook-broker supports scheduling messages for future delivery using a simple header-based API. Key features:
+
+- Send messages with the `X-Broker-Scheduled-For` header containing an ISO-8601 date-time
+- Time must be at least 2 minutes in the future (configurable)
+- Messages are stored until their scheduled time, then delivered through the normal flow
+- No support for recurring deliveries or cancellation of scheduled messages
+
+API endpoints:
+- `POST /channel/{channelId}/broadcast` with `X-Broker-Scheduled-For` header to schedule a message
+- `GET /channel/{channelId}/scheduled-messages` to list scheduled messages
+- `GET /channel/{channelId}/scheduled-message/{messageId}` to get a specific scheduled message
+- `GET /channel/{channelId}/messages-status` includes counts of scheduled messages
+
+The scheduler runs as a background service, checking periodically for messages due for delivery.
 
 ## Configuration management
 
