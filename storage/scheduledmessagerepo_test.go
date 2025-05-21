@@ -246,7 +246,7 @@ func TestScheduledMessageMarkDispatched(t *testing.T) {
 
 		// Mark message as dispatched
 		message.Status = data.ScheduledMsgStatusDispatched
-		message.DispatchedDate = time.Now()
+		message.DispatchedAt = time.Now()
 		err = msgRepo.MarkDispatched(message)
 		assert.Nil(t, err)
 
@@ -254,7 +254,7 @@ func TestScheduledMessageMarkDispatched(t *testing.T) {
 		retrievedMessage, err := msgRepo.GetByID(message.ID.String())
 		assert.Nil(t, err)
 		assert.Equal(t, data.ScheduledMsgStatusDispatched, retrievedMessage.Status)
-		assert.False(t, retrievedMessage.DispatchedDate.IsZero())
+		assert.False(t, retrievedMessage.DispatchedAt.IsZero())
 
 		// Cleanup
 		_, err = executeUpdateQuery(testDB, "DELETE FROM scheduled_message WHERE id = ?", []interface{}{message.ID})
@@ -386,7 +386,7 @@ func TestScheduledMessageGetScheduledMessagesForChannel(t *testing.T) {
 		firstMsg, err := msgRepo.GetByID(msgID)
 		assert.Nil(t, err)
 		firstMsg.Status = data.ScheduledMsgStatusDispatched
-		firstMsg.DispatchedDate = time.Now()
+		firstMsg.DispatchedAt = time.Now()
 		err = msgRepo.MarkDispatched(firstMsg)
 		assert.Nil(t, err)
 
@@ -508,7 +508,7 @@ func TestScheduledMessageGetScheduledMessageStatusCountsByChannel(t *testing.T) 
 		firstMsg, err := msgRepo.GetByID(msgID)
 		assert.Nil(t, err)
 		firstMsg.Status = data.ScheduledMsgStatusDispatched
-		firstMsg.DispatchedDate = time.Now()
+		firstMsg.DispatchedAt = time.Now()
 		err = msgRepo.MarkDispatched(firstMsg)
 		assert.Nil(t, err)
 

@@ -117,11 +117,11 @@ func TestScheduledMessageIsInValidState(t *testing.T) {
 		msg.DispatchSchedule = time.Time{}
 		assert.False(t, msg.IsInValidState())
 	})
-	t.Run("InvalidDispatchedDate", func(t *testing.T) {
+	t.Run("InvalidDispatchedAt", func(t *testing.T) {
 		t.Parallel()
 		msg := getCompleteScheduledMessageFixture()
 		msg.Status = ScheduledMsgStatusDispatched
-		msg.DispatchedDate = time.Time{}
+		msg.DispatchedAt = time.Time{}
 		assert.False(t, msg.IsInValidState())
 	})
 }

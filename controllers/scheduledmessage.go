@@ -43,15 +43,15 @@ func (controller *ScheduledMessageController) Get(w http.ResponseWriter, r *http
 		"priority":         scheduledMessage.Priority,
 		"producedBy":       scheduledMessage.ProducedBy.ProducerID,
 		"dispatchSchedule": scheduledMessage.DispatchSchedule,
-		"dispatchedDate":   nil,
+		"dispatchedAt":   nil,
 		"status":           scheduledMessage.Status.String(),
 		"payload":          scheduledMessage.Payload,
 		"headers":          scheduledMessage.Headers,
 	}
 
 	// Only include dispatched date if it's set (not zero value)
-	if !scheduledMessage.DispatchedDate.IsZero() {
-		responseData["dispatchedDate"] = scheduledMessage.DispatchedDate
+	if !scheduledMessage.DispatchedAt.IsZero() {
+		responseData["dispatchedAt"] = scheduledMessage.DispatchedAt
 	}
 
 	writeJSON(w, responseData)

@@ -70,7 +70,7 @@ func TestScheduledMessageControllerGet(t *testing.T) {
 		assert.Equal(t, scheduledMsg.Payload, responseData["payload"])
 		assert.Equal(t, float64(scheduledMsg.Priority), responseData["priority"])
 		assert.Equal(t, scheduledMsg.ProducedBy.ProducerID, responseData["producedBy"])
-		assert.Nil(t, responseData["dispatchedDate"]) // Should be nil for a scheduled message
+		assert.Nil(t, responseData["dispatchedAt"]) // Should be nil for a scheduled message
 
 		scheduledMsgRepo.AssertExpectations(t)
 	})
@@ -99,7 +99,7 @@ func TestScheduledMessageControllerGet(t *testing.T) {
 		scheduledMsgRepo.AssertExpectations(t)
 	})
 
-	t.Run("WithDispatchedDate", func(t *testing.T) {
+	t.Run("WithDispatchedAt", func(t *testing.T) {
 		scheduledMsgRepo := new(storagemocks.ScheduledMessageRepository)
 		channelRepo := new(storagemocks.ChannelRepository)
 		controller := NewScheduledMessageController(scheduledMsgRepo, channelRepo)
@@ -112,7 +112,7 @@ func TestScheduledMessageControllerGet(t *testing.T) {
 
 		scheduledMsg, _ := data.NewScheduledMessage(channel, producer, "test-payload", "test/content-type", dispatchTime, data.HeadersMap{})
 		scheduledMsg.Status = data.ScheduledMsgStatusDispatched
-		scheduledMsg.DispatchedDate = dispatchedTime
+		scheduledMsg.DispatchedAt = dispatchedTime
 
 		// Setup mock repository
 		scheduledMsgRepo.On("Get", "test-channel", "dispatched-message").Return(scheduledMsg, nil)
@@ -136,7 +136,7 @@ func TestScheduledMessageControllerGet(t *testing.T) {
 
 		assert.Equal(t, scheduledMsg.ID.String(), responseData["id"])
 		assert.Equal(t, "DISPATCHED", responseData["status"])
-		assert.NotNil(t, responseData["dispatchedDate"]) // Should have a dispatched date
+		assert.NotNil(t, responseData["dispatchedAt"]) // Should have a dispatched date
 
 		scheduledMsgRepo.AssertExpectations(t)
 	})
