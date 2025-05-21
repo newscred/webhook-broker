@@ -76,7 +76,7 @@ type ScheduledMessageModel struct {
 	Priority         uint
 	ProducedBy       string
 	DispatchSchedule time.Time
-	DispatchedDate   *time.Time
+	DispatchedAt     *time.Time
 	Status           string
 	Payload          string
 	Headers          map[string]string
@@ -844,26 +844,26 @@ func testDLQFlow() {
 
 func testScheduledMessages() {
 	log.Println("Starting scheduled messages test")
-	
+
 	// 1. Test basic scheduled message flow
 	testBasicScheduledMessageFlow()
-	
+
 	// 2. Test error cases
 	testScheduledMessageErrorCases()
-	
+
 	// 3. Test concurrent scheduling
 	testConcurrentScheduledMessages()
-	
+
 	log.Println("Scheduled messages tests completed successfully")
 }
 
 func testBasicScheduledMessageFlow() {
 	log.Println("Testing basic scheduled message flow")
 	channelID := generalChannelID
-	
+
 	// Schedule a message for delivery in 3 minutes (must be at least 2 minutes in the future)
 	futureTime := time.Now().Add(3 * time.Minute).Format(time.RFC3339)
-	
+
 	// Create a scheduled message
 	req, _ := http.NewRequest(http.MethodPost, brokerBaseURL+"/channel/"+channelID+"/broadcast", strings.NewReader(payload))
 	req.Header.Add(headerContentType, contentType)
@@ -871,29 +871,29 @@ func testBasicScheduledMessageFlow() {
 	req.Header.Add(headerProducerID, producerID)
 	req.Header.Add(headerProducerToken, token)
 	req.Header.Add(headerScheduledFor, futureTime)
-	
+
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Println("Error creating scheduled message:", err)
 		os.Exit(40)
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusCreated {
 		body, _ := io.ReadAll(resp.Body)
 		log.Println("Error scheduling message:", resp.StatusCode, string(body))
 		os.Exit(41)
 	}
-	
+
 	// Get message URL from the Location header
 	messageURL := resp.Header.Get("Location")
 	if messageURL == "" {
 		log.Println("No location header in response")
 		os.Exit(42)
 	}
-	
+
 	log.Println("Created scheduled message:", messageURL)
-	
+
 	// Get scheduled message list to verify it appears
 	scheduledMessagesURL := brokerBaseURL + "/channel/" + channelID + "/scheduled-messages"
 	req, _ = http.NewRequest(http.MethodGet, scheduledMessagesURL, nil)
@@ -903,7 +903,7 @@ func testBasicScheduledMessageFlow() {
 		os.Exit(43)
 	}
 	defer resp.Body.Close()
-	
+
 	body, _ := io.ReadAll(resp.Body)
 	var msgList ScheduledMessageListResult
 	err = json.Unmarshal(body, &msgList)
@@ -911,12 +911,12 @@ func testBasicScheduledMessageFlow() {
 		log.Println("Error parsing scheduled messages response:", err)
 		os.Exit(44)
 	}
-	
+
 	if len(msgList.Result) < 1 {
 		log.Println("No scheduled messages found")
 		os.Exit(45)
 	}
-	
+
 	// Verify message status endpoint contains scheduled message count
 	statusURL := brokerBaseURL + "/channel/" + channelID + "/messages-status"
 	req, _ = http.NewRequest(http.MethodGet, statusURL, nil)
@@ -926,10 +926,37 @@ func testBasicScheduledMessageFlow() {
 		os.Exit(46)
 	}
 	defer resp.Body.Close()
-	
+
 	body, _ = io.ReadAll(resp.Body)
 	log.Println("Status response:", string(body))
-	
+
+	// Verify the status response includes scheduled message count
+	var statusData map[string]interface{}
+	err = json.Unmarshal(body, &statusData)
+	if err != nil {
+		log.Println("Error parsing message status response:", err)
+		os.Exit(47)
+	}
+
+	// Check if scheduled count exists and is greater than 0
+	counts, countsOk := statusData["counts"].(map[string]interface{})
+	if !countsOk {
+		log.Println("Expected 'counts' object in status response")
+		os.Exit(47)
+	}
+
+	scheduledStatus, scheduledOk := counts["SCHEDULED_SCHEDULED"].(map[string]interface{})
+	if !scheduledOk {
+		log.Println("Expected 'SCHEDULED_SCHEDULED' in counts")
+		os.Exit(47)
+	}
+
+	scheduledCount, countOk := scheduledStatus["Count"].(float64)
+	if !countOk || scheduledCount < 1 {
+		log.Println("Expected Count >= 1 for SCHEDULED_SCHEDULED in status response")
+		os.Exit(47)
+	}
+
 	// Set up consumer to receive the scheduled message
 	wg := &sync.WaitGroup{}
 	wg.Add(pushConsumerCount)
@@ -953,17 +980,17 @@ func testBasicScheduledMessageFlow() {
 			wg.Done()
 		}
 	}
-	
+
 	// Wait for the scheduled time to pass and message to be delivered
 	timeoutDuration := 5 * time.Minute // Wait up to 5 minutes for the message to be delivered
 	if waitTimeout(wg, timeoutDuration) {
 		log.Println("Timed out waiting for scheduled message delivery")
 		os.Exit(47)
 	}
-	
+
 	// Verify the message status changed from SCHEDULED to DISPATCHED
 	time.Sleep(2 * time.Second) // Give the broker time to update the status
-	
+
 	// Get individual scheduled message to verify status
 	req, _ = http.NewRequest(http.MethodGet, brokerBaseURL+messageURL, nil)
 	resp, err = client.Do(req)
@@ -972,7 +999,7 @@ func testBasicScheduledMessageFlow() {
 		os.Exit(48)
 	}
 	defer resp.Body.Close()
-	
+
 	body, _ = io.ReadAll(resp.Body)
 	var scheduledMsg ScheduledMessageModel
 	err = json.Unmarshal(body, &scheduledMsg)
@@ -980,19 +1007,19 @@ func testBasicScheduledMessageFlow() {
 		log.Println("Error parsing scheduled message response:", err)
 		os.Exit(49)
 	}
-	
+
 	if scheduledMsg.Status != "DISPATCHED" {
 		log.Println("Scheduled message not dispatched:", scheduledMsg.Status)
 		os.Exit(50)
 	}
-	
+
 	log.Println("Basic scheduled message flow test passed")
 }
 
 func testScheduledMessageErrorCases() {
 	log.Println("Testing scheduled message error cases")
 	channelID := generalChannelID
-	
+
 	// Test case 1: Invalid date format
 	invalidDate := "2025/12/31 23:59:59"
 	req, _ := http.NewRequest(http.MethodPost, brokerBaseURL+"/channel/"+channelID+"/broadcast", strings.NewReader(payload))
@@ -1001,19 +1028,19 @@ func testScheduledMessageErrorCases() {
 	req.Header.Add(headerProducerID, producerID)
 	req.Header.Add(headerProducerToken, token)
 	req.Header.Add(headerScheduledFor, invalidDate)
-	
+
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Println("Error testing invalid date format:", err)
 		os.Exit(51)
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusBadRequest {
 		log.Println("Expected 400 for invalid date format, got:", resp.StatusCode)
 		os.Exit(52)
 	}
-	
+
 	// Test case 2: Time too close to present (less than 2 minutes)
 	tooSoonTime := time.Now().Add(1 * time.Minute).Format(time.RFC3339)
 	req, _ = http.NewRequest(http.MethodPost, brokerBaseURL+"/channel/"+channelID+"/broadcast", strings.NewReader(payload))
@@ -1022,65 +1049,65 @@ func testScheduledMessageErrorCases() {
 	req.Header.Add(headerProducerID, producerID)
 	req.Header.Add(headerProducerToken, token)
 	req.Header.Add(headerScheduledFor, tooSoonTime)
-	
+
 	resp, err = client.Do(req)
 	if err != nil {
 		log.Println("Error testing time too close to present:", err)
 		os.Exit(53)
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusPreconditionFailed {
 		log.Println("Expected 412 for time too close to present, got:", resp.StatusCode)
 		os.Exit(54)
 	}
-	
+
 	log.Println("Scheduled message error cases test passed")
 }
 
 func testConcurrentScheduledMessages() {
 	log.Println("Testing concurrent scheduled messages")
 	channelID := generalChannelID
-	
+
 	// Create 5 messages with different future times (all at least 2 minutes in the future)
 	futureTimes := []time.Duration{
 		2*time.Minute + 30*time.Second,
-		3*time.Minute,
+		3 * time.Minute,
 		3*time.Minute + 30*time.Second,
-		4*time.Minute,
+		4 * time.Minute,
 		4*time.Minute + 30*time.Second,
 	}
-	
+
 	// Schedule messages
 	for i, futureTime := range futureTimes {
 		scheduledTime := time.Now().Add(futureTime).Format(time.RFC3339)
-		
+
 		req, _ := http.NewRequest(http.MethodPost, brokerBaseURL+"/channel/"+channelID+"/broadcast", strings.NewReader(payload))
 		req.Header.Add(headerContentType, contentType)
 		req.Header.Add(headerChannelToken, token)
 		req.Header.Add(headerProducerID, producerID)
 		req.Header.Add(headerProducerToken, token)
 		req.Header.Add(headerScheduledFor, scheduledTime)
-		
+
 		resp, err := client.Do(req)
 		if err != nil {
 			log.Println("Error scheduling concurrent message", i, ":", err)
 			os.Exit(55 + i)
 		}
 		defer resp.Body.Close()
-		
+
 		if resp.StatusCode != http.StatusCreated {
 			body, _ := io.ReadAll(resp.Body)
 			log.Println("Error scheduling concurrent message", i, ":", resp.StatusCode, string(body))
 			os.Exit(60 + i)
 		}
 	}
-	
+
 	// Set up consumers to receive all messages
 	messagesExpected := len(futureTimes) * pushConsumerCount
 	wg := &sync.WaitGroup{}
 	wg.Add(messagesExpected)
-	
+
 	for index := 0; index < pushConsumerCount; index++ {
 		consumerHandler[consumerIDPrefix+strconv.Itoa(index)] = func(s string, rw http.ResponseWriter, r *http.Request) {
 			defer func() {
@@ -1101,14 +1128,14 @@ func testConcurrentScheduledMessages() {
 			wg.Done()
 		}
 	}
-	
+
 	// Wait for all scheduled messages to be delivered
 	timeoutDuration := 6 * time.Minute
 	if waitTimeout(wg, timeoutDuration) {
 		log.Println("Timed out waiting for concurrent scheduled messages delivery")
 		os.Exit(65)
 	}
-	
+
 	// Check status endpoint for final counts
 	statusURL := brokerBaseURL + "/channel/" + channelID + "/messages-status"
 	req, _ := http.NewRequest(http.MethodGet, statusURL, nil)
@@ -1118,10 +1145,48 @@ func testConcurrentScheduledMessages() {
 		os.Exit(66)
 	}
 	defer resp.Body.Close()
-	
+
 	body, _ := io.ReadAll(resp.Body)
 	log.Println("Final status after concurrent scheduling:", string(body))
-	
+
+	// Verify the status response includes dispatched messages
+	var statusData map[string]interface{}
+	err = json.Unmarshal(body, &statusData)
+	if err != nil {
+		log.Println("Error parsing final status response:", err)
+		os.Exit(67)
+	}
+
+	// All scheduled messages should now be dispatched
+	counts, countsOk := statusData["counts"].(map[string]interface{})
+	if !countsOk {
+		log.Println("Expected 'counts' object in status response")
+		os.Exit(68)
+	}
+
+	// Check if SCHEDULED_SCHEDULED is present and has count 0 (or doesn't exist at all)
+	scheduledStatus, scheduledOk := counts["SCHEDULED_SCHEDULED"].(map[string]interface{})
+	if scheduledOk {
+		scheduledCount, countOk := scheduledStatus["Count"].(float64)
+		if !countOk || scheduledCount > 0 {
+			log.Println("Expected Count = 0 for SCHEDULED_SCHEDULED after all messages dispatched")
+			os.Exit(69)
+		}
+	}
+
+	// Verify dispatched count is present
+	dispatchedStatus, dispatchedOk := counts["SCHEDULED_DISPATCHED"].(map[string]interface{})
+	if !dispatchedOk {
+		log.Println("Expected 'SCHEDULED_DISPATCHED' in counts")
+		os.Exit(70)
+	}
+
+	dispatchedCount, countOk := dispatchedStatus["Count"].(float64)
+	if !countOk || dispatchedCount < float64(len(futureTimes)) {
+		log.Println("Expected Count to be at least", len(futureTimes), "for DISPATCHED")
+		os.Exit(71)
+	}
+
 	log.Println("Concurrent scheduled messages test passed")
 }
 

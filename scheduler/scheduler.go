@@ -154,10 +154,10 @@ func (scheduler *MessageSchedulerImpl) dispatchMessage(scheduledMsg *data.Schedu
 			return err
 		}
 
-		// Update scheduled message status to dispatched and set dispatchedDate
+		// Update scheduled message status to dispatched and set dispatchedAt
 		dispatchTime := time.Now()
 		scheduledMsg.Status = data.ScheduledMsgStatusDispatched
-		scheduledMsg.DispatchedDate = dispatchTime
+		scheduledMsg.DispatchedAt = dispatchTime
 		dispatchLag := dispatchTime.Sub(scheduledMsg.DispatchSchedule)
 		scheduler.metricsCollector.SetLatestDispatchLag(dispatchLag)
 

@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS `scheduled_message` (
     `producerId` VARCHAR(255) NOT NULL,
     `headers` JSON NULL,
     `dispatchSchedule` DATETIME NOT NULL,
-    `dispatchedDate` DATETIME NULL,
+    `dispatchedAt` DATETIME NULL,
     `status` INTEGER NOT NULL,
     `createdAt` DATETIME NOT NULL,
     `updatedAt` DATETIME NOT NULL,

@@ -48,7 +48,7 @@ type ScheduledMessage struct {
 	BroadcastedTo    *Channel
 	ProducedBy       *Producer
 	DispatchSchedule time.Time
-	DispatchedDate   time.Time
+	DispatchedAt     time.Time
 	Headers          HeadersMap
 }
 
@@ -93,7 +93,7 @@ func (message *ScheduledMessage) IsInValidState() bool {
 				valid = false
 			}
 		case ScheduledMsgStatusDispatched:
-			if message.DispatchedDate.IsZero() {
+			if message.DispatchedAt.IsZero() {
 				valid = false
 			}
 		}

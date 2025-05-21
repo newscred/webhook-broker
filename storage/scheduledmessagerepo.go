@@ -29,7 +29,7 @@ var (
 )
 
 const (
-	scheduledMessageSelectRowCommonQuery = "SELECT id, messageId, producerId, channelId, payload, contentType, priority, status, dispatchSchedule, dispatchedDate, headers, createdAt, updatedAt FROM scheduled_message WHERE"
+	scheduledMessageSelectRowCommonQuery = "SELECT id, messageId, producerId, channelId, payload, contentType, priority, status, dispatchSchedule, dispatchedAt, headers, createdAt, updatedAt FROM scheduled_message WHERE"
 )
 
 // Create creates a new scheduled message if message.MessageID does not already exist; please ensure QuickFix is called before repo is called
@@ -42,8 +42,8 @@ func (msgRepo *ScheduledMessageDBRepository) Create(message *data.ScheduledMessa
 		if msgErr == nil {
 			err = ErrDuplicateScheduledMessageIDForChannel
 		} else {
-			err = transactionalSingleRowWriteExec(msgRepo.db, emptyOps, "INSERT INTO scheduled_message (id, channelId, producerId, messageId, payload, contentType, priority, status, dispatchSchedule, dispatchedDate, headers, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-				args2SliceFnWrapper(message.ID, message.BroadcastedTo.ChannelID, message.ProducedBy.ProducerID, message.MessageID, message.Payload, message.ContentType, message.Priority, message.Status, message.DispatchSchedule, sql.NullTime{Time: message.DispatchedDate, Valid: !message.DispatchedDate.IsZero()}, message.Headers, message.CreatedAt, message.UpdatedAt))
+			err = transactionalSingleRowWriteExec(msgRepo.db, emptyOps, "INSERT INTO scheduled_message (id, channelId, producerId, messageId, payload, contentType, priority, status, dispatchSchedule, dispatchedAt, headers, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+				args2SliceFnWrapper(message.ID, message.BroadcastedTo.ChannelID, message.ProducedBy.ProducerID, message.MessageID, message.Payload, message.ContentType, message.Priority, message.Status, message.DispatchSchedule, sql.NullTime{Time: message.DispatchedAt, Valid: !message.DispatchedAt.IsZero()}, message.Headers, message.CreatedAt, message.UpdatedAt))
 			err = normalizeDBError(err, scheduledMessageMysqlErrorMap)
 		}
 	}
@@ -80,7 +80,7 @@ func (msgRepo *ScheduledMessageDBRepository) getSingleMessage(query string, quer
 	if err == nil {
 		message.ProducedBy, err = msgRepo.producerRepository.Get(producerID)
 		if nullDispatchedDate.Valid {
-			message.DispatchedDate = nullDispatchedDate.Time
+			message.DispatchedAt = nullDispatchedDate.Time
 		}
 	}
 	if loadChannel && err == nil {
@@ -95,8 +95,8 @@ func (msgRepo *ScheduledMessageDBRepository) MarkDispatched(message *data.Schedu
 		return fmt.Errorf("can only mark scheduled messages with status DISPATCHED; current status - %v", message.Status)
 	}
 
-	err := transactionalSingleRowWriteExec(msgRepo.db, emptyOps, "UPDATE scheduled_message SET status = ?, dispatchedDate = ?, updatedAt = ? WHERE id = ?",
-		args2SliceFnWrapper(message.Status, message.DispatchedDate, time.Now(), message.ID))
+	err := transactionalSingleRowWriteExec(msgRepo.db, emptyOps, "UPDATE scheduled_message SET status = ?, dispatchedAt = ?, updatedAt = ? WHERE id = ?",
+		args2SliceFnWrapper(message.Status, message.DispatchedAt, time.Now(), message.ID))
 
 	return err
 }
@@ -123,7 +123,7 @@ func (msgRepo *ScheduledMessageDBRepository) GetMessagesReadyForDispatch(limit i
 			continue
 		}
 		if nullDispatchedDate.Valid {
-			message.DispatchedDate = nullDispatchedDate.Time
+			message.DispatchedAt = nullDispatchedDate.Time
 		}
 		message.ProducedBy, err = msgRepo.producerRepository.Get(producerID)
 		if err != nil {
@@ -236,7 +236,7 @@ func (msgRepo *ScheduledMessageDBRepository) getScheduledMessages(baseQuery stri
 		}
 
 		if nullDispatchedDate.Valid {
-			msg.DispatchedDate = nullDispatchedDate.Time
+			msg.DispatchedAt = nullDispatchedDate.Time
 		}
 
 		// Load producer
