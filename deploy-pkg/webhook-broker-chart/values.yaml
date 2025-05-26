@@ -42,6 +42,7 @@ broker:
     cronSchedule: "*/5 * * * *"
     pvStorage: 32Gi
     pvReclaimPolicy: Retain
+    timeoutSeconds: 1800
     config: |
       [prune]
       export-node-name=webhook-broker

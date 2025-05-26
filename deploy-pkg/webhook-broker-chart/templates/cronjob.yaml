@@ -8,10 +8,11 @@ metadata:
 spec:
   schedule: {{ .Values.broker.dbPruning.cronSchedule | quote }}
   concurrencyPolicy: Forbid
-  successfulJobsHistoryLimit: 10
+  successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 10
   jobTemplate:
     spec:
+      activeDeadlineSeconds: {{ .Values.broker.dbPruning.timeoutSeconds }}
       template:
         metadata:
           {{- with .Values.podAnnotations }}
