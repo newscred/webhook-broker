@@ -87,6 +87,10 @@ func (message *Message) QuickFix() bool {
 		message.OutboxedAt = time.Now()
 		madeChanges = true
 	}
+	if message.CreatedAt.After(message.ReceivedAt) {
+		message.CreatedAt = message.ReceivedAt
+		madeChanges = true
+	}
 	switch message.Status {
 	case MsgStatusAcknowledged:
 	case MsgStatusDispatched:
