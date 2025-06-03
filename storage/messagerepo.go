@@ -38,15 +38,15 @@ type ContextKey string
 const (
 	messageSelectRowCommonQuery            = "SELECT id, messageId, producerId, channelId, payload, contentType, priority, status, receivedAt, outboxedAt, headers, createdAt, updatedAt FROM message WHERE"
 	txContextKey                ContextKey = "tx"
-	pruneMessageQuery           string     = `SELECT 
+	pruneMessageQuery           string     = `SELECT
 		m.id, m.messageId, m.producerId, m.channelId, m.payload, m.contentType, m.priority, m.status, m.receivedAt, m.outboxedAt, m.headers, m.createdAt, m.updatedAt
 		FROM message m
-		WHERE m.status = ? AND m.receivedAt <= ? AND NOT EXISTS (
+		WHERE m.status = ? AND m.createdAt <= ? AND NOT EXISTS (
 			SELECT 1
 			FROM job j
-			WHERE j.messageId = m.id
-				AND j.status <> ?
-			) `
+			WHERE j.messageId = m.id AND j.status <> ?
+			LIMIT 1
+		)`
 )
 
 // Create creates a new message if message.MessageID does not already exist; please ensure QuickFix is called before repo is called
