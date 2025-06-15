@@ -38,7 +38,7 @@ const (
 )
 
 func TestGetAppVersion(t *testing.T) {
-	assert.Equal(t, string(GetAppVersion()), "0.3.0-dev")
+	assert.Equal(t, string(GetAppVersion()), "0.2.2")
 }
 
 var waitForPort = func(portNum int) {

@@ -2,6 +2,9 @@
 
 This contains all the release of the project from oldest to newest.
 
+## Release `0.2.2`
+Bug fix: Webhook broker prune job gets stuck for hours due to MySQL not being able to utilize indexes for the `pruneMessageQuery`
+
 ## Release `0.2.1`
 
 ### New Features
@@ -21,7 +24,7 @@ This contains all the release of the project from oldest to newest.
 
 ## Release `0.2.0`
 
-This includes all issues with milestone [v0.2](https://github.com/newscred/webhook-broker/issues?q=is%3Aissue%20state%3Aclosed%20milestone%3Av0.2). 
+This includes all issues with milestone [v0.2](https://github.com/newscred/webhook-broker/issues?q=is%3Aissue%20state%3Aclosed%20milestone%3Av0.2).
 
 ## Release `0.1.2`
 
