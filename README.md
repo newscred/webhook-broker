@@ -2,8 +2,6 @@
 
 ![webhook-broker CI](https://github.com/newscred/webhook-broker/actions/workflows/build.yml/badge.svg)
 ![webhook-broker Container CI](https://github.com/newscred/webhook-broker/actions/workflows/container-build.yml/badge.svg)
-[![Test Coverage](https://api.codeclimate.com/v1/badges/0242f0e077ad68716c26/test_coverage)](https://codeclimate.com/github/newscred/webhook-broker/test_coverage)
-[![Maintainability](https://api.codeclimate.com/v1/badges/0242f0e077ad68716c26/maintainability)](https://codeclimate.com/github/newscred/webhook-broker/maintainability)
 [![Go Report Card](https://goreportcard.com/badge/github.com/newscred/webhook-broker)](https://goreportcard.com/report/github.com/newscred/webhook-broker)
 
 This is a fully HTTP based Pub/Sub Broker with a goal to simplify systems architected in SOA or Microservice architecture. It aims to solve the inter service communication problem.
