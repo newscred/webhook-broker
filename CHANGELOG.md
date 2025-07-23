@@ -2,6 +2,9 @@
 
 This contains all the release of the project from oldest to newest.
 
+## Release `0.2.3`
+- Add index to optimize queries filtering by (createdAt, id) on the message table.
+
 ## Release `0.2.2`
 Bug fix: Webhook broker prune job gets stuck for hours due to MySQL not being able to utilize indexes for the `pruneMessageQuery`
 
