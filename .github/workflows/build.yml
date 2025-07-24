@@ -25,32 +25,3 @@ jobs:
       with:
         name: dist-app
         path: dist/webhook-broker-*.tar.bz2
-
-  coverage:
-    needs: [ build ]
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: "check is CODECLIMATE_REPORTER_ID exists"
-      env:
-          super_secret: ${{ secrets.CODECLIMATE_REPORTER_ID }}
-      if: ${{ env.super_secret == '' }}
-      run: 'echo "echo the secret \"CODECLIMATE_REPORTER_ID\" has not been made; echo please go to \"settings \> secrets \> actions\" to create it"'
-    - uses: actions/checkout@master
-    - uses: actions/setup-go@v2
-      with:
-        go-version: '1.23.0'
-    - name: Create dist
-      run: mkdir ./dist/
-    - name: Install dependencies
-      run: make dep-tools deps
-    - uses: paambaati/codeclimate-action@v2.7.5
-      if: ${{ env.CC_TEST_REPORTER_ID != '' }}
-      env:
-        CC_TEST_REPORTER_ID: ${{ secrets.CODECLIMATE_REPORTER_ID }}
-      with:
-        coverageCommand: go test -timeout 30s -coverprofile=cover.out ./... -short
-        debug: true
-        prefix: github.com/newscred/webhook-broker/
-        coverageLocations: |
-          ${{github.workspace}}/*.out:gocov
