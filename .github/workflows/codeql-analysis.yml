@@ -48,10 +48,10 @@ jobs:
         image: your/image-to-test
         args: --file=Dockerfile --sarif-file-output=snyk.sarif
 
-    - name: Set up Python 3.9 (required for sarif-toolkit)
+    - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.9'
+        python-version: '3.13'
 
     - name: Split SARIF file manually
       run: |
