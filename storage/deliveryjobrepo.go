@@ -310,9 +310,15 @@ func (djRepo *DeliveryJobDBRepository) GetJobStatusCountsGroupedByConsumer() (ma
 		newest     string
 	}
 	rows := make([]*statusRow, 0)
-	query := `SELECT c.channelId, j.consumerId, j.status, count(j.id), min(j.statusChangedAt), max(j.statusChangedAt)
-FROM job j JOIN consumer c on j.consumerId = c.id
-GROUP BY c.channelId, j.consumerId, j.status`
+	query := `SELECT c.channelId, j.consumerId, j.status, j.j_count, j.min_statusChangedAt, j.max_statusChangedAt
+FROM
+(
+    SELECT consumerId, status, count(id) j_count, min(statusChangedAt) min_statusChangedAt, max(statusChangedAt) max_statusChangedAt
+    FROM job
+    GROUP BY consumerId, status
+) j
+JOIN consumer c
+ON j.consumerId = c.id`
 	scanStatusCount := func() []interface{} {
 		statusCount := &statusRow{}
 		rows = append(rows, statusCount)
