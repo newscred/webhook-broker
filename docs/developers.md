@@ -91,3 +91,47 @@ sudo chmod +x /usr/local/bin/aws-iam-authenticator
 ## Release Management
 
 Currently the release is managed through tag pushes and that should be done in 2 PRs. First pull request to update the version for [CLI](https://github.com/newscred/webhook-broker/blob/main/config/config.go#L37), [Main test](https://github.com/newscred/webhook-broker/blob/ef0364661e6fb443fccc6307c04ec9aa52071be2/main_test.go#L41), [Helm docker image tag](https://github.com/newscred/webhook-broker/blob/ef0364661e6fb443fccc6307c04ec9aa52071be2/deploy-pkg/webhook-broker-chart/values.yaml#L11), [Helm package version](https://github.com/newscred/webhook-broker/blob/main/deploy-pkg/webhook-broker-chart/Chart.yaml#L18) and [Helm app version](https://github.com/newscred/webhook-broker/blob/main/deploy-pkg/webhook-broker-chart/Chart.yaml#L23) to set to the new release version, along with any CHANGELOG changes and once this is merged; follow up a tag for this change; that should trigger the release process. Then the second pull request promoting the version to the next dev version.
+
+### How to Release (Step By Step)
+
+#### 1. Merge your changes to main
+Ensure CI is passing: Make sure main is green. Continuous images from main will build/push automatically (these use the chart’s appVersion for tagging).
+
+#### 2. Prep the release on a short PR
+
+- Bump versions in one commit/PR:
+
+  - Set the release version for [CLI](https://github.com/newscred/webhook-broker/blob/main/config/config.go#L37), [Main test](https://github.com/newscred/webhook-broker/blob/ef0364661e6fb443fccc6307c04ec9aa52071be2/main_test.go#L41) and [Helm app version](https://github.com/newscred/webhook-broker/blob/main/deploy-pkg/webhook-broker-chart/Chart.yaml#L23)
+
+  - Set the release version for [Helm chart version](https://github.com/newscred/webhook-broker/blob/main/deploy-pkg/webhook-broker-chart/Chart.yaml#L18).
+
+    - If you bump the appVersion (the Webhook Broker release version), you must also bump the Helm chart version.
+
+    - If you make changes only to the chart itself (without changes to the Webhook Broker source code), bump only the Helm chart version and leave appVersion unchanged.
+
+- Update CHANGELOG.md (or release notes section) with a concise summary of changes.
+
+Sample: https://github.com/newscred/webhook-broker/pull/236/files
+
+### 3. Push Tag
+
+After the PR above is merged to main, create an annotated tag that includes the v prefix:
+
+```bash
+git checkout main && git pull
+export VER=v0.2.4
+git tag "$VER"
+git push origin "$VER"
+```
+
+Pushing vX.Y.Z triggers your two release workflows:
+
+- Release Packages: builds artifacts, creates the GitHub Release, packages/pushes the Helm chart to the S3-backed repo.
+
+- Release Containers: builds multi-arch images and pushes to ECR, GHCR and DockerHub.
+
+#### 4. Post-tag housekeeping
+
+Open a tiny follow-up PR that bumps version references to the next -dev (e.g., 0.3.0-dev) to indicate development has resumed.
+
+Sample: https://github.com/newscred/webhook-broker/pull/237
