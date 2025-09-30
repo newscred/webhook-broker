@@ -123,6 +123,7 @@ gatewayApi:
   region: us-east1
   connectionDrainingTimeoutSec: 30
   loggingEnabled: true
+  timeoutSec: 60
 
 certificateMapEntries: []
 
