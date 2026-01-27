@@ -140,6 +140,10 @@ Usage of ./webhook-broker:
 
 In addition consult our [configuration documentation](./docs/configuration.md) to setup the application.
 
+## API Reference
+
+For a complete reference of all available HTTP API endpoints, see the [API Reference](./API_REFERENCE.md).
+
 ## Implementation Details
 
 The Tech Specs are good place to understand the implementation details -
