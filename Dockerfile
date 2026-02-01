@@ -26,6 +26,7 @@ ADD dispatcher ./dispatcher
 ADD utils ./utils
 ADD prune ./prune
 ADD scheduler ./scheduler
+ADD dlq ./dlq
 
 RUN make build
 RUN make test
