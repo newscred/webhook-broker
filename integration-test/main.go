@@ -33,6 +33,7 @@ type deadDeliveryJobModel struct {
 	Status           string
 	StatusChangedAt  time.Time
 	MessageURL       string
+	JobRequeueURL    string
 }
 
 // DLQList represents the list of jobs that are dead
@@ -93,11 +94,13 @@ var (
 	client                  *http.Client
 	errDuringCreation       = errors.New("error during creating fixture")
 	consumerAssertionFailed = false
+	consumerHostName        string
+	brokerBaseURL           string
 )
 
 const (
-	consumerHostName               = "tester"
-	brokerBaseURL                  = "http://webhook-broker:8080"
+	defaultConsumerHostName         = "tester"
+	defaultBrokerBaseURL           = "http://webhook-broker:8080"
 	token                          = "someRandomToken"
 	tokenFormParamKey              = "token"
 	callbackURLFormParamKey        = "callbackUrl"
@@ -439,7 +442,16 @@ func resetHandlers() {
 	consumerHandler = make(map[string]func(string, http.ResponseWriter, *http.Request))
 }
 
+func getEnvOrDefault(key, defaultVal string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return defaultVal
+}
+
 func main() {
+	consumerHostName = getEnvOrDefault("CONSUMER_HOST", defaultConsumerHostName)
+	brokerBaseURL = getEnvOrDefault("BROKER_BASE_URL", defaultBrokerBaseURL)
 	client = &http.Client{Timeout: 2 * time.Second}
 	http.DefaultTransport.(*http.Transport).MaxIdleConnsPerHost = concurrentPushWorkers
 	port := findPort()
@@ -476,6 +488,8 @@ func main() {
 	testScheduledMessages()
 	resetHandlers()
 	testPruning()
+	resetHandlers()
+	testDLQDeletePurge()
 }
 
 func testBasicObjectCreation(portString string) {
@@ -798,6 +812,8 @@ func testDLQFlow() {
 		log.Println("DLQ List mismatch", dlq)
 		os.Exit(10)
 	}
+	// Test DLQ observability: GET /dlq-status should show dead count after updater runs
+	testDLQObservability(channelID, consumerIDPrefix+indexString)
 	// POST to requeue DLQ
 	start = time.Now()
 	formValues := url.Values{}
@@ -840,6 +856,178 @@ func testDLQFlow() {
 			os.Exit(13)
 		}
 	}
+}
+
+type dlqConsumerSummary struct {
+	ChannelID    string `json:"channelId"`
+	ChannelName  string `json:"channelName"`
+	ConsumerID   string `json:"consumerId"`
+	ConsumerName string `json:"consumerName"`
+	DeadCount    int64  `json:"deadCount"`
+}
+
+type dlqStatusResponse struct {
+	Consumers []*dlqConsumerSummary `json:"consumers"`
+}
+
+func testDLQObservability(channelID, consumerID string) {
+	log.Println("Testing DLQ observability")
+	// Poll /dlq-status until the updater has populated counts (max 15s with 5s updater interval)
+	var dlqStatus dlqStatusResponse
+	var found bool
+	for attempt := 0; attempt < 6; attempt++ {
+		req, _ := http.NewRequest(http.MethodGet, brokerBaseURL+"/dlq-status", nil)
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Println("error fetching dlq-status", err)
+			os.Exit(80)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			log.Println("dlq-status returned non-200", resp.StatusCode)
+			os.Exit(81)
+		}
+		err = json.Unmarshal(body, &dlqStatus)
+		if err != nil {
+			log.Println("error decoding dlq-status", err)
+			os.Exit(82)
+		}
+		for _, c := range dlqStatus.Consumers {
+			if c.ConsumerID != "" && c.ChannelID != "" && c.DeadCount > 0 {
+				found = true
+				break
+			}
+		}
+		if found {
+			break
+		}
+		time.Sleep(3 * time.Second)
+	}
+	if !found {
+		log.Println("dlq-status did not show any dead counts after polling", dlqStatus)
+		os.Exit(83)
+	}
+	for _, c := range dlqStatus.Consumers {
+		log.Printf("DLQ status: channel=%s consumer=%s deadCount=%d\n", c.ChannelName, c.ConsumerName, c.DeadCount)
+	}
+
+	// Verify the Prometheus metrics endpoint has dead_job_count
+	req, _ := http.NewRequest(http.MethodGet, brokerBaseURL+"/metrics", nil)
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Println("error fetching metrics", err)
+		os.Exit(84)
+	}
+	metricsBody, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if !strings.Contains(string(metricsBody), "dead_job_count") {
+		log.Println("metrics endpoint missing dead_job_count")
+		os.Exit(85)
+	}
+	log.Println("DLQ observability test passed")
+}
+
+type dlqPurgeResponse struct {
+	DeletedCount int64 `json:"deletedCount"`
+}
+
+func testDLQDeletePurge() {
+	log.Println("Starting DLQ delete/purge test")
+	channelID := generalChannelID
+	consumerID := consumerIDPrefix + "0"
+	// Set consumer-0 to fail so messages go dead
+	wg := &sync.WaitGroup{}
+	wg.Add(6) // 5 retries + 1 initial
+	consumerHandler[consumerID] = func(s string, rw http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Println("Recovered in DLQ delete/purge", r)
+			}
+		}()
+		io.ReadAll(r.Body)
+		rw.WriteHeader(http.StatusNotFound)
+		wg.Done()
+	}
+	// Broadcast 1 message and wait for it to go dead
+	err := broadcastMessage(channelID, 1)
+	if err != nil {
+		log.Println("error broadcasting for DLQ delete test", err)
+		os.Exit(90)
+	}
+	timeoutDuration := (1 + 2 + 3 + 4 + 5 + 20) * time.Second
+	if waitTimeout(wg, timeoutDuration) {
+		log.Println("Timed out waiting for dead job in DLQ delete test")
+		os.Exit(91)
+	}
+	time.Sleep(500 * time.Millisecond)
+	// Get DLQ list to find the dead job
+	dlqURL := brokerBaseURL + "/channel/" + channelID + "/consumer/" + consumerID + "/dlq"
+	req, _ := http.NewRequest(http.MethodGet, dlqURL, nil)
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Println("error fetching DLQ list", err)
+		os.Exit(92)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	dlq := &dlqList{}
+	err = json.Unmarshal(body, dlq)
+	if err != nil || len(dlq.DeadJobs) < 1 {
+		log.Println("DLQ list empty or error", err, string(body))
+		os.Exit(93)
+	}
+	// Extract job ID from JobRequeueURL: /channel/.../consumer/.../job/{jobId}/requeue-dead-job
+	requeueURL := dlq.DeadJobs[0].JobRequeueURL
+	parts := strings.Split(requeueURL, "/")
+	// Find "job" in parts, the next element is the jobId
+	var jobID string
+	for i, p := range parts {
+		if p == "job" && i+1 < len(parts) {
+			jobID = parts[i+1]
+			break
+		}
+	}
+	if jobID == "" {
+		log.Println("could not extract job ID from", requeueURL)
+		os.Exit(94)
+	}
+	log.Println("Deleting single dead job:", jobID)
+	// DELETE single dead job
+	deleteURL := brokerBaseURL + "/channel/" + channelID + "/consumer/" + consumerID + "/job/" + jobID
+	req, _ = http.NewRequest(http.MethodDelete, deleteURL, nil)
+	req.Header.Set(headerChannelToken, token)
+	req.Header.Set(headerConsumerToken, token)
+	resp, err = client.Do(req)
+	if err != nil {
+		log.Println("error deleting dead job", err)
+		os.Exit(95)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		log.Println("expected 204 from single delete, got", resp.StatusCode)
+		os.Exit(96)
+	}
+	log.Println("Single dead job deleted successfully")
+	// Test purge endpoint (should return 0 since we already deleted the only dead job)
+	req, _ = http.NewRequest(http.MethodDelete, dlqURL, nil)
+	req.Header.Set(headerChannelToken, token)
+	req.Header.Set(headerConsumerToken, token)
+	resp, err = client.Do(req)
+	if err != nil {
+		log.Println("error purging DLQ", err)
+		os.Exit(97)
+	}
+	purgeBody, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		log.Println("expected 200 from purge, got", resp.StatusCode, string(purgeBody))
+		os.Exit(98)
+	}
+	var purgeResp dlqPurgeResponse
+	json.Unmarshal(purgeBody, &purgeResp)
+	log.Printf("DLQ purge response: deletedCount=%d\n", purgeResp.DeletedCount)
+	log.Println("DLQ delete/purge test passed")
 }
 
 func testScheduledMessages() {
@@ -1193,7 +1381,7 @@ func testConcurrentScheduledMessages() {
 func testPruning() {
 	// Subtract message created date by 2 days
 	// TODO Copied from the integration test configuration, consider rather reading it from the config file directly to avoid copying of the URL
-	connectionString := "webhook_broker:zxc909zxc@tcp(mysql:3306)/webhook-broker?charset=utf8mb4&collation=utf8mb4_0900_ai_ci&parseTime=true&multiStatements=true"
+	connectionString := getEnvOrDefault("MYSQL_CONNECTION_URL", "webhook_broker:zxc909zxc@tcp(mysql:3306)/webhook-broker?charset=utf8mb4&collation=utf8mb4_0900_ai_ci&parseTime=true&multiStatements=true")
 	db, err := connectToMySQL(connectionString)
 	if err != nil {
 		log.Fatal(err) // Handle error appropriately
@@ -1230,7 +1418,7 @@ func testPruning() {
 		os.Exit(31)
 	}
 	// Check export links
-	prunerURL := "http://webhook-broker-pruner/"
+	prunerURL := getEnvOrDefault("PRUNER_BASE_URL", "http://webhook-broker-pruner/")
 	resp, err := client.Get(prunerURL) // Use the existing client for the call
 	if err != nil {
 		log.Fatal("Error calling pruner endpoint:", err)
