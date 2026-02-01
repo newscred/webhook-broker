@@ -45,6 +45,7 @@ func TestMain(m *testing.M) {
 			BroadcastTestSetup()
 			MessageTestSetup()
 			JobTestSetup()
+			DLQDeleteTestSetup()
 			m.Run()
 			db.Close()
 		}

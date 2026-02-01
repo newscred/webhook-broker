@@ -576,3 +576,99 @@ func TestGetJobStatusCountsGroupedByConsumer(t *testing.T) {
 	assert.Equal(t, 10, result[channelID][consumerIds[4]][0].Count)
 	assert.Equal(t, data.JobQueued, result[channelID][consumerIds[4]][0].Status)
 }
+
+func TestDeleteDeadJob(t *testing.T) {
+	djRepo := getDeliverJobRepository()
+	msgRepo := getMessageRepository()
+	message := getMessageForJob()
+	msgRepo.Create(message)
+	jobs := getDeliveryJobsInFixture(message)
+	err := djRepo.DispatchMessage(message, jobs...)
+	assert.NoError(t, err)
+
+	targetJob := jobs[0]
+
+	t.Run("DeleteNonDeadJobReturns0", func(t *testing.T) {
+		// Job is queued, not dead
+		rowsAffected, err := djRepo.DeleteDeadJob(targetJob, 0)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(0), rowsAffected)
+	})
+
+	t.Run("DeleteDeadJobWithRetryNotExhausted", func(t *testing.T) {
+		err := djRepo.MarkJobInflight(targetJob)
+		assert.NoError(t, err)
+		err = djRepo.MarkJobDead(targetJob)
+		assert.NoError(t, err)
+		// retryAttemptCount is 1 but we require >= 5
+		rowsAffected, err := djRepo.DeleteDeadJob(targetJob, 5)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(0), rowsAffected)
+	})
+
+	t.Run("DeleteDeadJobSuccess", func(t *testing.T) {
+		// retryAttemptCount is 1, require >= 0
+		rowsAffected, err := djRepo.DeleteDeadJob(targetJob, 0)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), rowsAffected)
+		// Verify it's gone
+		_, err = djRepo.GetByID(targetJob.ID.String())
+		assert.Error(t, err)
+	})
+}
+
+func TestDeleteDeadJobsForConsumer(t *testing.T) {
+	djRepo := getDeliverJobRepository()
+	msgRepo := getMessageRepository()
+
+	// Create 2 messages and dispatch, mark dead for consumer[1]
+	consumer := consumers[1]
+	for i := 0; i < 2; i++ {
+		msg := getMessageForJob()
+		msgRepo.Create(msg)
+		job, _ := data.NewDeliveryJob(msg, consumer)
+		djRepo.DispatchMessage(msg, job)
+		djRepo.MarkJobInflight(job)
+		djRepo.MarkJobDead(job)
+	}
+
+	t.Run("BulkDeleteSuccess", func(t *testing.T) {
+		rowsAffected, err := djRepo.DeleteDeadJobsForConsumer(consumer, 0)
+		assert.NoError(t, err)
+		assert.GreaterOrEqual(t, rowsAffected, int64(2))
+	})
+
+	t.Run("NoDeadJobsReturns0", func(t *testing.T) {
+		rowsAffected, err := djRepo.DeleteDeadJobsForConsumer(consumer, 0)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(0), rowsAffected)
+	})
+}
+
+func TestGetDeadJobCountsSinceCheckpoint(t *testing.T) {
+	djRepo := getDeliverJobRepository()
+	msgRepo := getMessageRepository()
+
+	checkpoint := time.Now().Add(-1 * time.Second)
+
+	// Create a job and mark it dead
+	msg := getMessageForJob()
+	msgRepo.Create(msg)
+	consumer := consumers[2]
+	job, _ := data.NewDeliveryJob(msg, consumer)
+	djRepo.DispatchMessage(msg, job)
+	djRepo.MarkJobInflight(job)
+	djRepo.MarkJobDead(job)
+
+	counts, err := djRepo.GetDeadJobCountsSinceCheckpoint(checkpoint)
+	assert.NoError(t, err)
+	assert.GreaterOrEqual(t, counts[consumer.ID.String()], int64(1))
+
+	t.Run("FutureCheckpointReturnsZero", func(t *testing.T) {
+		futureCounts, err := djRepo.GetDeadJobCountsSinceCheckpoint(time.Now().Add(1 * time.Hour))
+		assert.NoError(t, err)
+		assert.Equal(t, 0, len(futureCounts))
+	})
+}
+
+// Generated with assistance from Claude AI

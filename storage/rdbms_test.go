@@ -38,6 +38,7 @@ func TestMain(m *testing.M) {
 		SetupForMessageTests()
 		SetupForDeliveryJobTests()
 		SetupForScheduledMessageTests()
+		SetupForDLQSummaryTests()
 		defer testDB.Close()
 		m.Run()
 	}

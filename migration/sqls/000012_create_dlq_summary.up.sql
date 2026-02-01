@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS `dlq_summary` (
     `channelId` VARCHAR(255) NOT NULL,
     `channelName` VARCHAR(255) NOT NULL,
     `dead_count` BIGINT NOT NULL DEFAULT 0,
-    `last_checked_at` DATETIME(6) NOT NULL,
+    `last_checked_at` DATETIME NOT NULL,
     CONSTRAINT `dlqSummaryConsumerRef` FOREIGN KEY (`consumerId`)
         REFERENCES consumer(`id`) ON UPDATE CASCADE ON DELETE CASCADE
 );

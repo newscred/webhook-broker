@@ -501,6 +501,43 @@ paths:
           description: Job not found
         '412':
           description: Precondition failed
+    delete:
+      summary: Delete a single dead job
+      tags:
+        - DLQ
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: consumerId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: X-Broker-Channel-Token
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: X-Broker-Consumer-Token
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Dead job deleted successfully
+        '403':
+          description: Token mismatch
+        '404':
+          description: Job not found, not dead, or retry not exhausted
   /channel/{channelId}/broadcast:
     post:
       summary: Broadcast a message to a channel
@@ -730,6 +767,46 @@ paths:
                 $ref: '#/components/schemas/DLQList'
         '404':
           description: Consumer not found
+    delete:
+      summary: Purge all dead jobs for a consumer
+      tags:
+        - DLQ
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: consumerId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: X-Broker-Channel-Token
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: X-Broker-Consumer-Token
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Dead jobs deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deletedCount:
+                    type: integer
+                    format: int64
+        '403':
+          description: Token mismatch
+        '404':
+          description: Channel or consumer not found
     post:
       summary: Requeue dead jobs for a consumer
       tags:
@@ -761,6 +838,18 @@ paths:
           description: Bad request
         '404':
           description: Consumer not found
+  /dlq-status:
+    get:
+      summary: Get DLQ status summary across all consumers
+      tags:
+        - DLQ
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DLQStatus'
 components:
   schemas:
     MsgStakeholder:
@@ -966,6 +1055,27 @@ components:
           type: object
           additionalProperties:
             type: string
+    DLQStatus:
+      type: object
+      properties:
+        consumers:
+          type: array
+          items:
+            $ref: '#/components/schemas/DLQConsumerSummary'
+    DLQConsumerSummary:
+      type: object
+      properties:
+        channelId:
+          type: string
+        channelName:
+          type: string
+        consumerId:
+          type: string
+        consumerName:
+          type: string
+        deadCount:
+          type: integer
+          format: int64
     DLQList:
       type: object
       properties:
