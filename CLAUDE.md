@@ -120,6 +120,11 @@ curl -v localhost:18181/channel/sample-channel/broadcast -X POST \
    - Messages can be in ACKNOWLEDGED or DISPATCHED state
    - Jobs can be in QUEUED, INFLIGHT, DELIVERED, or DEAD state
 
+4. **Job Status Integer Values (CAUTION)**:
+   - The `JobStatus` iota in `storage/data/job.go` starts after `deliverJobLockPrefix` in the same const block, so iota=0 is consumed by the string constant
+   - Actual DB values: QUEUED=1001, INFLIGHT=1002, DELIVERED=1003, DEAD=1004
+   - **EXTREME CAUTION**: Never reorder, insert, or remove constants in this const block — the iota values map directly to production database rows. Changing the order silently shifts all status integers, corrupting query results and state transitions across millions of jobs. Always use the Go constants, never hardcoded integers.
+
 4. **Scheduled Messages**:
    - Messages can be scheduled for future delivery using the `X-Broker-Scheduled-For` header
    - Scheduler service periodically checks for messages due for delivery
