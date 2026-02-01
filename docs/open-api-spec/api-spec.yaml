@@ -48,6 +48,12 @@ paths:
           required: true
           schema:
             type: string
+        - name: If-Unmodified-Since
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Only update if the resource has not been modified since this timestamp
       requestBody:
         required: true
         content:
@@ -70,6 +76,8 @@ paths:
           description: Bad request
         '404':
           description: Producer not found
+        '412':
+          description: Precondition failed - resource has been modified
   /channels:
     get:
       summary: Get list of channels
@@ -114,6 +122,12 @@ paths:
           required: true
           schema:
             type: string
+        - name: If-Unmodified-Since
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Only update if the resource has not been modified since this timestamp
       requestBody:
         required: true
         content:
@@ -136,6 +150,8 @@ paths:
           description: Bad request
         '404':
           description: Channel not found
+        '412':
+          description: Precondition failed - resource has been modified
   /channel/{channelId}/consumers:
     get:
       summary: Get list of consumers for a channel
@@ -196,6 +212,12 @@ paths:
           required: true
           schema:
             type: string
+        - name: If-Unmodified-Since
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Only update if the resource has not been modified since this timestamp
       requestBody:
         required: true
         content:
@@ -222,6 +244,8 @@ paths:
           description: Bad request
         '404':
           description: Consumer not found
+        '412':
+          description: Precondition failed - resource has been modified
     delete:
       summary: Delete a specific consumer
       tags:
@@ -237,11 +261,19 @@ paths:
           required: true
           schema:
             type: string
+        - name: If-Unmodified-Since
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Only delete if the resource has not been modified since this timestamp
       responses:
         '204':
           description: Successful deletion
         '404':
           description: Consumer not found
+        '412':
+          description: Precondition failed - resource has been modified
   /_status:
     get:
       summary: Get application status
@@ -292,6 +324,18 @@ paths:
             type: integer
             default: 25
             maximum: 100
+        - name: X-Broker-Channel-Token
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Channel authentication token
+        - name: X-Broker-Consumer-Token
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Consumer authentication token
       responses:
         '200':
           description: Successful response
@@ -301,6 +345,12 @@ paths:
                 $ref: '#/components/schemas/JobListResult'
         '400':
           description: Bad request
+        '401':
+          description: Unauthorized - missing or invalid token
+        '403':
+          description: Forbidden - token does not match
+        '412':
+          description: Precondition failed
   /channel/{channelId}/consumer/{consumerId}/job/{jobId}/requeue-dead-job:
     post:
       summary: Requeue a dead job for a consumer
@@ -322,13 +372,31 @@ paths:
           required: true
           schema:
             type: string
+        - name: X-Broker-Channel-Token
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Channel authentication token
+        - name: X-Broker-Consumer-Token
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Consumer authentication token
       responses:
         '202':
           description: Job requeued successfully
         '400':
           description: Bad request
+        '401':
+          description: Unauthorized - missing or invalid token
+        '403':
+          description: Forbidden - token does not match
         '404':
           description: Job not found
+        '412':
+          description: Precondition failed
   /channel/{channelId}/consumer/{consumerId}/job/{jobId}:
     get:
       summary: Get a specific job
@@ -350,6 +418,18 @@ paths:
           required: true
           schema:
             type: string
+        - name: X-Broker-Channel-Token
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Channel authentication token
+        - name: X-Broker-Consumer-Token
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Consumer authentication token
       responses:
         '200':
           description: Successful response
@@ -357,8 +437,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HyperlinkedDeliveryJobModel'
+        '401':
+          description: Unauthorized - missing or invalid token
+        '403':
+          description: Forbidden - token does not match
         '404':
           description: Job not found
+        '412':
+          description: Precondition failed
     post:
       summary: Update a specific job
       tags:
@@ -379,6 +465,18 @@ paths:
           required: true
           schema:
             type: string
+        - name: X-Broker-Channel-Token
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Channel authentication token
+        - name: X-Broker-Consumer-Token
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Consumer authentication token
       requestBody:
         required: true
         content:
@@ -395,8 +493,14 @@ paths:
           description: Job updated successfully
         '400':
           description: Bad request
+        '401':
+          description: Unauthorized - missing or invalid token
+        '403':
+          description: Forbidden - token does not match
         '404':
           description: Job not found
+        '412':
+          description: Precondition failed
   /channel/{channelId}/broadcast:
     post:
       summary: Broadcast a message to a channel
@@ -408,6 +512,48 @@ paths:
           required: true
           schema:
             type: string
+        - name: X-Broker-Channel-Token
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Channel authentication token
+        - name: X-Broker-Producer-ID
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Producer identifier
+        - name: X-Broker-Producer-Token
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Producer authentication token
+        - name: X-Broker-Message-ID
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Optional custom message ID for idempotent broadcasting
+        - name: X-Broker-Message-Priority
+          in: header
+          required: false
+          schema:
+            type: integer
+          description: Message priority (higher value = higher priority)
+        - name: X-Broker-Scheduled-For
+          in: header
+          required: false
+          schema:
+            type: string
+          description: RFC3339 timestamp for scheduled message delivery
+        - name: X-Broker-Metadata-Headers
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Comma-separated list of header names to include as message metadata
       requestBody:
         required: true
         content:
@@ -419,8 +565,14 @@ paths:
           description: Message broadcasted successfully
         '400':
           description: Bad request
+        '401':
+          description: Unauthorized - missing or invalid token
+        '403':
+          description: Forbidden - token does not match
         '409':
           description: Conflict - Duplicate message ID
+        '412':
+          description: Precondition failed
   /channel/{channelId}/message/{messageId}:
     get:
       summary: Get a specific message
@@ -490,6 +642,69 @@ paths:
                 $ref: '#/components/schemas/StatusCount'
         '500':
           description: Internal server error
+  /channel/{channelId}/scheduled-messages:
+    get:
+      summary: Get list of scheduled messages for a channel
+      tags:
+        - Scheduled Messages
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Filter by scheduled message status
+        - name: previous
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Pagination cursor for previous page
+        - name: next
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Pagination cursor for next page
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListResult'
+        '404':
+          description: Channel not found
+  /channel/{channelId}/scheduled-message/{messageId}:
+    get:
+      summary: Get a specific scheduled message
+      tags:
+        - Scheduled Messages
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: messageId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledMessageModel'
+        '404':
+          description: Scheduled message not found
   /channel/{channelId}/consumer/{consumerId}/dlq:
     get:
       summary: Get dead letter queue for a consumer
@@ -587,6 +802,9 @@ components:
           type: string
           format: uri
         MessagesStatusURL:
+          type: string
+          format: uri
+        ScheduledMessagesURL:
           type: string
           format: uri
     ConsumerModel:
@@ -700,6 +918,32 @@ components:
             $ref: '#/components/schemas/DeliveryJobModel'
         Headers:
           type: object
+    ScheduledMessageModel:
+      type: object
+      properties:
+        id:
+          type: string
+        messageId:
+          type: string
+        contentType:
+          type: string
+        priority:
+          type: integer
+        producedBy:
+          type: string
+        dispatchSchedule:
+          type: string
+          format: date-time
+        dispatchedAt:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          type: string
+        payload:
+          type: string
+        headers:
+          type: object
     StatusCount:
       type: object
       properties:
@@ -707,6 +951,12 @@ components:
           type: object
           additionalProperties:
             $ref: '#/components/schemas/TheCount'
+          description: Status counts. Scheduled message statuses are prefixed with SCHEDULED_.
+        next_scheduled_message_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp of the next scheduled message due for delivery
     TheCount:
       type: object
       properties:
