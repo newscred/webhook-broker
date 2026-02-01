@@ -96,7 +96,7 @@ func TestGetNewDataAccessor(t *testing.T) {
 		oldGetMigration := getMigration
 		defer func() { getMigration = oldGetMigration }()
 		migrationErr := errors.New("Migration Error")
-		getMigration = func(source, dialect string, driver database.Driver) (*migrate.Migrate, error) {
+		getMigration = func(sourceDriver *DialectSource, dialect string, dbDriver database.Driver) (*migrate.Migrate, error) {
 			return nil, migrationErr
 		}
 		_, err := GetNewDataAccessor(configuration, defaultMigrationConf, configuration)

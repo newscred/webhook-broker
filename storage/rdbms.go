@@ -268,11 +268,16 @@ var (
 	}
 	runMigration = func(db *sql.DB, dbConfig config.RelationalDatabaseConfig, migrationConf *MigrationConfig) error {
 		if migrationConf.MigrationEnabled {
-			driver, err := getMigrationDriver(db, dbConfig)
+			dbDriver, err := getMigrationDriver(db, dbConfig)
 			if err != nil {
 				return err
 			}
-			migration, err := getMigration(migrationConf.MigrationSource, string(dbConfig.GetDBDialect()), driver)
+			dialect := string(dbConfig.GetDBDialect())
+			sourceDriver, err := NewDialectSource(migrationConf.MigrationSource, dialect)
+			if err != nil {
+				return err
+			}
+			migration, err := getMigration(sourceDriver, dialect, dbDriver)
 			if err != nil {
 				return err
 			}
@@ -284,8 +289,8 @@ var (
 		return nil
 	}
 
-	getMigration = func(source, dialect string, driver database.Driver) (*migrate.Migrate, error) {
-		return migrate.NewWithDatabaseInstance(source, dialect, driver)
+	getMigration = func(sourceDriver *DialectSource, dialect string, dbDriver database.Driver) (*migrate.Migrate, error) {
+		return migrate.NewWithInstance("dialect", sourceDriver, dialect, dbDriver)
 	}
 
 	getMigrationDriver = func(db *sql.DB, dbConfig config.RelationalDatabaseConfig) (database.Driver, error) {
