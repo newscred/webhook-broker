@@ -396,6 +396,12 @@ func (m *MockedDataAccessor) GetScheduledMessageRepository() ScheduledMessageRep
 	return args.Get(0).(ScheduledMessageRepository)
 }
 
+// GetDLQSummaryRepository mocks the GetDLQSummaryRepository method.
+func (m *MockedDataAccessor) GetDLQSummaryRepository() DLQSummaryRepository {
+	args := m.Called()
+	return args.Get(0).(DLQSummaryRepository)
+}
+
 func TestGetMessagesFromBeforeDurationThatAreCompletelyDelivered(t *testing.T) {
 	msgRepo := getMessageRepository()
 

@@ -200,7 +200,7 @@ func (controller *JobRequeueController) Post(w http.ResponseWriter, r *http.Requ
 		writeStatus(w, http.StatusBadRequest, errJobDoesNotExist)
 		return
 	}
-	err := controller.DeliveryJobRepo.RequeueDeadJob(job)
+	_, err := controller.DeliveryJobRepo.RequeueDeadJob(job)
 	if err == nil {
 		writeStatus(w, http.StatusAccepted, nil)
 	} else {

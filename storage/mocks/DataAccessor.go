@@ -77,6 +77,26 @@ func (_m *DataAccessor) GetConsumerRepository() storage.ConsumerRepository {
 	return r0
 }
 
+// GetDLQSummaryRepository provides a mock function with no fields
+func (_m *DataAccessor) GetDLQSummaryRepository() storage.DLQSummaryRepository {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetDLQSummaryRepository")
+	}
+
+	var r0 storage.DLQSummaryRepository
+	if rf, ok := ret.Get(0).(func() storage.DLQSummaryRepository); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(storage.DLQSummaryRepository)
+		}
+	}
+
+	return r0
+}
+
 // GetDeliveryJobRepository provides a mock function with no fields
 func (_m *DataAccessor) GetDeliveryJobRepository() storage.DeliveryJobRepository {
 	ret := _m.Called()

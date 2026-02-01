@@ -32,7 +32,7 @@ var (
 	routerInitializer sync.Once
 	server            *http.Server
 	// ControllerInjector for binding controllers
-	ControllerInjector = wire.NewSet(ConfigureAPI, NewRouter, NewStatusController, NewProducersController, NewProducerController, NewChannelController, NewChannelsController, NewConsumerController, NewConsumersController, NewJobsController, NewJobController, NewBroadcastController, NewMessageController, NewMessagesController, NewMessagesStatusController, NewDLQController, NewJobRequeueController, NewJobStatusController, NewScheduledMessageController, NewScheduledMessagesController, wire.Struct(new(Controllers), "StatusController", "ProducersController", "ProducerController", "ChannelController", "ConsumerController", "ConsumersController", "JobsController", "JobController", "BroadcastController", "MessageController", "MessagesController", "DLQController", "ChannelsController", "MessagesStatusController", "JobRequeueController", "JobStatusController", "ScheduledMessageController", "ScheduledMessagesController", "MetricsHandler"))
+	ControllerInjector = wire.NewSet(ConfigureAPI, NewRouter, NewStatusController, NewProducersController, NewProducerController, NewChannelController, NewChannelsController, NewConsumerController, NewConsumersController, NewJobsController, NewJobController, NewBroadcastController, NewMessageController, NewMessagesController, NewMessagesStatusController, NewDLQController, NewJobRequeueController, NewJobStatusController, NewScheduledMessageController, NewScheduledMessagesController, NewDLQStatusController, NewDLQPurgeController, NewDeadJobDeleteController, wire.Struct(new(Controllers), "StatusController", "ProducersController", "ProducerController", "ChannelController", "ConsumerController", "ConsumersController", "JobsController", "JobController", "BroadcastController", "MessageController", "MessagesController", "DLQController", "ChannelsController", "MessagesStatusController", "JobRequeueController", "JobStatusController", "ScheduledMessageController", "ScheduledMessagesController", "DLQStatusController", "DLQPurgeController", "DeadJobDeleteController", "MetricsHandler"))
 	// ErrUnsupportedMediaType is returned when client does not provide appropriate `Content-Type` header
 	ErrUnsupportedMediaType = errors.New("Media type not supported")
 	// ErrConditionalFailed is returned when update is missing `If-Unmodified-Since` header
@@ -78,6 +78,9 @@ type (
 		JobStatusController         *JobStatusController
 		ScheduledMessageController  *ScheduledMessageController
 		ScheduledMessagesController *ScheduledMessagesController
+		DLQStatusController         *DLQStatusController
+		DLQPurgeController          *DLQPurgeController
+		DeadJobDeleteController     *DeadJobDeleteController
 		MetricsHandler              http.Handler
 	}
 
@@ -224,7 +227,8 @@ func NewRouter(controllers *Controllers) *httprouter.Router {
 	setupAPIRoutes(apiRouter, controllers.StatusController, controllers.ProducersController, controllers.ProducerController, controllers.ChannelController,
 		controllers.ConsumerController, controllers.ConsumersController, controllers.JobsController, controllers.JobController, controllers.BroadcastController, controllers.MessageController,
 		controllers.MessagesController, controllers.DLQController, controllers.ChannelsController, controllers.MessagesStatusController, controllers.JobRequeueController,
-		controllers.JobStatusController, controllers.ScheduledMessageController, controllers.ScheduledMessagesController)
+		controllers.JobStatusController, controllers.ScheduledMessageController, controllers.ScheduledMessagesController, controllers.DLQStatusController,
+		controllers.DLQPurgeController, controllers.DeadJobDeleteController)
 	return apiRouter
 }
 

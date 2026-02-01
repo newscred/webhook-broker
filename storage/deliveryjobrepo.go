@@ -232,22 +232,39 @@ func (djRepo *DeliveryJobDBRepository) GetJobsForMessage(message *data.Message, 
 	return djRepo.getJobs(baseQuery, message, nil, appendWithPaginationArgs(page, message.ID.String()))
 }
 
-// RequeueDeadJobsForConsumer queues up dead jobs for a specific consumer
-func (djRepo *DeliveryJobDBRepository) RequeueDeadJobsForConsumer(consumer *data.Consumer) (err error) {
+// RequeueDeadJobsForConsumer queues up dead jobs for a specific consumer; returns rows affected
+func (djRepo *DeliveryJobDBRepository) RequeueDeadJobsForConsumer(consumer *data.Consumer) (int64, error) {
 	currentTime := time.Now()
-	err = transactionalWrites(djRepo.db, func(tx *sql.Tx) error {
-		return inTransactionExec(tx, emptyOps, "UPDATE job SET status = ?, statusChangedAt = ?, updatedAt = ?, retryAttemptCount = ? WHERE consumerId like ? and status = ?", args2SliceFnWrapper(data.JobQueued, currentTime, currentTime, 0, consumer.ID, data.JobDead), 0)
+	var rowsAffected int64
+	err := transactionalWrites(djRepo.db, func(tx *sql.Tx) error {
+		result, execErr := tx.Exec("UPDATE job SET status = ?, statusChangedAt = ?, updatedAt = ?, retryAttemptCount = ? WHERE consumerId like ? and status = ?",
+			data.JobQueued, currentTime, currentTime, 0, consumer.ID, data.JobDead)
+		if execErr != nil {
+			return execErr
+		}
+		rowsAffected, execErr = result.RowsAffected()
+		return execErr
 	})
-	return err
+	return rowsAffected, err
 }
 
-// RequeueDeadJob queues up a dead job
-func (djRepo *DeliveryJobDBRepository) RequeueDeadJob(job *data.DeliveryJob) (err error) {
+// RequeueDeadJob queues up a dead job; returns rows affected
+func (djRepo *DeliveryJobDBRepository) RequeueDeadJob(job *data.DeliveryJob) (int64, error) {
 	currentTime := time.Now()
-	err = transactionalWrites(djRepo.db, func(tx *sql.Tx) error {
-		return inTransactionExec(tx, emptyOps, "UPDATE job SET status = ?, statusChangedAt = ?, updatedAt = ?, retryAttemptCount = ? WHERE id like ? and status = ?", args2SliceFnWrapper(data.JobQueued, currentTime, currentTime, 0, job.ID, data.JobDead), 1)
+	var rowsAffected int64
+	err := transactionalWrites(djRepo.db, func(tx *sql.Tx) error {
+		result, execErr := tx.Exec("UPDATE job SET status = ?, statusChangedAt = ?, updatedAt = ?, retryAttemptCount = ? WHERE id like ? and status = ?",
+			data.JobQueued, currentTime, currentTime, 0, job.ID, data.JobDead)
+		if execErr != nil {
+			return execErr
+		}
+		rowsAffected, execErr = result.RowsAffected()
+		if execErr == nil && rowsAffected == 0 {
+			return ErrNoRowsUpdated
+		}
+		return execErr
 	})
-	return err
+	return rowsAffected, err
 }
 
 // GetJobsForConsumer retrieves DeliveryJob created for delivery to a customer and it has to be filtered by a specific status
@@ -342,6 +359,60 @@ GROUP BY c.channelId, j.consumerId, j.status`
 	// The following log is for local dev/testing only
 	// log.Info().Msg("Result: " + fmt.Sprint(result))
 	return result, err
+}
+
+// DeleteDeadJobsForConsumer deletes dead jobs for a consumer where retry is exhausted; returns rows affected
+func (djRepo *DeliveryJobDBRepository) DeleteDeadJobsForConsumer(consumer *data.Consumer, maxRetryCount uint) (int64, error) {
+	var rowsAffected int64
+	err := transactionalWrites(djRepo.db, func(tx *sql.Tx) error {
+		result, execErr := tx.Exec("DELETE FROM job WHERE consumerId = ? AND status = ? AND retryAttemptCount >= ?",
+			consumer.ID, data.JobDead, maxRetryCount)
+		if execErr != nil {
+			return execErr
+		}
+		rowsAffected, execErr = result.RowsAffected()
+		return execErr
+	})
+	return rowsAffected, err
+}
+
+// DeleteDeadJob deletes a single dead job where retry is exhausted; returns rows affected (0 or 1)
+func (djRepo *DeliveryJobDBRepository) DeleteDeadJob(job *data.DeliveryJob, maxRetryCount uint) (int64, error) {
+	var rowsAffected int64
+	err := transactionalWrites(djRepo.db, func(tx *sql.Tx) error {
+		result, execErr := tx.Exec("DELETE FROM job WHERE id = ? AND status = ? AND retryAttemptCount >= ?",
+			job.ID, data.JobDead, maxRetryCount)
+		if execErr != nil {
+			return execErr
+		}
+		rowsAffected, execErr = result.RowsAffected()
+		return execErr
+	})
+	return rowsAffected, err
+}
+
+// GetDeadJobCountsSinceCheckpoint returns dead job counts per consumer since the given timestamp
+func (djRepo *DeliveryJobDBRepository) GetDeadJobCountsSinceCheckpoint(since time.Time) (map[string]int64, error) {
+	result := make(map[string]int64)
+	type countRow struct {
+		consumerID string
+		count      int64
+	}
+	rows := make([]*countRow, 0)
+	scanArgs := func() []interface{} {
+		row := &countRow{}
+		rows = append(rows, row)
+		return []interface{}{&row.consumerID, &row.count}
+	}
+	err := queryRows(djRepo.db, "SELECT consumerId, COUNT(id) FROM job WHERE status = ? AND statusChangedAt > ? GROUP BY consumerId",
+		args2SliceFnWrapper(data.JobDead, since), scanArgs)
+	if err != nil {
+		return result, err
+	}
+	for _, row := range rows {
+		result[row.consumerID] = row.count
+	}
+	return result, nil
 }
 
 // NewDeliveryJobRepository creates a new instance of DeliveryJobRepository

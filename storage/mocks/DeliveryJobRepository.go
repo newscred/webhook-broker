@@ -16,6 +16,62 @@ type DeliveryJobRepository struct {
 	mock.Mock
 }
 
+// DeleteDeadJob provides a mock function with given fields: job, maxRetryCount
+func (_m *DeliveryJobRepository) DeleteDeadJob(job *data.DeliveryJob, maxRetryCount uint) (int64, error) {
+	ret := _m.Called(job, maxRetryCount)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteDeadJob")
+	}
+
+	var r0 int64
+	var r1 error
+	if rf, ok := ret.Get(0).(func(*data.DeliveryJob, uint) (int64, error)); ok {
+		return rf(job, maxRetryCount)
+	}
+	if rf, ok := ret.Get(0).(func(*data.DeliveryJob, uint) int64); ok {
+		r0 = rf(job, maxRetryCount)
+	} else {
+		r0 = ret.Get(0).(int64)
+	}
+
+	if rf, ok := ret.Get(1).(func(*data.DeliveryJob, uint) error); ok {
+		r1 = rf(job, maxRetryCount)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// DeleteDeadJobsForConsumer provides a mock function with given fields: consumer, maxRetryCount
+func (_m *DeliveryJobRepository) DeleteDeadJobsForConsumer(consumer *data.Consumer, maxRetryCount uint) (int64, error) {
+	ret := _m.Called(consumer, maxRetryCount)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteDeadJobsForConsumer")
+	}
+
+	var r0 int64
+	var r1 error
+	if rf, ok := ret.Get(0).(func(*data.Consumer, uint) (int64, error)); ok {
+		return rf(consumer, maxRetryCount)
+	}
+	if rf, ok := ret.Get(0).(func(*data.Consumer, uint) int64); ok {
+		r0 = rf(consumer, maxRetryCount)
+	} else {
+		r0 = ret.Get(0).(int64)
+	}
+
+	if rf, ok := ret.Get(1).(func(*data.Consumer, uint) error); ok {
+		r1 = rf(consumer, maxRetryCount)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // DeleteJobsForMessage provides a mock function with given fields: message
 func (_m *DeliveryJobRepository) DeleteJobsForMessage(message *data.Message) error {
 	ret := _m.Called(message)
@@ -82,6 +138,36 @@ func (_m *DeliveryJobRepository) GetByID(id string) (*data.DeliveryJob, error) {
 
 	if rf, ok := ret.Get(1).(func(string) error); ok {
 		r1 = rf(id)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// GetDeadJobCountsSinceCheckpoint provides a mock function with given fields: since
+func (_m *DeliveryJobRepository) GetDeadJobCountsSinceCheckpoint(since time.Time) (map[string]int64, error) {
+	ret := _m.Called(since)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetDeadJobCountsSinceCheckpoint")
+	}
+
+	var r0 map[string]int64
+	var r1 error
+	if rf, ok := ret.Get(0).(func(time.Time) (map[string]int64, error)); ok {
+		return rf(since)
+	}
+	if rf, ok := ret.Get(0).(func(time.Time) map[string]int64); ok {
+		r0 = rf(since)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(map[string]int64)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(time.Time) error); ok {
+		r1 = rf(since)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -376,39 +462,59 @@ func (_m *DeliveryJobRepository) MarkQueuedJobAsDead(deliveryJob *data.DeliveryJ
 }
 
 // RequeueDeadJob provides a mock function with given fields: job
-func (_m *DeliveryJobRepository) RequeueDeadJob(job *data.DeliveryJob) error {
+func (_m *DeliveryJobRepository) RequeueDeadJob(job *data.DeliveryJob) (int64, error) {
 	ret := _m.Called(job)
 
 	if len(ret) == 0 {
 		panic("no return value specified for RequeueDeadJob")
 	}
 
-	var r0 error
-	if rf, ok := ret.Get(0).(func(*data.DeliveryJob) error); ok {
+	var r0 int64
+	var r1 error
+	if rf, ok := ret.Get(0).(func(*data.DeliveryJob) (int64, error)); ok {
+		return rf(job)
+	}
+	if rf, ok := ret.Get(0).(func(*data.DeliveryJob) int64); ok {
 		r0 = rf(job)
 	} else {
-		r0 = ret.Error(0)
+		r0 = ret.Get(0).(int64)
 	}
 
-	return r0
+	if rf, ok := ret.Get(1).(func(*data.DeliveryJob) error); ok {
+		r1 = rf(job)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // RequeueDeadJobsForConsumer provides a mock function with given fields: consumer
-func (_m *DeliveryJobRepository) RequeueDeadJobsForConsumer(consumer *data.Consumer) error {
+func (_m *DeliveryJobRepository) RequeueDeadJobsForConsumer(consumer *data.Consumer) (int64, error) {
 	ret := _m.Called(consumer)
 
 	if len(ret) == 0 {
 		panic("no return value specified for RequeueDeadJobsForConsumer")
 	}
 
-	var r0 error
-	if rf, ok := ret.Get(0).(func(*data.Consumer) error); ok {
+	var r0 int64
+	var r1 error
+	if rf, ok := ret.Get(0).(func(*data.Consumer) (int64, error)); ok {
+		return rf(consumer)
+	}
+	if rf, ok := ret.Get(0).(func(*data.Consumer) int64); ok {
 		r0 = rf(consumer)
 	} else {
-		r0 = ret.Error(0)
+		r0 = ret.Get(0).(int64)
 	}
 
-	return r0
+	if rf, ok := ret.Get(1).(func(*data.Consumer) error); ok {
+		r1 = rf(consumer)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // NewDeliveryJobRepository creates a new instance of DeliveryJobRepository. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.

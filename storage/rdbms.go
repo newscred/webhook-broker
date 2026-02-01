@@ -41,6 +41,7 @@ type RelationalDBDataAccessor struct {
 	deliveryJobRepository      DeliveryJobRepository
 	lockRepository             LockRepository
 	scheduledMessageRepository ScheduledMessageRepository
+	dlqSummaryRepository       DLQSummaryRepository
 	db                         *sql.DB
 }
 
@@ -82,6 +83,11 @@ func (rdbmsDataAccessor *RelationalDBDataAccessor) GetLockRepository() LockRepos
 // GetScheduledMessageRepository retrieves the ScheduledMessageRepository to be used for ScheduledMessage ops
 func (rdbmsDataAccessor *RelationalDBDataAccessor) GetScheduledMessageRepository() ScheduledMessageRepository {
 	return rdbmsDataAccessor.scheduledMessageRepository
+}
+
+// GetDLQSummaryRepository retrieves the DLQSummaryRepository to be used for DLQSummary ops
+func (rdbmsDataAccessor *RelationalDBDataAccessor) GetDLQSummaryRepository() DLQSummaryRepository {
+	return rdbmsDataAccessor.dlqSummaryRepository
 }
 
 // Close closes the connection to DB
@@ -205,7 +211,7 @@ var (
 	// ErrDBConnectionNeverInitialized is returned when same NewDataAccessor is called the first time and it failed to connec to DB; in all subsequent calls the accessor will remain nil
 	ErrDBConnectionNeverInitialized = errors.New("DB Connection never initialized")
 	// RDBMSStorageInternalInjector injector for data storage related implementation
-	RDBMSStorageInternalInjector = wire.NewSet(GetConnectionPool, GetDefaultCacheTTLDuration, NewLockRepository, NewAppRepository, NewProducerRepository, NewCachedProducerRepository, NewChannelRepository, NewCachedChannelRepository, NewConsumerRepository, NewCachedConsumerRepository, NewMessageRepository, NewDeliveryJobRepository, NewScheduledMessageRepository, wire.Struct(new(RelationalDBDataAccessor), "db", "appRepository", "producerRepository", "channelRepository", "consumerRepository", "messageRepository", "deliveryJobRepository", "lockRepository", "scheduledMessageRepository"), wire.Bind(new(DataAccessor), new(*RelationalDBDataAccessor)))
+	RDBMSStorageInternalInjector = wire.NewSet(GetConnectionPool, GetDefaultCacheTTLDuration, NewLockRepository, NewAppRepository, NewProducerRepository, NewCachedProducerRepository, NewChannelRepository, NewCachedChannelRepository, NewConsumerRepository, NewCachedConsumerRepository, NewMessageRepository, NewDeliveryJobRepository, NewScheduledMessageRepository, NewDLQSummaryRepository, wire.Struct(new(RelationalDBDataAccessor), "db", "appRepository", "producerRepository", "channelRepository", "consumerRepository", "messageRepository", "deliveryJobRepository", "lockRepository", "scheduledMessageRepository", "dlqSummaryRepository"), wire.Bind(new(DataAccessor), new(*RelationalDBDataAccessor)))
 )
 
 func GetDefaultCacheTTLDuration() time.Duration {

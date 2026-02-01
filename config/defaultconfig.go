@@ -44,6 +44,8 @@ remote-export-url=
 export-path=
 remote-file-prefix=
 max-archive-file-size-in-mb=100
+[dlq]
+summary-update-interval-seconds=600
 [initial-channels]
 sample-channel=Sample Channel
 [initial-producers]
