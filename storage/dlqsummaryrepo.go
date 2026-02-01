@@ -27,12 +27,12 @@ func (repo *DLQSummaryDBRepository) GetAll() ([]*data.DLQSummary, error) {
 
 // GetLastCheckedAt returns the maximum last_checked_at from the dlq_summary table
 func (repo *DLQSummaryDBRepository) GetLastCheckedAt() (time.Time, error) {
-	var lastCheckedAt sql.NullTime
+	var lastCheckedAt sql.NullString
 	err := querySingleRow(repo.db, "SELECT MAX(last_checked_at) FROM dlq_summary", nilArgs, args2SliceFnWrapper(&lastCheckedAt))
 	if err != nil || !lastCheckedAt.Valid {
 		return time.Time{}, err
 	}
-	return lastCheckedAt.Time, nil
+	return time.Parse("2006-01-02 15:04:05", lastCheckedAt.String[:19])
 }
 
 // UpsertCounts inserts or updates dead job counts in the summary table

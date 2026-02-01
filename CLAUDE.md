@@ -213,6 +213,29 @@ NEVER edit wire_gen.go files directly as they are auto-generated. Instead:
 
 These patterns should be followed for all new features to maintain consistency with the existing architecture.
 
+## DLQ Observability
+
+The DLQ (Dead Letter Queue) observability feature provides visibility into dead jobs across consumers.
+
+### Components
+
+- **`dlq_summary` table** (migration 000012): Stores per-consumer dead job counts with `consumerId` (PK), `consumerName`, `channelId`, `channelName`, `dead_count`, `last_checked_at`. Foreign key references consumer table.
+- **`DLQSummaryRepository`** (`storage/dlqsummaryrepo.go`): CRUD for the summary table — `GetAll`, `GetLastCheckedAt`, `UpsertCounts` (additive), `DecrementCount` (floor at 0), `BootstrapCounts` (full recount).
+- **Background updater** (`dlq/updater.go`): Lock-based service (same pattern as scheduler) that periodically updates `dlq_summary`. Uses `DLQSummaryLock` for distributed mutex. On first run, bootstraps full counts; subsequently does incremental counts since last checkpoint.
+- **Config**: `[dlq]` INI section, key `summary-update-interval-seconds` (default 600 = 10 minutes). Interface: `config.DLQConfig`.
+
+### API Endpoints
+
+- **`GET /dlq-status`**: Returns JSON `{"consumers": [{channelId, channelName, consumerId, consumerName, deadCount}]}` — aggregated dead job counts.
+- **`DELETE /channel/{channelId}/consumer/{consumerId}/dlq`**: Purges all dead jobs for a consumer (requires channel + consumer tokens). Only deletes jobs where `retryAttemptCount >= maxRetry`. Returns `{"deletedCount": N}`.
+- **`DELETE /channel/{channelId}/consumer/{consumerId}/job/{jobId}`**: Deletes a single dead job (requires channel + consumer tokens). Returns 204 on success, 404 if not dead or retry not exhausted.
+
+### Consistency
+
+- Requeue and delete operations decrement `dlq_summary.dead_count` via `DLQSummaryRepository.DecrementCount`.
+- `RequeueDeadJobsForConsumer` and `RequeueDeadJob` return `(int64, error)` — rows affected for summary updates.
+- Prometheus gauge `dead_job_count` (labels: `channel`, `consumer`) is updated by the background updater and decremented by requeue/delete controllers.
+
 ## AI-Generated Code Guidelines
 
 When AI agents (like Claude) generate code for this project, the code should be properly formatted according to these guidelines:
