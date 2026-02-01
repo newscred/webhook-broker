@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	"github.com/newscred/webhook-broker/config"
@@ -18,6 +19,7 @@ type DataAccessor interface {
 	GetDeliveryJobRepository() DeliveryJobRepository
 	GetLockRepository() LockRepository
 	GetScheduledMessageRepository() ScheduledMessageRepository
+	GetDLQSummaryRepository() DLQSummaryRepository
 	Close()
 }
 
@@ -75,7 +77,7 @@ type DeliveryJobRepository interface {
 	MarkJobRetry(deliveryJob *data.DeliveryJob, earliestDelta time.Duration) error
 	MarkQueuedJobAsDead(deliveryJob *data.DeliveryJob) error
 	MarkDeadJobAsInflight(deliveryJob *data.DeliveryJob) error
-	RequeueDeadJobsForConsumer(consumer *data.Consumer) error
+	RequeueDeadJobsForConsumer(consumer *data.Consumer) (int64, error)
 	GetJobsForMessage(message *data.Message, page *data.Pagination) ([]*data.DeliveryJob, *data.Pagination, error)
 	GetJobsForConsumer(consumer *data.Consumer, jobStatus data.JobStatus, page *data.Pagination) ([]*data.DeliveryJob, *data.Pagination, error)
 	GetPrioritizedJobsForConsumer(consumer *data.Consumer, jobStatus data.JobStatus, pageSize int) ([]*data.DeliveryJob, error)
@@ -84,7 +86,19 @@ type DeliveryJobRepository interface {
 	GetJobsReadyForInflightSince(delta time.Duration, retryThreshold int) []*data.DeliveryJob
 	DeleteJobsForMessage(message *data.Message) error
 	GetJobStatusCountsGroupedByConsumer() (map[Channel_ID]map[Consumer_ID][]*data.StatusCount[data.JobStatus], error)
-	RequeueDeadJob(job *data.DeliveryJob) (err error)
+	RequeueDeadJob(job *data.DeliveryJob) (int64, error)
+	DeleteDeadJobsForConsumer(consumer *data.Consumer, maxRetryCount uint) (int64, error)
+	DeleteDeadJob(job *data.DeliveryJob, maxRetryCount uint) (int64, error)
+	GetDeadJobCountsSinceCheckpoint(since time.Time) (map[string]int64, error)
+}
+
+// DLQSummaryRepository allows storage operations over DLQSummary
+type DLQSummaryRepository interface {
+	GetAll() ([]*data.DLQSummary, error)
+	GetLastCheckedAt() (time.Time, error)
+	UpsertCounts(summaries []*data.DLQSummary) error
+	DecrementCount(consumerID string, count int64) error
+	BootstrapCounts(db *sql.DB) error
 }
 
 // LockRepository allows storage operations over Lock

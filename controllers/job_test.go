@@ -968,7 +968,7 @@ func TestJobRequeueController_Post(t *testing.T) {
 		job.QuickFix()
 		job.Status = data.JobDead
 		repo.On("GetByID", jobID).Return(job, nil).Once()
-		repo.On("RequeueDeadJob", job).Return(nil).Once()
+		repo.On("RequeueDeadJob", job).Return(int64(1), nil).Once()
 
 		url := fmt.Sprintf("/channel/%s/consumer/%s/job/%s/requeue-dead-job", channelID, consumerID, jobID)
 		req, _ := http.NewRequest("POST", url, nil)
@@ -1000,7 +1000,7 @@ func TestJobRequeueController_Post(t *testing.T) {
 		job.QuickFix()
 		job.Status = data.JobDead
 		repo.On("GetByID", jobID).Return(job, nil).Once()
-		repo.On("RequeueDeadJob", job).Return(expectedErr).Once()
+		repo.On("RequeueDeadJob", job).Return(int64(0), expectedErr).Once()
 
 		url := fmt.Sprintf("/channel/%s/consumer/%s/job/%s/requeue-dead-job", channelID, consumerID, jobID)
 		req, _ := http.NewRequest("POST", url, nil)

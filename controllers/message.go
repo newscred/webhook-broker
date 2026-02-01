@@ -387,7 +387,7 @@ func (controller *DLQController) Post(w http.ResponseWriter, r *http.Request, pa
 			writeStatus(w, http.StatusBadRequest, ErrBadRequestForRequeue)
 			return
 		}
-		err := controller.DeliveryJobRepo.RequeueDeadJobsForConsumer(consumer)
+		_, err := controller.DeliveryJobRepo.RequeueDeadJobsForConsumer(consumer)
 		if err == nil {
 			writeStatus(w, http.StatusAccepted, nil)
 		} else {

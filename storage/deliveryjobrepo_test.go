@@ -467,9 +467,9 @@ func TestRequeueDeadJobsForConsumer(t *testing.T) {
 		assert.Nil(t, err)
 		err = djRepo.MarkJobDead(sampleTestJob)
 		assert.Nil(t, err)
-		err = djRepo.RequeueDeadJob(sampleTestJob)
+		_, err = djRepo.RequeueDeadJob(sampleTestJob)
 		assert.Nil(t, err)
-		err = djRepo.RequeueDeadJob(sampleTestJob)
+		_, err = djRepo.RequeueDeadJob(sampleTestJob)
 		assert.NotNil(t, err)
 	})
 
@@ -494,7 +494,7 @@ func TestRequeueDeadJobsForConsumer(t *testing.T) {
 		}
 		assert.True(t, found)
 	}
-	err = djRepo.RequeueDeadJobsForConsumer(testJobs[0].Listener)
+	_, err = djRepo.RequeueDeadJobsForConsumer(testJobs[0].Listener)
 	assert.Nil(t, err)
 	rJobs, _, err = djRepo.GetJobsForConsumer(testJobs[0].Listener, data.JobDead, data.NewPagination(nil, nil))
 	assert.Nil(t, err)

@@ -73,7 +73,7 @@ var (
 	loadConfiguration = defaultLoadFunc
 	errDBDialect      = errors.New("DB Dialect not supported")
 	// ConfigInjector sets up configuration related bindings
-	ConfigInjector = wire.NewSet(GetConfigurationFromCLIConfig, wire.Bind(new(SeedDataConfig), new(*Config)), wire.Bind(new(HTTPConfig), new(*Config)), wire.Bind(new(RelationalDatabaseConfig), new(*Config)), wire.Bind(new(LogConfig), new(*Config)), wire.Bind(new(BrokerConfig), new(*Config)), wire.Bind(new(ConsumerConnectionConfig), new(*Config)), wire.Bind(new(SchedulerConfig), new(*Config)))
+	ConfigInjector = wire.NewSet(GetConfigurationFromCLIConfig, wire.Bind(new(SeedDataConfig), new(*Config)), wire.Bind(new(HTTPConfig), new(*Config)), wire.Bind(new(RelationalDatabaseConfig), new(*Config)), wire.Bind(new(LogConfig), new(*Config)), wire.Bind(new(BrokerConfig), new(*Config)), wire.Bind(new(ConsumerConnectionConfig), new(*Config)), wire.Bind(new(SchedulerConfig), new(*Config)), wire.Bind(new(DLQConfig), new(*Config)))
 )
 
 var currentUser = user.Current
@@ -127,6 +127,8 @@ type Config struct {
 	SchedulerIntervalMs     uint
 	MinScheduleDelayMinutes uint
 	SchedulerBatchSize      uint
+	// DLQ configuration
+	DLQSummaryUpdateIntervalSeconds uint
 }
 
 // GetLogLevel returns the log level as per the configuration
@@ -343,6 +345,7 @@ func GetConfigurationFromParseConfig(cfg *ini.File) (*Config, error) {
 	setupBrokerConfiguration(cfg, configuration)
 	setupMessagePruningConfiguration(cfg, configuration)
 	setupSchedulerConfiguration(cfg, configuration)
+	setupDLQConfiguration(cfg, configuration)
 	if validationErr := validateConfigurationState(configuration); validationErr != nil {
 		return EmptyConfigurationForError, validationErr
 	}
@@ -649,6 +652,14 @@ func setupBrokerConfiguration(cfg *ini.File, configuration *Config) {
 		backoffDelays = append(backoffDelays, time.Duration(parsedBackoff)*time.Second)
 	}
 	configuration.RetryBackoffDelays = backoffDelays
+}
+
+func setupDLQConfiguration(cfg *ini.File, configuration *Config) {
+	dlqSection, err := cfg.GetSection("dlq")
+	if err != nil {
+		return
+	}
+	configuration.DLQSummaryUpdateIntervalSeconds = dlqSection.Key("summary-update-interval-seconds").MustUint(DefaultDLQSummaryUpdateIntervalSeconds)
 }
 
 func setupSchedulerConfiguration(cfg *ini.File, configuration *Config) {
