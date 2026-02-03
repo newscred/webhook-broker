@@ -32,7 +32,16 @@ func (repo *DLQSummaryDBRepository) GetLastCheckedAt() (time.Time, error) {
 	if err != nil || !lastCheckedAt.Valid {
 		return time.Time{}, err
 	}
-	return time.Parse("2006-01-02 15:04:05", lastCheckedAt.String[:19])
+	// Try parsing with T separator (MySQL ISO 8601 format) first, then space separator (SQLite)
+	ts := lastCheckedAt.String
+	if len(ts) >= 19 {
+		ts = ts[:19]
+	}
+	t, err := time.Parse("2006-01-02T15:04:05", ts)
+	if err != nil {
+		t, err = time.Parse("2006-01-02 15:04:05", ts)
+	}
+	return t, err
 }
 
 // UpsertCounts inserts or updates dead job counts in the summary table
