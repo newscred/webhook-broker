@@ -291,10 +291,9 @@ func (djRepo *DeliveryJobDBRepository) GetJobsInflightSince(delta time.Duration)
 
 // GetJobsReadyForInflightSince retrieves jobs in queued status and earliestNextAttemptAt < `now`-delta
 func (djRepo *DeliveryJobDBRepository) GetJobsReadyForInflightSince(delta time.Duration, retryThreshold int) []*data.DeliveryJob {
-	query := fmt.Sprintf(`SELECT b.id as id, messageId, b.consumerId as consumerId, status, dispatchReceivedAt, retryAttemptCount, statusChangedAt, earliestNextAttemptAt, b.createdAt as createdAt, b.updatedAt as updatedAt, priority, incrementalTimeout
-FROM job as b join consumer as c on b.consumerId = c.id
-WHERE (c.type = %d OR retryAttemptCount >= %d) AND`, data.PushConsumer, retryThreshold)
-	return djRepo.getJobsForStatusAndDeltaWithCustomQuery(data.JobQueued, delta, false, query, "b")
+	query := fmt.Sprintf(`%s (retryAttemptCount >= %d OR consumerId NOT IN (SELECT id FROM consumer WHERE type = %d)) AND`,
+		jobCommonSelectQuery, retryThreshold, data.PullConsumer)
+	return djRepo.getJobsForStatusAndDeltaWithCustomQuery(data.JobQueued, delta, false, query, "")
 }
 
 // GetByID loads the delivery job with specified id if it exists, else returns an error
