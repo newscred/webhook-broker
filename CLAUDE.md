@@ -236,6 +236,28 @@ The DLQ (Dead Letter Queue) observability feature provides visibility into dead 
 - `RequeueDeadJobsForConsumer` and `RequeueDeadJob` return `(int64, error)` — rows affected for summary updates.
 - Prometheus gauge `dead_job_count` (labels: `channel`, `consumer`) is updated by the background updater and decremented by requeue/delete controllers.
 
+## Gateway Authentication (HMAC)
+
+Optional HMAC-SHA256 request authentication for public-facing deployments.
+
+### Configuration
+
+`[gateway-auth]` INI section: `mode` (`none`|`hmac`), `hmac-shared-secret` (base64), `hmac-timestamp-tolerance-seconds` (default 300), `auth-exempt-paths` (default `/_status,/metrics,/debug/pprof/`).
+
+Interface: `config.GatewayAuthConfig`. Middleware: `controllers.NewHMACMiddleware`.
+
+### Signature Format
+
+Header: `X-Broker-Signature: t={unix_timestamp},v1={hex_hmac_sha256}`
+Signing payload: `{timestamp}.{request_body}`
+Secret is base64-decoded before use as HMAC key.
+
+### Middleware Chain Position
+
+`Logger → Request ID → Access Log (wraps response) → HMAC Middleware → Router → Controller`
+
+Access log handler wraps around HMAC middleware so that 401/403 rejections are recorded with request IDs.
+
 ## AI-Generated Code Guidelines
 
 When AI agents (like Claude) generate code for this project, the code should be properly formatted according to these guidelines:

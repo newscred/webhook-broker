@@ -46,6 +46,11 @@ remote-file-prefix=
 max-archive-file-size-in-mb=100
 [dlq]
 summary-update-interval-seconds=600
+[gateway-auth]
+mode=none
+hmac-shared-secret=
+hmac-timestamp-tolerance-seconds=300
+auth-exempt-paths=/_status,/metrics,/debug/pprof/
 [initial-channels]
 sample-channel=Sample Channel
 [initial-producers]

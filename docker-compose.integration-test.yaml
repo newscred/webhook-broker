@@ -44,6 +44,28 @@ services:
         aliases:
           - "webhook-broker"
   
+  ibroker-hmac:
+    build: .
+    container_name: ibroker-hmac
+    volumes:
+      - ./webhook-broker-integration-test-hmac.cfg:/webhook-broker.cfg
+    command: ["./webhook-broker", "-migrate", "./migration/sqls/"]
+    depends_on:
+      ibroker:
+        condition: service_healthy
+    ports:
+      - "31820:8082"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/_status"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 10s
+    networks:
+      brokeritest:
+        aliases:
+          - "webhook-broker-hmac"
+
   ipruner:
     build:
       context: .
@@ -70,6 +92,8 @@ services:
     command: ["make", "run"]
     depends_on:
       ibroker:
+        condition: service_healthy
+      ibroker-hmac:
         condition: service_healthy
       ipruner:
         condition: service_started
