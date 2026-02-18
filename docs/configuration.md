@@ -85,6 +85,47 @@ This section configures the pruning of delivered messages. Pruning can target a 
 | `remote-file-prefix` | _(empty)_ | An optional prefix added to the archived filenames in remote storage. |
 | `max-archive-file-size-in-mb` | 100 | The maximum size of a single archive file in megabytes.  When this size is reached, a new archive file is created. |
 
+## Section - Gateway Authentication: `[gateway-auth]`
+
+This section configures optional HMAC-SHA256 gateway authentication. When enabled, all non-exempt requests must include a valid `X-Broker-Signature` header. This is useful when deploying the broker as a public-facing event ingestion gateway.
+
+| Name | Default Value | Description |
+|---|---|---|
+| `mode` | `none` | Authentication mode. `none` disables gateway auth (current behavior). `hmac` enables HMAC-SHA256 signature verification on all non-exempt requests. |
+| `hmac-shared-secret` | _(empty)_ | Base64-encoded shared secret for HMAC signing. Required when `mode=hmac`. Generate with `openssl rand -base64 32`. |
+| `hmac-timestamp-tolerance-seconds` | `300` | Maximum age (in seconds) of a signed request before rejection. Protects against replay attacks. |
+| `auth-exempt-paths` | `/_status,/metrics,/debug/pprof/` | Comma-separated list of URL path prefixes that bypass gateway authentication. Requests to these paths do not require a signature. |
+
+### Signature Format
+
+The `X-Broker-Signature` header value has the format:
+
+```
+t={unix_timestamp},v1={hex_encoded_hmac_sha256}
+```
+
+The signing payload is `{timestamp}.{raw_request_body}`. For requests without a body (e.g., GET), the payload is `{timestamp}.`.
+
+The signature is computed as `HMAC-SHA256(signing_payload, base64_decode(shared_secret))`.
+
+### Example (curl)
+
+```bash
+SECRET="dGVzdC1zZWNyZXQtZm9yLWhtYWM="   # base64("test-secret-for-hmac")
+BODY='{"event": "order.created", "data": {"id": "123"}}'
+TIMESTAMP=$(date +%s)
+HEX_KEY=$(echo -n "$SECRET" | base64 -d | xxd -p -c 256)
+SIGNATURE=$(echo -n "${TIMESTAMP}.${BODY}" | openssl dgst -sha256 -mac hmac -macopt hexkey:"$HEX_KEY" | sed 's/.*= //')
+
+curl -X POST http://localhost:8080/channel/my-channel/broadcast \
+  -H "Content-Type: application/json" \
+  -H "X-Broker-Channel-Token: my-channel-token" \
+  -H "X-Broker-Producer-Token: my-producer-token" \
+  -H "X-Broker-Producer-ID: my-producer" \
+  -H "X-Broker-Signature: t=${TIMESTAMP},v1=${SIGNATURE}" \
+  --data "$BODY"
+```
+
 ## Sections  for Seed Dataset
 
 For seed data of the application there are 5 fixed sections and a dynamic section per consumer configured. When Webhook Broker is used for System to System communication or ESB, channels would be relatively be within fixed channels. The sections are:

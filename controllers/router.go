@@ -169,15 +169,16 @@ func logAccess(r *http.Request, status, size int, duration time.Duration) {
 		Msg("")
 }
 
-func getHandler(apiRouter *httprouter.Router) http.Handler {
-	// Chain handlers - new handler to attach logger to request context, request id handler and lastly access log handler all ending with the our routes
-	return hlog.NewHandler(log.Logger)(getRequestIDHandler(requestIDLogFieldKey, headerRequestID)(hlog.AccessHandler(logAccess)(apiRouter)))
+func getHandler(apiRouter *httprouter.Router, authConfig config.GatewayAuthConfig) http.Handler {
+	hmacMiddleware := NewHMACMiddleware(authConfig)
+	// Chain: Logger → Request ID → Access Log (wraps response) → HMAC Middleware → Router
+	return hlog.NewHandler(log.Logger)(getRequestIDHandler(requestIDLogFieldKey, headerRequestID)(hlog.AccessHandler(logAccess)(hmacMiddleware(apiRouter))))
 }
 
 // ConfigureAPI configures API Server with interrupt handling
-func ConfigureAPI(httpConfig config.HTTPConfig, iListener ServerLifecycleListener, apiRouter *httprouter.Router) *http.Server {
+func ConfigureAPI(httpConfig config.HTTPConfig, iListener ServerLifecycleListener, apiRouter *httprouter.Router, authConfig config.GatewayAuthConfig) *http.Server {
 	listener = iListener
-	handler := getHandler(apiRouter)
+	handler := getHandler(apiRouter, authConfig)
 	server = &http.Server{
 		Handler:      handler,
 		Addr:         httpConfig.GetHTTPListeningAddr(),

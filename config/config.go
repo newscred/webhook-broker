@@ -73,7 +73,7 @@ var (
 	loadConfiguration = defaultLoadFunc
 	errDBDialect      = errors.New("DB Dialect not supported")
 	// ConfigInjector sets up configuration related bindings
-	ConfigInjector = wire.NewSet(GetConfigurationFromCLIConfig, wire.Bind(new(SeedDataConfig), new(*Config)), wire.Bind(new(HTTPConfig), new(*Config)), wire.Bind(new(RelationalDatabaseConfig), new(*Config)), wire.Bind(new(LogConfig), new(*Config)), wire.Bind(new(BrokerConfig), new(*Config)), wire.Bind(new(ConsumerConnectionConfig), new(*Config)), wire.Bind(new(SchedulerConfig), new(*Config)), wire.Bind(new(DLQConfig), new(*Config)))
+	ConfigInjector = wire.NewSet(GetConfigurationFromCLIConfig, wire.Bind(new(SeedDataConfig), new(*Config)), wire.Bind(new(HTTPConfig), new(*Config)), wire.Bind(new(RelationalDatabaseConfig), new(*Config)), wire.Bind(new(LogConfig), new(*Config)), wire.Bind(new(BrokerConfig), new(*Config)), wire.Bind(new(ConsumerConnectionConfig), new(*Config)), wire.Bind(new(SchedulerConfig), new(*Config)), wire.Bind(new(DLQConfig), new(*Config)), wire.Bind(new(GatewayAuthConfig), new(*Config)))
 )
 
 var currentUser = user.Current
@@ -129,6 +129,11 @@ type Config struct {
 	SchedulerBatchSize      uint
 	// DLQ configuration
 	DLQSummaryUpdateIntervalSeconds uint
+	// Gateway auth configuration
+	GatewayAuthMode               string
+	HMACSharedSecret              string
+	HMACTimestampToleranceSeconds uint
+	AuthExemptPaths               string
 }
 
 // GetLogLevel returns the log level as per the configuration
@@ -346,6 +351,7 @@ func GetConfigurationFromParseConfig(cfg *ini.File) (*Config, error) {
 	setupMessagePruningConfiguration(cfg, configuration)
 	setupSchedulerConfiguration(cfg, configuration)
 	setupDLQConfiguration(cfg, configuration)
+	setupGatewayAuthConfiguration(cfg, configuration)
 	if validationErr := validateConfigurationState(configuration); validationErr != nil {
 		return EmptyConfigurationForError, validationErr
 	}
@@ -353,6 +359,17 @@ func GetConfigurationFromParseConfig(cfg *ini.File) (*Config, error) {
 }
 
 func validateConfigurationState(configuration *Config) error {
+	// Validate gateway auth configuration first (before port/DB checks)
+	if configuration.GatewayAuthMode == "hmac" {
+		if len(configuration.HMACSharedSecret) == 0 {
+			return errors.New("gateway-auth: hmac-shared-secret is required when mode=hmac")
+		}
+		if _, err := base64.StdEncoding.DecodeString(configuration.HMACSharedSecret); err != nil {
+			return fmt.Errorf("gateway-auth: hmac-shared-secret is not valid base64: %w", err)
+		}
+	} else if configuration.GatewayAuthMode != "none" && configuration.GatewayAuthMode != "" {
+		return fmt.Errorf("gateway-auth: unsupported mode %q (must be \"none\" or \"hmac\")", configuration.GatewayAuthMode)
+	}
 	if len(configuration.TokenRequestHeaderName) <= 0 {
 		configuration.TokenRequestHeaderName = "X-Broker-Consumer-Token"
 	}
@@ -660,6 +677,17 @@ func setupDLQConfiguration(cfg *ini.File, configuration *Config) {
 		return
 	}
 	configuration.DLQSummaryUpdateIntervalSeconds = dlqSection.Key("summary-update-interval-seconds").MustUint(DefaultDLQSummaryUpdateIntervalSeconds)
+}
+
+func setupGatewayAuthConfiguration(cfg *ini.File, configuration *Config) {
+	gatewayAuthSection, err := cfg.GetSection("gateway-auth")
+	if err != nil {
+		return
+	}
+	configuration.GatewayAuthMode = gatewayAuthSection.Key("mode").MustString(DefaultGatewayAuthMode)
+	configuration.HMACSharedSecret = gatewayAuthSection.Key("hmac-shared-secret").MustString("")
+	configuration.HMACTimestampToleranceSeconds = gatewayAuthSection.Key("hmac-timestamp-tolerance-seconds").MustUint(DefaultHMACTimestampToleranceSeconds)
+	configuration.AuthExemptPaths = gatewayAuthSection.Key("auth-exempt-paths").MustString(DefaultAuthExemptPaths)
 }
 
 func setupSchedulerConfiguration(cfg *ini.File, configuration *Config) {

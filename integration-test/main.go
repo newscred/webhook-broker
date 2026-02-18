@@ -3,6 +3,10 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -96,11 +100,18 @@ var (
 	consumerAssertionFailed = false
 	consumerHostName        string
 	brokerBaseURL           string
+	hmacBrokerBaseURL       string
 )
 
 const (
 	defaultConsumerHostName         = "tester"
 	defaultBrokerBaseURL           = "http://webhook-broker:8080"
+	defaultHMACBrokerBaseURL       = "http://webhook-broker-hmac:8082"
+	hmacChannelID                  = "hmac-test-channel"
+	hmacChannelToken               = "hmac-test-channel-token"
+	hmacProducerID                 = "hmac-test-producer"
+	hmacProducerToken              = "hmac-test-producer-token"
+	hmacSharedSecretB64            = "dGVzdC1obWFjLXNlY3JldC1mb3ItaW50ZWdyYXRpb24="
 	token                          = "someRandomToken"
 	tokenFormParamKey              = "token"
 	callbackURLFormParamKey        = "callbackUrl"
@@ -452,6 +463,7 @@ func getEnvOrDefault(key, defaultVal string) string {
 func main() {
 	consumerHostName = getEnvOrDefault("CONSUMER_HOST", defaultConsumerHostName)
 	brokerBaseURL = getEnvOrDefault("BROKER_BASE_URL", defaultBrokerBaseURL)
+	hmacBrokerBaseURL = getEnvOrDefault("HMAC_BROKER_BASE_URL", defaultHMACBrokerBaseURL)
 	client = &http.Client{Timeout: 2 * time.Second}
 	http.DefaultTransport.(*http.Transport).MaxIdleConnsPerHost = concurrentPushWorkers
 	port := findPort()
@@ -490,6 +502,8 @@ func main() {
 	testPruning()
 	resetHandlers()
 	testDLQDeletePurge()
+	resetHandlers()
+	testHMACAuth()
 }
 
 func testBasicObjectCreation(portString string) {
@@ -1434,4 +1448,123 @@ func testPruning() {
 		log.Fatal("Expected string 'w7b6_intg_test' not found in pruner response")
 	}
 	//TODO Check for the contents of the file to ensure it is exporting the right thing in right format
+}
+
+func computeHMACSignature(body []byte, secretB64 string, timestamp int64) string {
+	secret, err := base64.StdEncoding.DecodeString(secretB64)
+	if err != nil {
+		log.Fatal("failed to decode HMAC secret:", err)
+	}
+	payload := strconv.FormatInt(timestamp, 10) + "." + string(body)
+	mac := hmac.New(sha256.New, secret)
+	mac.Write([]byte(payload))
+	signature := hex.EncodeToString(mac.Sum(nil))
+	return fmt.Sprintf("t=%d,v1=%s", timestamp, signature)
+}
+
+func testHMACAuth() {
+	log.Println("Starting HMAC authentication tests")
+
+	// Test 1: Exempt path without signature — expect 200
+	log.Println("HMAC Test 1: Exempt path without signature")
+	req, _ := http.NewRequest(http.MethodGet, hmacBrokerBaseURL+"/_status", nil)
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Println("HMAC test 1 failed:", err)
+		os.Exit(100)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		log.Println("HMAC test 1: expected 200 for exempt path, got", resp.StatusCode)
+		os.Exit(101)
+	}
+	log.Println("HMAC Test 1 passed: exempt path returns 200")
+
+	// Test 2: Missing signature — expect 401
+	log.Println("HMAC Test 2: Missing signature")
+	body := []byte(payload)
+	req, _ = http.NewRequest(http.MethodPost, hmacBrokerBaseURL+"/channel/"+hmacChannelID+"/broadcast", bytes.NewReader(body))
+	req.Header.Set(headerContentType, contentType)
+	req.Header.Set(headerChannelToken, hmacChannelToken)
+	req.Header.Set(headerProducerID, hmacProducerID)
+	req.Header.Set(headerProducerToken, hmacProducerToken)
+	resp, err = client.Do(req)
+	if err != nil {
+		log.Println("HMAC test 2 failed:", err)
+		os.Exit(102)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		log.Println("HMAC test 2: expected 401 for missing signature, got", resp.StatusCode)
+		os.Exit(103)
+	}
+	log.Println("HMAC Test 2 passed: missing signature returns 401")
+
+	// Test 3: Wrong signature — expect 403
+	log.Println("HMAC Test 3: Wrong signature")
+	timestamp := time.Now().Unix()
+	req, _ = http.NewRequest(http.MethodPost, hmacBrokerBaseURL+"/channel/"+hmacChannelID+"/broadcast", bytes.NewReader(body))
+	req.Header.Set(headerContentType, contentType)
+	req.Header.Set(headerChannelToken, hmacChannelToken)
+	req.Header.Set(headerProducerID, hmacProducerID)
+	req.Header.Set(headerProducerToken, hmacProducerToken)
+	req.Header.Set("X-Broker-Signature", fmt.Sprintf("t=%d,v1=deadbeefdeadbeefdeadbeefdeadbeef", timestamp))
+	resp, err = client.Do(req)
+	if err != nil {
+		log.Println("HMAC test 3 failed:", err)
+		os.Exit(104)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		log.Println("HMAC test 3: expected 403 for wrong signature, got", resp.StatusCode)
+		os.Exit(105)
+	}
+	log.Println("HMAC Test 3 passed: wrong signature returns 403")
+
+	// Test 4: Expired timestamp — expect 403
+	log.Println("HMAC Test 4: Expired timestamp")
+	expiredTimestamp := time.Now().Unix() - 600
+	sig := computeHMACSignature(body, hmacSharedSecretB64, expiredTimestamp)
+	req, _ = http.NewRequest(http.MethodPost, hmacBrokerBaseURL+"/channel/"+hmacChannelID+"/broadcast", bytes.NewReader(body))
+	req.Header.Set(headerContentType, contentType)
+	req.Header.Set(headerChannelToken, hmacChannelToken)
+	req.Header.Set(headerProducerID, hmacProducerID)
+	req.Header.Set(headerProducerToken, hmacProducerToken)
+	req.Header.Set("X-Broker-Signature", sig)
+	resp, err = client.Do(req)
+	if err != nil {
+		log.Println("HMAC test 4 failed:", err)
+		os.Exit(106)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		log.Println("HMAC test 4: expected 403 for expired timestamp, got", resp.StatusCode)
+		os.Exit(107)
+	}
+	log.Println("HMAC Test 4 passed: expired timestamp returns 403")
+
+	// Test 5: Valid signed broadcast — expect 201
+	log.Println("HMAC Test 5: Valid signed broadcast")
+	timestamp = time.Now().Unix()
+	sig = computeHMACSignature(body, hmacSharedSecretB64, timestamp)
+	req, _ = http.NewRequest(http.MethodPost, hmacBrokerBaseURL+"/channel/"+hmacChannelID+"/broadcast", bytes.NewReader(body))
+	req.Header.Set(headerContentType, contentType)
+	req.Header.Set(headerChannelToken, hmacChannelToken)
+	req.Header.Set(headerProducerID, hmacProducerID)
+	req.Header.Set(headerProducerToken, hmacProducerToken)
+	req.Header.Set("X-Broker-Signature", sig)
+	resp, err = client.Do(req)
+	if err != nil {
+		log.Println("HMAC test 5 failed:", err)
+		os.Exit(108)
+	}
+	respBody, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		log.Println("HMAC test 5: expected 201 for valid signed broadcast, got", resp.StatusCode, string(respBody))
+		os.Exit(109)
+	}
+	log.Println("HMAC Test 5 passed: valid signed broadcast returns 201")
+
+	log.Println("All HMAC authentication tests passed")
 }

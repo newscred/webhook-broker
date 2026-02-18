@@ -55,7 +55,7 @@ func TestConfigureAPI(t *testing.T) {
 	mListener.On("ServerShutdownCompleted").Return()
 	mAppRepo.On("GetApp").Return(defaultApp, nil)
 	ConfigureAPI(configuration, mListener, NewRouter(&Controllers{StatusController: NewStatusController(mAppRepo),
-		ProducersController: &ProducersController{}, ProducerController: &ProducerController{}, ChannelController: &ChannelController{}}))
+		ProducersController: &ProducersController{}, ProducerController: &ProducerController{}, ChannelController: &ChannelController{}}), &noopGatewayAuthConfig{})
 	<-mListener.serverListener
 	mListener.AssertExpectations(t)
 	mAppRepo.AssertExpectations(t)

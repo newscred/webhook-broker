@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/newscred/webhook-broker/config"
@@ -19,6 +20,14 @@ import (
 	storagemocks "github.com/newscred/webhook-broker/storage/mocks"
 	"github.com/stretchr/testify/assert"
 )
+
+type noopGatewayAuthConfig struct{}
+
+func (c *noopGatewayAuthConfig) GetGatewayAuthMode() string               { return "none" }
+func (c *noopGatewayAuthConfig) GetHMACSharedSecret() []byte              { return nil }
+func (c *noopGatewayAuthConfig) GetHMACTimestampTolerance() time.Duration { return 0 }
+func (c *noopGatewayAuthConfig) GetAuthExemptPaths() []string             { return nil }
+func (c *noopGatewayAuthConfig) IsGatewayAuthEnabled() bool               { return false }
 
 var (
 	configuration *config.Config
@@ -58,7 +67,7 @@ func TestMain(m *testing.M) {
 func createTestRouter(endpoints ...EndpointController) http.Handler {
 	testRouter := httprouter.New()
 	setupAPIRoutes(testRouter, endpoints...)
-	return getHandler(testRouter)
+	return getHandler(testRouter, &noopGatewayAuthConfig{})
 }
 
 func TestStatus(t *testing.T) {
