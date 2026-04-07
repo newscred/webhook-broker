@@ -63,6 +63,7 @@ type ArchiveWriteManager struct {
 	currentSize int64
 	mu          sync.Mutex
 	writer      Writer
+	wg          sync.WaitGroup
 }
 
 // NewArchiveWriteManager creates a new RotationManager.
@@ -115,6 +116,7 @@ func (rm *ArchiveWriteManager) Write(ctx context.Context, jsonStr string) (int, 
 
 	if rm.currentSize >= rm.maxSize {
 		// Initiate rotation in the background
+		rm.wg.Add(1)
 		go rm.rotateInBackground(ctx)
 	}
 
@@ -123,6 +125,7 @@ func (rm *ArchiveWriteManager) Write(ctx context.Context, jsonStr string) (int, 
 
 // rotateInBackground performs the object rotation in a separate goroutine.
 func (rm *ArchiveWriteManager) rotateInBackground(ctx context.Context) {
+	defer rm.wg.Done()
 	rm.mu.Lock() // Lock to prevent concurrent rotations
 	defer rm.mu.Unlock()
 
@@ -155,8 +158,9 @@ func (rm *ArchiveWriteManager) rotate(ctx context.Context) error {
 	return nil
 }
 
-// Close closes the underlying writer.
+// Close waits for any in-flight rotations to complete, then closes the underlying writer.
 func (rm *ArchiveWriteManager) Close() error {
+	rm.wg.Wait()
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
 	if rm.writer != nil {
