@@ -82,7 +82,6 @@ func TestArchiveWriteManager(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer rm.Close()
 
 		// Generate random JSON strings
 		jsonData := generateRandomJSON(maxSize/2, 10) // Half the maxSize, 10 lines
@@ -100,6 +99,11 @@ func TestArchiveWriteManager(t *testing.T) {
 			}(jsonStr)
 		}
 		wg.Wait()
+
+		// Close to wait for any in-flight background rotations to complete
+		if err := rm.Close(); err != nil {
+			t.Fatal(err)
+		}
 
 		// Check if rotation happened
 		ctx := context.Background()
