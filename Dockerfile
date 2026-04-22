@@ -33,6 +33,7 @@ RUN make test
 
 FROM alpine:3.20
 RUN apk update && apk add curl
+ADD https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /etc/ssl/certs/rds-combined-ca-bundle.pem
 WORKDIR /
 COPY --from=build-env /go/src/github.com/newscred/webhook-broker/webhook-broker /webhook-broker
 COPY --from=build-env /go/src/github.com/newscred/webhook-broker/migration /migration
