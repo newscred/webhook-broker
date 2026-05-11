@@ -26,6 +26,7 @@ const (
 	headerConsumerID      = "X-Broker-Consumer-ID"
 	headerMessageID       = "X-Broker-Message-ID"
 	headerMetadataHeaders = "X-Broker-Metadata-Headers"
+	headerRetryAttempt    = "X-Broker-Retry-Attempt"
 	headerRequestID       = "X-Request-ID"
 	headerUserAgent       = "User-Agent"
 	requestIDLogFieldKey  = "requestId"
@@ -133,6 +134,7 @@ var callConsumer = func(worker *Worker, requestID string, logger zerolog.Logger,
 		req.Header.Set(headerUserAgent, worker.consumerConnectionConfig.GetUserAgent())
 		req.Header.Set(headerRequestID, requestID)
 		req.Header.Set(headerMessageID, message.MessageID)
+		req.Header.Set(headerRetryAttempt, strconv.Itoa(int(job.Data.RetryAttemptCount)))
 		metadataHeaderNames := []string{}
 		for key, val := range message.Headers {
 			req.Header.Set(key, val)
