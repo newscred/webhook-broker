@@ -57,6 +57,10 @@ spec:
               port: {{ .Values.broker.port }}
             initialDelaySeconds: {{ .Values.broker.probeInitialDelay }}
             periodSeconds: {{ .Values.broker.probeInterval }}
+          {{- if .Values.startupProbe }}
+          startupProbe:
+            {{- toYaml .Values.startupProbe | nindent 12 }}
+          {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       volumes:
