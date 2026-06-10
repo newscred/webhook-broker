@@ -182,12 +182,9 @@ func (djRepo *DeliveryJobDBRepository) getJobsForStatusAndDelta(status data.JobS
 }
 
 func (djRepo *DeliveryJobDBRepository) getJobsForStatusAndDeltaWithCustomQuery(status data.JobStatus, delta time.Duration, useStatusChangedAt bool, jobQueryBase string, jobAlias string) []*data.DeliveryJob {
-	jobs := make([]*data.DeliveryJob, 0)
-	page := data.NewPagination(nil, nil)
 	if delta > 0 {
 		delta = -1 * delta
 	}
-	more := true
 	dateCol := "earliestNextAttemptAt"
 	if useStatusChangedAt {
 		dateCol = "statusChangedAt"
@@ -198,23 +195,11 @@ func (djRepo *DeliveryJobDBRepository) getJobsForStatusAndDeltaWithCustomQuery(s
 		orderBy = getOrderByClauseWithAlias(jobAlias, LIMIT_100_SUFFIX)
 		aliasPrefix = jobAlias + "."
 	}
-	commonBaseQuery := jobQueryBase + fmt.Sprintf(" %sstatus = ? AND  %s%s <= ?", aliasPrefix, aliasPrefix, dateCol)
-	log.Debug().Msgf("JobsForStatusAndDeltaWithCustomQuery for status %s common query: %s", status, commonBaseQuery)
-	for more {
-		baseQuery := commonBaseQuery + getPaginationQueryFragmentWithConfigurablePageSizeWithAlias(page, true, orderBy, jobAlias)
-		pageJobs, pagination, err := djRepo.getJobs(baseQuery, nil, nil, appendWithPaginationArgs(page, status, time.Now().Add(delta)))
-		if err == nil {
-			jobs = append(jobs, pageJobs...)
-			jobCount := len(pageJobs)
-			if jobCount > 0 {
-				page.Next = pagination.Next
-			} else {
-				more = false
-			}
-		} else {
-			log.Error().Err(err).Msg(fmt.Sprint("error - could get list jobs (status, use status changed at date field) ", status, " ", useStatusChangedAt))
-			more = false
-		}
+	baseQuery := jobQueryBase + fmt.Sprintf(" %sstatus = ? AND  %s%s <= ? ", aliasPrefix, aliasPrefix, dateCol) + string(orderBy)
+	jobs, _, err := djRepo.getJobs(baseQuery, nil, nil, args2SliceFnWrapper(status, time.Now().Add(delta))())
+	if err != nil {
+		log.Error().Err(err).Msg(fmt.Sprint("error - could get list jobs (status, use status changed at date field) ", status, " ", useStatusChangedAt))
+		return make([]*data.DeliveryJob, 0)
 	}
 	return jobs
 }
