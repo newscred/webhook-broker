@@ -102,7 +102,11 @@ func (scheduler *MessageSchedulerImpl) Stop() {
 
 // processScheduledMessages retrieves messages due for dispatch and processes them
 func (scheduler *MessageSchedulerImpl) processScheduledMessages() {
-	messages := scheduler.scheduledMsgRepo.GetMessagesReadyForDispatch(scheduler.schedulerConfig.GetSchedulerBatchSize())
+	messages, err := scheduler.scheduledMsgRepo.GetAndClaimMessagesForDispatch(scheduler.schedulerConfig.GetSchedulerBatchSize())
+	if err != nil {
+		log.Error().Err(err).Msg("Error claiming scheduled messages for dispatch")
+		return
+	}
 
 	for _, scheduledMsg := range messages {
 		go scheduler.dispatchMessage(scheduledMsg)
@@ -141,7 +145,8 @@ func (scheduler *MessageSchedulerImpl) dispatchMessage(scheduledMsg *data.Schedu
 		err = scheduler.msgRepo.Create(message)
 		if err != nil {
 			if err == storage.ErrDuplicateMessageIDForChannel {
-				// Handle potential race condition
+				// Handle potential race condition (defense-in-depth)
+				// This should be rare now that we use GetAndClaimMessagesForDispatch
 				time.Sleep(100 * time.Millisecond)
 				refreshedMsg, getErr := scheduler.scheduledMsgRepo.GetByID(scheduledMsg.ID.String())
 				if getErr == nil && refreshedMsg.Status == data.ScheduledMsgStatusScheduled {
@@ -154,19 +159,12 @@ func (scheduler *MessageSchedulerImpl) dispatchMessage(scheduledMsg *data.Schedu
 			return err
 		}
 
-		// Update scheduled message status to dispatched and set dispatchedAt
-		dispatchTime := time.Now()
-		scheduledMsg.Status = data.ScheduledMsgStatusDispatched
-		scheduledMsg.DispatchedAt = dispatchTime
-		dispatchLag := dispatchTime.Sub(scheduledMsg.DispatchSchedule)
+		// Calculate dispatch lag
+		// Note: scheduledMsg.Status is already DISPATCHED and dispatchedAt is already set by GetAndClaimMessagesForDispatch
+		dispatchLag := scheduledMsg.DispatchedAt.Sub(scheduledMsg.DispatchSchedule)
 		scheduler.metricsCollector.SetLatestDispatchLag(dispatchLag)
 
-		err = scheduler.scheduledMsgRepo.MarkDispatched(scheduledMsg)
-		if err != nil {
-			log.Error().Err(err).Str("messageId", message.MessageID).Msg("Failed to mark scheduled message as dispatched")
-			scheduler.metricsCollector.IncreaseSchedulingErrorCount()
-			return err
-		}
+		// No need to call MarkDispatched — GetAndClaimMessagesForDispatch already updated the status atomically
 
 		// Dispatch message through normal flow
 		scheduler.dispatcherSvc.Dispatch(message)

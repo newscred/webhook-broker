@@ -597,3 +597,245 @@ func TestScheduledMessageGetNextScheduledMessageTime(t *testing.T) {
 		assert.Nil(t, nextTime)
 	})
 }
+
+func TestScheduledMessageGetAndClaimMessagesForDispatch(t *testing.T) {
+	// Note: These tests require MySQL as they use FOR UPDATE SKIP LOCKED
+	// which is not supported by SQLite. Tests are skipped on SQLite.
+	t.Run("Success", func(t *testing.T) {
+		msgRepo := getScheduledMessageRepository()
+
+		// Create a message scheduled in the past
+		pastDispatchTime := time.Now().Add(-5 * time.Minute)
+		pastMessage, err := data.NewScheduledMessage(scheduledTestChannel, scheduledTestProducer, "past-payload", "test/content-type", pastDispatchTime, data.HeadersMap{})
+		assert.Nil(t, err)
+		assert.NotNil(t, pastMessage)
+
+		// Force the dispatch schedule to be in the past
+		pastMessage.DispatchSchedule = pastDispatchTime
+		err = msgRepo.Create(pastMessage)
+		assert.Nil(t, err)
+
+		// Create a message scheduled in the future
+		futureDispatchTime := time.Now().Add(15 * time.Minute)
+		futureMessage, err := data.NewScheduledMessage(scheduledTestChannel, scheduledTestProducer, "future-payload", "test/content-type", futureDispatchTime, data.HeadersMap{})
+		assert.Nil(t, err)
+		assert.NotNil(t, futureMessage)
+
+		err = msgRepo.Create(futureMessage)
+		assert.Nil(t, err)
+
+		// Claim messages ready for dispatch
+		claimedMessages, err := msgRepo.GetAndClaimMessagesForDispatch(10)
+		if err != nil && (err.Error() == "near \"FOR\": syntax error" || err.Error() == "syntax error") {
+			t.Skip("Test requires MySQL - FOR UPDATE SKIP LOCKED not supported by SQLite")
+		}
+		assert.Nil(t, err)
+		assert.GreaterOrEqual(t, len(claimedMessages), 1)
+
+		// Verify the past message was claimed
+		found := false
+		for _, msg := range claimedMessages {
+			if msg.ID.String() == pastMessage.ID.String() {
+				found = true
+				// Verify status was updated to DISPATCHED
+				assert.Equal(t, data.ScheduledMsgStatusDispatched, msg.Status)
+				assert.False(t, msg.DispatchedAt.IsZero())
+				// Verify relationships were loaded
+				assert.NotNil(t, msg.ProducedBy)
+				assert.NotNil(t, msg.BroadcastedTo)
+				break
+			}
+		}
+		assert.True(t, found, "Past message should be in claimed messages")
+
+		// Verify status was persisted to DB
+		retrievedMsg, err := msgRepo.GetByID(pastMessage.ID.String())
+		assert.Nil(t, err)
+		assert.Equal(t, data.ScheduledMsgStatusDispatched, retrievedMsg.Status)
+		assert.False(t, retrievedMsg.DispatchedAt.IsZero())
+
+		// Cleanup
+		_, err = executeUpdateQuery(testDB, "DELETE FROM scheduled_message WHERE id IN (?, ?)",
+			[]interface{}{pastMessage.ID, futureMessage.ID})
+		assert.Nil(t, err)
+	})
+
+	t.Run("ConcurrentClaimsGetDisjointRows", func(t *testing.T) {
+		msgRepo := getScheduledMessageRepository()
+
+		var messageIDs []interface{}
+
+		// Create 10 messages scheduled in the past
+		for i := 0; i < 10; i++ {
+			pastDispatchTime := time.Now().Add(time.Duration(-10-i) * time.Minute)
+			pastMessage, err := data.NewScheduledMessage(scheduledTestChannel, scheduledTestProducer, "past-payload", "test/content-type", pastDispatchTime, data.HeadersMap{})
+			assert.Nil(t, err)
+			assert.NotNil(t, pastMessage)
+
+			// Force the dispatch schedule to be in the past
+			pastMessage.DispatchSchedule = pastDispatchTime
+			err = msgRepo.Create(pastMessage)
+			assert.Nil(t, err)
+
+			messageIDs = append(messageIDs, pastMessage.ID)
+		}
+
+		// Simulate two concurrent claims (limit 5 each)
+		type claimResult struct {
+			messages []*data.ScheduledMessage
+			err      error
+		}
+
+		results := make(chan claimResult, 2)
+
+		// Launch two concurrent claims
+		go func() {
+			messages, err := msgRepo.GetAndClaimMessagesForDispatch(5)
+			results <- claimResult{messages: messages, err: err}
+		}()
+
+		go func() {
+			messages, err := msgRepo.GetAndClaimMessagesForDispatch(5)
+			results <- claimResult{messages: messages, err: err}
+		}()
+
+		// Collect results
+		result1 := <-results
+		result2 := <-results
+
+		if result1.err != nil && (result1.err.Error() == "near \"FOR\": syntax error" || result1.err.Error() == "syntax error") {
+			t.Skip("Test requires MySQL - FOR UPDATE SKIP LOCKED not supported by SQLite")
+		}
+		if result2.err != nil && (result2.err.Error() == "near \"FOR\": syntax error" || result2.err.Error() == "syntax error") {
+			t.Skip("Test requires MySQL - FOR UPDATE SKIP LOCKED not supported by SQLite")
+		}
+
+		assert.Nil(t, result1.err)
+		assert.Nil(t, result2.err)
+
+		// Verify that between the two calls, we got up to 10 messages
+		totalClaimed := len(result1.messages) + len(result2.messages)
+		assert.GreaterOrEqual(t, totalClaimed, 1)
+		assert.LessOrEqual(t, totalClaimed, 10)
+
+		// Verify no duplicates between the two results
+		claimedIDs := make(map[string]bool)
+		for _, msg := range result1.messages {
+			claimedIDs[msg.ID.String()] = true
+		}
+		for _, msg := range result2.messages {
+			_, exists := claimedIDs[msg.ID.String()]
+			assert.False(t, exists, "Message ID %s claimed by both goroutines - race condition!", msg.ID.String())
+			claimedIDs[msg.ID.String()] = true
+		}
+
+		// Cleanup
+		placeholders := ""
+		for i := range messageIDs {
+			if i > 0 {
+				placeholders += ", "
+			}
+			placeholders += "?"
+		}
+		_, err := executeUpdateQuery(testDB, "DELETE FROM scheduled_message WHERE id IN ("+placeholders+")", messageIDs)
+		assert.Nil(t, err)
+	})
+
+	t.Run("EmptyResult", func(t *testing.T) {
+		msgRepo := getScheduledMessageRepository()
+
+		// Claim when no messages are ready
+		claimedMessages, err := msgRepo.GetAndClaimMessagesForDispatch(10)
+		if err != nil && (err.Error() == "near \"FOR\": syntax error" || err.Error() == "syntax error") {
+			t.Skip("Test requires MySQL - FOR UPDATE SKIP LOCKED not supported by SQLite")
+		}
+		assert.Nil(t, err)
+		// We may have messages from other tests, but this shouldn't error
+		assert.NotNil(t, claimedMessages)
+	})
+
+	t.Run("LimitRespected", func(t *testing.T) {
+		msgRepo := getScheduledMessageRepository()
+
+		var messageIDs []interface{}
+
+		// Create 5 messages scheduled in the past
+		for i := 0; i < 5; i++ {
+			pastDispatchTime := time.Now().Add(time.Duration(-5-i) * time.Minute)
+			pastMessage, err := data.NewScheduledMessage(scheduledTestChannel, scheduledTestProducer, "past-payload", "test/content-type", pastDispatchTime, data.HeadersMap{})
+			assert.Nil(t, err)
+			assert.NotNil(t, pastMessage)
+
+			// Force the dispatch schedule to be in the past
+			pastMessage.DispatchSchedule = pastDispatchTime
+			err = msgRepo.Create(pastMessage)
+			assert.Nil(t, err)
+
+			messageIDs = append(messageIDs, pastMessage.ID)
+		}
+
+		// Claim with limit of 3
+		claimedMessages, err := msgRepo.GetAndClaimMessagesForDispatch(3)
+		if err != nil && (err.Error() == "near \"FOR\": syntax error" || err.Error() == "syntax error") {
+			t.Skip("Test requires MySQL - FOR UPDATE SKIP LOCKED not supported by SQLite")
+		}
+		assert.Nil(t, err)
+		assert.LessOrEqual(t, len(claimedMessages), 3)
+
+		// Cleanup
+		placeholders := ""
+		for i := range messageIDs {
+			if i > 0 {
+				placeholders += ", "
+			}
+			placeholders += "?"
+		}
+		_, err = executeUpdateQuery(testDB, "DELETE FROM scheduled_message WHERE id IN ("+placeholders+")", messageIDs)
+		assert.Nil(t, err)
+	})
+
+	t.Run("OnlyClaimsScheduledStatus", func(t *testing.T) {
+		msgRepo := getScheduledMessageRepository()
+
+		// Create a message and mark it as dispatched
+		pastDispatchTime := time.Now().Add(-5 * time.Minute)
+		dispatchedMessage, err := data.NewScheduledMessage(scheduledTestChannel, scheduledTestProducer, "dispatched-payload", "test/content-type", pastDispatchTime, data.HeadersMap{})
+		assert.Nil(t, err)
+		assert.NotNil(t, dispatchedMessage)
+
+		dispatchedMessage.DispatchSchedule = pastDispatchTime
+		err = msgRepo.Create(dispatchedMessage)
+		assert.Nil(t, err)
+
+		dispatchedMessage.Status = data.ScheduledMsgStatusDispatched
+		dispatchedMessage.DispatchedAt = time.Now()
+		err = msgRepo.MarkDispatched(dispatchedMessage)
+		assert.Nil(t, err)
+
+		// Create a scheduled message
+		scheduledMessage, err := data.NewScheduledMessage(scheduledTestChannel, scheduledTestProducer, "scheduled-payload", "test/content-type", pastDispatchTime, data.HeadersMap{})
+		assert.Nil(t, err)
+		assert.NotNil(t, scheduledMessage)
+
+		scheduledMessage.DispatchSchedule = pastDispatchTime
+		err = msgRepo.Create(scheduledMessage)
+		assert.Nil(t, err)
+
+		// Claim messages
+		claimedMessages, err := msgRepo.GetAndClaimMessagesForDispatch(10)
+		if err != nil && (err.Error() == "near \"FOR\": syntax error" || err.Error() == "syntax error") {
+			t.Skip("Test requires MySQL - FOR UPDATE SKIP LOCKED not supported by SQLite")
+		}
+		assert.Nil(t, err)
+
+		// Verify the dispatched message is NOT in the claimed messages
+		for _, msg := range claimedMessages {
+			assert.NotEqual(t, dispatchedMessage.ID.String(), msg.ID.String(), "Already dispatched message should not be claimed")
+		}
+
+		// Cleanup
+		_, err = executeUpdateQuery(testDB, "DELETE FROM scheduled_message WHERE id IN (?, ?)",
+			[]interface{}{dispatchedMessage.ID, scheduledMessage.ID})
+		assert.Nil(t, err)
+	})
+}

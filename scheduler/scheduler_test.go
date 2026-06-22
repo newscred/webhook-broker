@@ -130,8 +130,8 @@ func TestStartStop(t *testing.T) {
 	}
 	lockRepo := &mocks.LockRepository{}
 
-	// Need to mock the GetMessagesReadyForDispatch method to avoid panic
-	scheduledMsgRepo.On("GetMessagesReadyForDispatch", 10).Return([]*data.ScheduledMessage{})
+	// Need to mock the GetAndClaimMessagesForDispatch method to avoid panic
+	scheduledMsgRepo.On("GetAndClaimMessagesForDispatch", 10).Return([]*data.ScheduledMessage{}, nil)
 
 	scheduler := NewMessageScheduler(&SchedulerConfiguration{
 		ScheduledMsgRepo: scheduledMsgRepo,
@@ -147,7 +147,7 @@ func TestStartStop(t *testing.T) {
 	scheduler.Stop()
 
 	// Assert - If it didn't hang, the test passes
-	scheduledMsgRepo.AssertCalled(t, "GetMessagesReadyForDispatch", 10)
+	scheduledMsgRepo.AssertCalled(t, "GetAndClaimMessagesForDispatch", 10)
 }
 
 func createTestScheduledMessage(t *testing.T) *data.ScheduledMessage {
@@ -179,9 +179,12 @@ func TestProcessScheduledMessages(t *testing.T) {
 
 	// Create test objects
 	scheduledMsg := createTestScheduledMessage(t)
+	// Mark as already dispatched (since GetAndClaimMessagesForDispatch does this)
+	scheduledMsg.Status = data.ScheduledMsgStatusDispatched
+	scheduledMsg.DispatchedAt = time.Now()
 
 	// Set up expectations
-	scheduledMsgRepo.On("GetMessagesReadyForDispatch", 10).Return([]*data.ScheduledMessage{scheduledMsg})
+	scheduledMsgRepo.On("GetAndClaimMessagesForDispatch", 10).Return([]*data.ScheduledMessage{scheduledMsg}, nil)
 
 	// For locking
 	lockRepo.On("TryLock", mock.Anything).Return(nil)
@@ -192,10 +195,7 @@ func TestProcessScheduledMessages(t *testing.T) {
 		return msg.MessageID == "test-message-id"
 	})).Return(nil)
 
-	scheduledMsgRepo.On("MarkDispatched", mock.MatchedBy(func(msg *data.ScheduledMessage) bool {
-		return msg.MessageID == "test-message-id" &&
-			msg.Status == data.ScheduledMsgStatusDispatched
-	})).Return(nil)
+	// No need to mock MarkDispatched since GetAndClaimMessagesForDispatch already handles it
 
 	// Add synchronization to ensure we can verify the call was made
 	wg := sync.WaitGroup{}
@@ -240,7 +240,7 @@ func TestProcessScheduledMessages(t *testing.T) {
 
 	// Assert
 	msgRepo.AssertCalled(t, "Create", mock.Anything)
-	scheduledMsgRepo.AssertCalled(t, "MarkDispatched", mock.Anything)
+	// No longer calling MarkDispatched since GetAndClaimMessagesForDispatch handles it
 	dispatcherSvc.AssertCalled(t, "Dispatch", mock.Anything)
 }
 
@@ -258,15 +258,18 @@ func TestRaceConditionHandling(t *testing.T) {
 
 	// Create test objects
 	scheduledMsg := createTestScheduledMessage(t)
+	// Mark as already dispatched (since GetAndClaimMessagesForDispatch does this)
+	scheduledMsg.Status = data.ScheduledMsgStatusDispatched
+	scheduledMsg.DispatchedAt = time.Now()
 
 	// Set up expectations
-	scheduledMsgRepo.On("GetMessagesReadyForDispatch", 10).Return([]*data.ScheduledMessage{scheduledMsg})
+	scheduledMsgRepo.On("GetAndClaimMessagesForDispatch", 10).Return([]*data.ScheduledMessage{scheduledMsg}, nil)
 
 	// For locking
 	lockRepo.On("TryLock", mock.Anything).Return(nil)
 	lockRepo.On("ReleaseLock", mock.Anything).Return(nil)
 
-	// Simulate duplicate message ID error
+	// Simulate duplicate message ID error (defense-in-depth scenario)
 	msgRepo.On("Create", mock.MatchedBy(func(msg *data.Message) bool {
 		return msg.MessageID == "test-message-id"
 	})).Return(storage.ErrDuplicateMessageIDForChannel)
@@ -312,9 +315,12 @@ func TestErrorHandling(t *testing.T) {
 
 	// Create test objects
 	scheduledMsg := createTestScheduledMessage(t)
+	// Mark as already dispatched (since GetAndClaimMessagesForDispatch does this)
+	scheduledMsg.Status = data.ScheduledMsgStatusDispatched
+	scheduledMsg.DispatchedAt = time.Now()
 
 	// Set up expectations
-	scheduledMsgRepo.On("GetMessagesReadyForDispatch", 10).Return([]*data.ScheduledMessage{scheduledMsg})
+	scheduledMsgRepo.On("GetAndClaimMessagesForDispatch", 10).Return([]*data.ScheduledMessage{scheduledMsg}, nil)
 
 	// For locking
 	lockRepo.On("TryLock", mock.Anything).Return(nil)
@@ -344,8 +350,7 @@ func TestErrorHandling(t *testing.T) {
 	// Assert
 	msgRepo.AssertCalled(t, "Create", mock.Anything)
 
-	// These should not be called due to error
-	scheduledMsgRepo.AssertNotCalled(t, "MarkDispatched", mock.Anything)
+	// Dispatch should not be called due to error
 	dispatcherSvc.AssertNotCalled(t, "Dispatch", mock.Anything)
 
 	// Metrics should have recorded an error
