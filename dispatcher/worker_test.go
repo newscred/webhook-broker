@@ -143,9 +143,30 @@ func TestCallConsumer(t *testing.T) {
 			assert.Equal(t, configuration.GetUserAgent(), r.Header.Get(headerUserAgent))
 			assert.NotNil(t, r.Header.Get(headerRequestID))
 			assert.Equal(t, job.Message.MessageID, r.Header.Get(headerMessageID))
+			assert.Equal(t, strconv.Itoa(int(job.RetryAttemptCount)), r.Header.Get(headerRetryAttempt))
 			rw.WriteHeader(http.StatusNoContent)
 		}
 		err := callConsumer(&worker, "test-request", log.Logger, NewJob(job))
+		assert.Nil(t, err)
+	})
+	t.Run("RetryAttemptHeader", func(t *testing.T) {
+		t.Cleanup(clearConsumerHandler)
+		// Test with retry count 0 (first attempt)
+		job.RetryAttemptCount = 0
+		consumerHandler[strings.ReplaceAll(consumers[0].ConsumerID, consumerIDPrefix, "consumer-")] = func(s string, rw http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "0", r.Header.Get(headerRetryAttempt))
+			rw.WriteHeader(http.StatusNoContent)
+		}
+		err := callConsumer(&worker, "test-request", log.Logger, NewJob(job))
+		assert.Nil(t, err)
+		
+		// Test with retry count 3 (fourth attempt)
+		job.RetryAttemptCount = 3
+		consumerHandler[strings.ReplaceAll(consumers[0].ConsumerID, consumerIDPrefix, "consumer-")] = func(s string, rw http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "3", r.Header.Get(headerRetryAttempt))
+			rw.WriteHeader(http.StatusNoContent)
+		}
+		err = callConsumer(&worker, "test-request", log.Logger, NewJob(job))
 		assert.Nil(t, err)
 	})
 }
