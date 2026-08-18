@@ -48,6 +48,13 @@ func (cont *StatusController) FormatAsRelativeLink(params ...httprouter.Param) s
 }
 
 // Get is the GET /_status endpoint controller
+// @Summary Get Application Status
+// @Description Retrieves the current status of the Webhook Broker application, including seed data and application state.
+// @Tags Status
+// @Produce json
+// @Success 200 {object} AppData
+// @Failure 500
+// @Router /_status [get]
 func (cont *StatusController) Get(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	app, err := cont.appRepository.GetApp()
 	if err != nil {
@@ -80,6 +87,13 @@ func (cont *JobStatusController) FormatAsRelativeLink(params ...httprouter.Param
 }
 
 // Get is the GET /job-status endpoint controller
+// @Summary Get Job Status Counts
+// @Description Retrieves job status counts grouped by consumer.
+// @Tags Status
+// @Produce json
+// @Success 200
+// @Failure 500
+// @Router /job-status [get]
 func (cont *JobStatusController) Get(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	status, err := cont.DeliveryJobRepo.GetJobStatusCountsGroupedByConsumer()
 	if err != nil {

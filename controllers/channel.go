@@ -33,6 +33,15 @@ type ChannelModel struct {
 }
 
 // Get implements the /channel/:prodId GET endpoint
+// @Summary Get Channel Details
+// @Description Retrieves details for a specific channel.
+// @Tags Channels
+// @Produce json
+// @Param channelId path string true "Channel ID"
+// @Success 200 {object} ChannelModel
+// @Failure 404
+// @Failure 500
+// @Router /channel/{channelId} [get]
 func (channelController *ChannelController) Get(w http.ResponseWriter, r *http.Request, param httprouter.Params) {
 	channelID := param.ByName(channelIDPathParamKey)
 	channelModel, err := channelController.ChannelRepo.Get(channelID)
@@ -40,6 +49,21 @@ func (channelController *ChannelController) Get(w http.ResponseWriter, r *http.R
 }
 
 // Put implements the /channel/:prodId PUT endpoint
+// @Summary Update Channel
+// @Description Updates a channel's name and/or token.
+// @Tags Channels
+// @Accept x-www-form-urlencoded
+// @Produce json
+// @Param channelId path string true "Channel ID"
+// @Param If-Unmodified-Since header string false "Only update if the resource has not been modified since this timestamp"
+// @Param token formData string false "Token"
+// @Param name formData string false "Name"
+// @Success 200 {object} ChannelModel
+// @Failure 400
+// @Failure 412
+// @Failure 415
+// @Failure 500
+// @Router /channel/{channelId} [put]
 func (channelController *ChannelController) Put(w http.ResponseWriter, r *http.Request, param httprouter.Params) {
 	validRequest := checkFormContentType(r, w)
 	channelID := param.ByName(channelIDPathParamKey)
@@ -83,6 +107,13 @@ type ChannelsController struct {
 }
 
 // Get implements the /channels endpoint
+// @Summary List All Channels
+// @Description Retrieves a paginated list of all channels.
+// @Tags Channels
+// @Produce json
+// @Success 200 {object} ListResult
+// @Failure 500
+// @Router /channels [get]
 func (channelsController *ChannelsController) Get(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	channels, resultPagination, err := channelsController.ChannelRepo.GetList(getPagination(r))
 	if err != nil {

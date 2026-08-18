@@ -15,6 +15,12 @@ const (
 	scheduledStatusParam  = "status"
 )
 
+// ScheduledMessagesListResponse represents the paginated response for listing scheduled messages
+type ScheduledMessagesListResponse struct {
+	Result []string          `json:"result"`
+	Pages  map[string]string `json:"pages"`
+}
+
 // ScheduledMessagesController handles listing scheduled messages for a channel
 type ScheduledMessagesController struct {
 	ScheduledMessageRepository storage.ScheduledMessageRepository
@@ -27,6 +33,18 @@ func NewScheduledMessagesController(scheduledMsgRepo storage.ScheduledMessageRep
 }
 
 // Get retrieves scheduled messages for a channel with optional filtering
+// @Summary List Scheduled Messages for a Channel
+// @Description Retrieves a paginated list of scheduled messages for a channel with optional status filtering.
+// @Tags Scheduled Messages
+// @Produce json
+// @Param channelId path string true "Channel ID"
+// @Param status query int false "Filter by scheduled message status"
+// @Param previous query string false "Pagination cursor for previous page"
+// @Param next query string false "Pagination cursor for next page"
+// @Success 200 {object} ScheduledMessagesListResponse
+// @Failure 404
+// @Failure 500
+// @Router /channel/{channelId}/scheduled-messages [get]
 func (controller *ScheduledMessagesController) Get(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 	logger := hlog.FromRequest(r)
 	channelID := params.ByName(channelIDPathParamKey)
@@ -66,9 +84,9 @@ func (controller *ScheduledMessagesController) Get(w http.ResponseWriter, r *htt
 		resultURIs = append(resultURIs, "/channel/"+channelID+"/scheduled-message/"+msg.MessageID)
 	}
 
-	responseData := map[string]interface{}{
-		"result": resultURIs,
-		"pages":  getPaginationLinks(r, resultPagination),
+	responseData := ScheduledMessagesListResponse{
+		Result: resultURIs,
+		Pages:  getPaginationLinks(r, resultPagination),
 	}
 
 	writeJSON(w, responseData)
