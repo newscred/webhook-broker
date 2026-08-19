@@ -79,6 +79,7 @@ type DeliveryJobRepository interface {
 	MarkDeadJobAsInflight(deliveryJob *data.DeliveryJob) error
 	RequeueDeadJobsForConsumer(consumer *data.Consumer) (int64, error)
 	GetJobsForMessage(message *data.Message, page *data.Pagination) ([]*data.DeliveryJob, *data.Pagination, error)
+	GetJobsForMessages(messageIDs []string) (map[string][]*data.DeliveryJob, error)
 	GetJobsForConsumer(consumer *data.Consumer, jobStatus data.JobStatus, page *data.Pagination) ([]*data.DeliveryJob, *data.Pagination, error)
 	GetPrioritizedJobsForConsumer(consumer *data.Consumer, jobStatus data.JobStatus, pageSize int) ([]*data.DeliveryJob, error)
 	GetByID(id string) (*data.DeliveryJob, error)

@@ -283,6 +283,36 @@ func (_m *DeliveryJobRepository) GetJobsForMessage(message *data.Message, page *
 	return r0, r1, r2
 }
 
+// GetJobsForMessages provides a mock function with given fields: messageIDs
+func (_m *DeliveryJobRepository) GetJobsForMessages(messageIDs []string) (map[string][]*data.DeliveryJob, error) {
+	ret := _m.Called(messageIDs)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetJobsForMessages")
+	}
+
+	var r0 map[string][]*data.DeliveryJob
+	var r1 error
+	if rf, ok := ret.Get(0).(func([]string) (map[string][]*data.DeliveryJob, error)); ok {
+		return rf(messageIDs)
+	}
+	if rf, ok := ret.Get(0).(func([]string) map[string][]*data.DeliveryJob); ok {
+		r0 = rf(messageIDs)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(map[string][]*data.DeliveryJob)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func([]string) error); ok {
+		r1 = rf(messageIDs)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // GetJobsInflightSince provides a mock function with given fields: delta
 func (_m *DeliveryJobRepository) GetJobsInflightSince(delta time.Duration) []*data.DeliveryJob {
 	ret := _m.Called(delta)

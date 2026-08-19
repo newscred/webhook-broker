@@ -115,25 +115,8 @@ var (
 		return nil
 	}
 
-	getJobs = func(dataAccessor storage.DataAccessor, message *data.Message) ([]*data.DeliveryJob, error) {
-		jobs := make([]*data.DeliveryJob, 0, 100)
-		page := data.NewPagination(nil, nil)
-		more := true
-		var err error
-		for more {
-			var jobsPage []*data.DeliveryJob
-			jobsPage, page, err = dataAccessor.GetDeliveryJobRepository().GetJobsForMessage(message, page)
-			if err != nil {
-				err = fmt.Errorf("failed to get jobs for message %d: %w", message.ID, err)
-				more = false
-			} else if len(jobsPage) > 0 {
-				jobs = append(jobs, jobsPage...)
-				page.Previous = nil
-			} else {
-				more = false
-			}
-		}
-		return jobs, err
+	getJobsForMessages = func(dataAccessor storage.DataAccessor, messageIDs []string) (map[string][]*data.DeliveryJob, error) {
+		return dataAccessor.GetDeliveryJobRepository().GetJobsForMessages(messageIDs)
 	}
 )
 
@@ -172,16 +155,25 @@ func PruneMessages(dataAccessor storage.DataAccessor, config config.MessagePruni
 			continue
 		}
 		log.Debug().Msg("Loading jobs to archive")
-		// Get jobs for each message and write to JSON stream
+		// Batch-load jobs for the whole message page in a few IN() queries instead of one query
+		// per message, then attach the parent message so the archived payload is unchanged.
+		messageIDs := make([]string, len(messages))
+		for i, message := range messages {
+			messageIDs[i] = message.ID.String()
+		}
+		jobsByMessage, jobErr := getJobsForMessages(dataAccessor, messageIDs)
+		if jobErr != nil {
+			log.Error().Err(jobErr).Msg("failed to batch-load jobs for messages to archive")
+			err = jobErr
+			break
+		}
+		// Write each message and its jobs to JSON stream
 		for _, message := range messages {
-			jobs, jobErr := getJobs(dataAccessor, message)
-			log.Info().Msgf("Archiving message %s with %d jobs, err: %v", message.ID, len(jobs), jobErr)
-			if jobErr != nil {
-				log.Error().Err(jobErr).Msgf("failed to get jobs for message %d", message.ID)
-				err = jobErr
-				moreMessages = false
-				break
+			jobs := jobsByMessage[message.ID.String()]
+			for _, job := range jobs {
+				job.Message = message
 			}
+			log.Info().Msgf("Archiving message %s with %d jobs", message.ID, len(jobs))
 			if archiveErr := archiveMessage(message, jobs, archiveDirector); archiveErr != nil {
 				err = fmt.Errorf("failed to archive message %s: %w", message.ID, archiveErr)
 				log.Error().Err(err)

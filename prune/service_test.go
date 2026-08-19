@@ -113,10 +113,10 @@ func TestPruneMessages(t *testing.T) {
 		assert.Len(t, msgs, 1)
 	})
 	t.Run("JobQueryError", func(t *testing.T) {
-		originalGetJobs := getJobs
-		defer func() { getJobs = originalGetJobs }()
-		getJobs = func(dataAccessor storage.DataAccessor, message *data.Message) ([]*data.DeliveryJob, error) {
-			log.Info().Msgf("Getting MOCK jobs for message %s", message.ID)
+		originalGetJobs := getJobsForMessages
+		defer func() { getJobsForMessages = originalGetJobs }()
+		getJobsForMessages = func(dataAccessor storage.DataAccessor, messageIDs []string) (map[string][]*data.DeliveryJob, error) {
+			log.Info().Msgf("Getting MOCK jobs for %d messages", len(messageIDs))
 			return nil, assert.AnError
 		}
 		err := PruneMessages(dataAccessor, getMockedPruneConfig(t))
