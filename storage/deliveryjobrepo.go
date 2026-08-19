@@ -232,6 +232,51 @@ func (djRepo *DeliveryJobDBRepository) GetJobsForMessage(message *data.Message, 
 	return djRepo.getJobs(baseQuery, message, nil, appendWithPaginationArgs(page, message.ID.String()))
 }
 
+// getJobsForMessagesChunkSize bounds the number of message ids per IN() query so a single
+// statement stays within driver placeholder/packet limits while collapsing what used to be
+// one query per message into a handful of queries per prune batch.
+const getJobsForMessagesChunkSize = 500
+
+// GetJobsForMessages retrieves all delivery jobs for the given message ids grouped by message id,
+// issuing at most one query per getJobsForMessagesChunkSize ids. It exists for batch workloads
+// such as pruning where GetJobsForMessage's one-query-per-message cost dominates runtime. The
+// returned jobs have Listener populated; Message carries only its ID so callers that already hold
+// the parent message can attach it without an extra lookup.
+// Generated with assistance from Claude AI
+func (djRepo *DeliveryJobDBRepository) GetJobsForMessages(messageIDs []string) (map[string][]*data.DeliveryJob, error) {
+	jobsByMessage := make(map[string][]*data.DeliveryJob, len(messageIDs))
+	if len(messageIDs) == 0 {
+		return jobsByMessage, nil
+	}
+	for start := 0; start < len(messageIDs); start += getJobsForMessagesChunkSize {
+		end := min(start+getJobsForMessagesChunkSize, len(messageIDs))
+		chunk := messageIDs[start:end]
+		query := jobCommonSelectQuery + " messageId IN (" + placeholders(len(chunk)) + ")"
+		args := make([]interface{}, len(chunk))
+		for i, id := range chunk {
+			args[i] = id
+		}
+		chunkJobs := make([]*data.DeliveryJob, 0, len(chunk))
+		scanArgs := func() []interface{} {
+			job := &data.DeliveryJob{}
+			job.Message = &data.Message{}
+			job.Listener = &data.Consumer{}
+			chunkJobs = append(chunkJobs, job)
+			return []interface{}{&job.ID, &job.Message.ID, &job.Listener.ID, &job.Status, &job.DispatchReceivedAt, &job.RetryAttemptCount, &job.StatusChangedAt, &job.EarliestNextAttemptAt, &job.CreatedAt, &job.UpdatedAt, &job.Priority, &job.IncrementalTimeout}
+		}
+		if err := queryRows(djRepo.db, query, args2SliceFnWrapper(args...), scanArgs); err != nil {
+			log.Error().Err(err).Msg("error - could not batch list jobs for messages")
+			return nil, err
+		}
+		for _, job := range chunkJobs {
+			job.Listener, _ = djRepo.consumerRepository.GetByID(job.Listener.ID.String())
+			msgID := job.Message.ID.String()
+			jobsByMessage[msgID] = append(jobsByMessage[msgID], job)
+		}
+	}
+	return jobsByMessage, nil
+}
+
 // RequeueDeadJobsForConsumer queues up dead jobs for a specific consumer; returns rows affected
 func (djRepo *DeliveryJobDBRepository) RequeueDeadJobsForConsumer(consumer *data.Consumer) (int64, error) {
 	currentTime := time.Now()
