@@ -241,7 +241,8 @@ const getJobsForMessagesChunkSize = 500
 // issuing at most one query per getJobsForMessagesChunkSize ids. It exists for batch workloads
 // such as pruning where GetJobsForMessage's one-query-per-message cost dominates runtime. The
 // returned jobs have Listener populated; Message carries only its ID so callers that already hold
-// the parent message can attach it without an extra lookup.
+// the parent message can attach it without an extra lookup. The result holds every job for the
+// whole id set at once, so peak memory is bounded by len(messageIDs) * consumers-per-channel.
 // Generated with assistance from Claude AI
 func (djRepo *DeliveryJobDBRepository) GetJobsForMessages(messageIDs []string) (map[string][]*data.DeliveryJob, error) {
 	jobsByMessage := make(map[string][]*data.DeliveryJob, len(messageIDs))
@@ -269,7 +270,14 @@ func (djRepo *DeliveryJobDBRepository) GetJobsForMessages(messageIDs []string) (
 			return nil, err
 		}
 		for _, job := range chunkJobs {
-			job.Listener, _ = djRepo.consumerRepository.GetByID(job.Listener.ID.String())
+			listener, listenerErr := djRepo.consumerRepository.GetByID(job.Listener.ID.String())
+			if listenerErr != nil {
+				// Prune archives before it deletes; a missing listener here means the job would be
+				// archived with a null consumer and then removed, so surface it rather than swallow.
+				log.Error().Err(listenerErr).Str("jobId", job.ID.String()).Str("consumerId", job.Listener.ID.String()).Msg("error - could not load listener for job while batch listing jobs for messages")
+			} else {
+				job.Listener = listener
+			}
 			msgID := job.Message.ID.String()
 			jobsByMessage[msgID] = append(jobsByMessage[msgID], job)
 		}

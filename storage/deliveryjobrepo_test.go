@@ -191,6 +191,97 @@ func TestDispatchMessage(t *testing.T) {
 	})
 }
 
+func TestGetJobsForMessages(t *testing.T) {
+	// Isolated channel/consumers so this test's extra jobs don't perturb the exact
+	// package-wide counts asserted by TestGetJobStatusCountsGroupedByConsumer.
+	const batchConsumerIDPrefix = "batch-jobs-consumer-"
+	const batchConsumerCount = 3
+	djRepo := getDeliverJobRepository()
+	msgRepo := getMessageRepository()
+	channelRepo := NewChannelRepository(testDB)
+	batchChannel, err := data.NewChannel("batch-jobs-test-channel", successfulGetTestToken)
+	assert.Nil(t, err)
+	batchChannel, err = channelRepo.Store(batchChannel)
+	assert.Nil(t, err)
+	batchConsumers := SetupForDeliveryJobTestsWithOptions(&DeliveryJobSetupOptions{
+		ConsumerCount:    batchConsumerCount,
+		ConsumerIDPrefix: batchConsumerIDPrefix,
+		ConsumerRepo:     getConsumerRepo(),
+		ConsumerChannel:  batchChannel,
+	})
+	// Remove every message/job this test creates so the package-wide job counts other
+	// tests assert on (TestGetJobStatusCountsGroupedByConsumer) are left untouched.
+	createdMessages := make([]*data.Message, 0)
+	t.Cleanup(func() {
+		for _, message := range createdMessages {
+			assert.Nil(t, djRepo.DeleteJobsForMessage(message))
+			assert.Nil(t, msgRepo.DeleteMessage(message))
+		}
+	})
+	dispatchMessageWithJobs := func() *data.Message {
+		message, msgErr := data.NewMessage(batchChannel, producer1, samplePayload, sampleContentType, data.HeadersMap{})
+		assert.Nil(t, msgErr)
+		assert.Nil(t, msgRepo.Create(message))
+		jobs := make([]*data.DeliveryJob, 0, len(batchConsumers))
+		for _, consumer := range batchConsumers {
+			job, _ := data.NewDeliveryJob(message, consumer)
+			jobs = append(jobs, job)
+		}
+		assert.Nil(t, dispatchJobs(djRepo, message, jobs))
+		createdMessages = append(createdMessages, message)
+		return message
+	}
+	assertGrouped := func(t *testing.T, jobsByMessage map[string][]*data.DeliveryJob, message *data.Message) {
+		jobs, ok := jobsByMessage[message.ID.String()]
+		assert.True(t, ok)
+		assert.Equal(t, batchConsumerCount, len(jobs))
+		for _, job := range jobs {
+			assert.Equal(t, message.ID, job.Message.ID)
+			assert.NotNil(t, job.Listener)
+			assert.Contains(t, job.Listener.ConsumerID, batchConsumerIDPrefix)
+		}
+	}
+	t.Run("Empty", func(t *testing.T) {
+		t.Parallel()
+		jobsByMessage, err := djRepo.GetJobsForMessages([]string{})
+		assert.Nil(t, err)
+		assert.Equal(t, 0, len(jobsByMessage))
+	})
+	t.Run("UnknownIDs", func(t *testing.T) {
+		t.Parallel()
+		jobsByMessage, err := djRepo.GetJobsForMessages([]string{xid.New().String(), xid.New().String()})
+		assert.Nil(t, err)
+		assert.Equal(t, 0, len(jobsByMessage))
+	})
+	t.Run("GroupsByMessage", func(t *testing.T) {
+		message1 := dispatchMessageWithJobs()
+		message2 := dispatchMessageWithJobs()
+		jobsByMessage, err := djRepo.GetJobsForMessages([]string{message1.ID.String(), message2.ID.String(), xid.New().String()})
+		assert.Nil(t, err)
+		assert.Equal(t, 2, len(jobsByMessage))
+		assertGrouped(t, jobsByMessage, message1)
+		assertGrouped(t, jobsByMessage, message2)
+	})
+	t.Run("SpansChunkBoundary", func(t *testing.T) {
+		// Place two real messages on opposite sides of the getJobsForMessagesChunkSize
+		// boundary so both chunk iterations are exercised; padding ids resolve to no rows.
+		message1 := dispatchMessageWithJobs()
+		message2 := dispatchMessageWithJobs()
+		messageIDs := make([]string, 0, getJobsForMessagesChunkSize+2)
+		messageIDs = append(messageIDs, message1.ID.String())
+		for len(messageIDs) < getJobsForMessagesChunkSize {
+			messageIDs = append(messageIDs, xid.New().String())
+		}
+		messageIDs = append(messageIDs, message2.ID.String())
+		assert.Greater(t, len(messageIDs), getJobsForMessagesChunkSize)
+		jobsByMessage, err := djRepo.GetJobsForMessages(messageIDs)
+		assert.Nil(t, err)
+		assert.Equal(t, 2, len(jobsByMessage))
+		assertGrouped(t, jobsByMessage, message1)
+		assertGrouped(t, jobsByMessage, message2)
+	})
+}
+
 func TestStatusUpdatesForJob(t *testing.T) {
 	djRepo := getDeliverJobRepository()
 	msgRepo := getMessageRepository()
