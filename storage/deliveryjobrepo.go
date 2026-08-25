@@ -234,8 +234,12 @@ func (djRepo *DeliveryJobDBRepository) GetJobsForMessage(message *data.Message, 
 
 // getJobsForMessagesChunkSize bounds the number of message ids per IN() query so a single
 // statement stays within driver placeholder/packet limits while collapsing what used to be
-// one query per message into a handful of queries per prune batch.
-const getJobsForMessagesChunkSize = 500
+// one query per message into a handful of queries per prune batch. It is kept at MySQL's
+// default eq_range_index_dive_limit (200): at or below it the optimizer dives the index per
+// value and estimates rows accurately, so it reliably picks the jobs_by_message index; above
+// it the optimizer falls back to index statistics and could mis-plan. The cost of the smaller
+// chunk is only a few extra round-trips per page, negligible against the ~2000 this removes.
+const getJobsForMessagesChunkSize = 200
 
 // GetJobsForMessages retrieves all delivery jobs for the given message ids grouped by message id,
 // issuing at most one query per getJobsForMessagesChunkSize ids. It exists for batch workloads
