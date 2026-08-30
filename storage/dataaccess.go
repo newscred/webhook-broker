@@ -115,6 +115,7 @@ type ScheduledMessageRepository interface {
 	GetByID(id string) (*data.ScheduledMessage, error)
 	MarkDispatched(message *data.ScheduledMessage) error
 	GetMessagesReadyForDispatch(limit int) []*data.ScheduledMessage
+	GetAndClaimMessagesForDispatch(limit int) ([]*data.ScheduledMessage, error)
 	GetScheduledMessagesForChannel(channelID string, page *data.Pagination, statusFilters ...data.ScheduledMsgStatus) ([]*data.ScheduledMessage, *data.Pagination, error)
 	GetScheduledMessageStatusCountsByChannel(channelID string) ([]*data.StatusCount[data.ScheduledMsgStatus], error)
 	GetNextScheduledMessageTime(channelID string) (*time.Time, error)

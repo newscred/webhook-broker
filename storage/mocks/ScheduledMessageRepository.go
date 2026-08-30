@@ -62,6 +62,36 @@ func (_m *ScheduledMessageRepository) Get(channelID string, messageID string) (*
 	return r0, r1
 }
 
+// GetAndClaimMessagesForDispatch provides a mock function with given fields: limit
+func (_m *ScheduledMessageRepository) GetAndClaimMessagesForDispatch(limit int) ([]*data.ScheduledMessage, error) {
+	ret := _m.Called(limit)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetAndClaimMessagesForDispatch")
+	}
+
+	var r0 []*data.ScheduledMessage
+	var r1 error
+	if rf, ok := ret.Get(0).(func(int) ([]*data.ScheduledMessage, error)); ok {
+		return rf(limit)
+	}
+	if rf, ok := ret.Get(0).(func(int) []*data.ScheduledMessage); ok {
+		r0 = rf(limit)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*data.ScheduledMessage)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(int) error); ok {
+		r1 = rf(limit)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // GetByID provides a mock function with given fields: id
 func (_m *ScheduledMessageRepository) GetByID(id string) (*data.ScheduledMessage, error) {
 	ret := _m.Called(id)
