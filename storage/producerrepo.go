@@ -2,7 +2,6 @@ package storage
 
 import (
 	"database/sql"
-	"sync"
 	"time"
 
 	"github.com/newscred/webhook-broker/storage/data"
@@ -91,7 +90,6 @@ func NewProducerRepository(db *sql.DB) PseudoProducerRepository {
 type CachedProducerRepository struct {
 	delegate ProducerRepository
 	cache    *MemoryCache[string, *data.Producer]
-	mutex    sync.RWMutex
 }
 
 // NewCachedProducerRepository creates a new CachedProducerRepository.
@@ -104,12 +102,9 @@ func NewCachedProducerRepository(delegate PseudoProducerRepository, ttl time.Dur
 
 // Get retrieves a producer by ID, first checking the cache.
 func (repo *CachedProducerRepository) Get(producerID string) (*data.Producer, error) {
-	repo.mutex.RLock()
 	if item, ok := repo.cache.Get(producerID); ok {
-		repo.mutex.RUnlock()
 		return item, nil // Cache hit
 	}
-	repo.mutex.RUnlock()
 
 	// Cache miss; fetch from the underlying repository
 	producer, err := repo.delegate.Get(producerID)
@@ -117,9 +112,7 @@ func (repo *CachedProducerRepository) Get(producerID string) (*data.Producer, er
 		return producer, err
 	}
 
-	repo.mutex.Lock()
 	repo.cache.Set(producerID, producer) // Cache the producer
-	repo.mutex.Unlock()
 
 	return producer, nil
 }
@@ -128,9 +121,7 @@ func (repo *CachedProducerRepository) Get(producerID string) (*data.Producer, er
 func (repo *CachedProducerRepository) Store(producer *data.Producer) (*data.Producer, error) {
 	producer, err := repo.delegate.Store(producer)
 	if err == nil {
-		repo.mutex.Lock()
 		repo.cache.Delete(producer.ProducerID)
-		repo.mutex.Unlock()
 	}
 	return producer, err
 }
