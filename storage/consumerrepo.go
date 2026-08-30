@@ -3,7 +3,6 @@ package storage
 import (
 	"database/sql"
 	"time"
-	"sync"
 
 	"github.com/newscred/webhook-broker/storage/data"
 )
@@ -138,7 +137,6 @@ func NewConsumerRepository(db *sql.DB, channelRepo ChannelRepository) PseudoCons
 type CachedConsumerRepository struct {
 	delegate ConsumerRepository
 	cache    *MemoryCache[string, *data.Consumer]
-	mutex    sync.RWMutex
 }
 
 // NewCachedConsumerRepository creates a new CachedConsumerRepository.
@@ -152,12 +150,9 @@ func NewCachedConsumerRepository(delegate PseudoConsumerRepository, ttl time.Dur
 // Get retrieves a consumer by ID, first checking the cache.
 func (repo *CachedConsumerRepository) Get(channelID string, consumerID string) (*data.Consumer, error) {
 	cacheKey := channelID + ":" + consumerID  // Create a composite key
-	repo.mutex.RLock()
 	if item, ok := repo.cache.Get(cacheKey); ok {
-		repo.mutex.RUnlock()
 		return item, nil // Cache hit
 	}
-	repo.mutex.RUnlock()
 
 	// Cache miss; fetch from the underlying repository
 	consumer, err := repo.delegate.Get(channelID, consumerID)
@@ -165,9 +160,7 @@ func (repo *CachedConsumerRepository) Get(channelID string, consumerID string) (
 		return consumer, err
 	}
 
-	repo.mutex.Lock()
 	repo.cache.Set(cacheKey, consumer) // Cache the consumer
-	repo.mutex.Unlock()
 	return consumer, nil
 }
 
@@ -175,21 +168,16 @@ func (repo *CachedConsumerRepository) Get(channelID string, consumerID string) (
 // GetByID retrieves a consumer by its ID from the cache or underlying repository
 func (repo *CachedConsumerRepository) GetByID(id string) (*data.Consumer, error) {
 
-	repo.mutex.RLock()
 	if item, ok := repo.cache.Get(id); ok {
-		repo.mutex.RUnlock()
 		return item, nil //Cache Hit
 	}
-	repo.mutex.RUnlock()
 
 	consumer, err := repo.delegate.GetByID(id)
 	if err != nil {
 		return nil, err
 	}
 
-	repo.mutex.Lock()
 	repo.cache.Set(id, consumer)
-	repo.mutex.Unlock()
 
 	return consumer, nil
 }
@@ -199,10 +187,8 @@ func (repo *CachedConsumerRepository) GetByID(id string) (*data.Consumer, error)
 func (repo *CachedConsumerRepository) Store(consumer *data.Consumer) (*data.Consumer, error) {
 	consumer, err := repo.delegate.Store(consumer)
 	if err == nil {
-		repo.mutex.Lock()
 		repo.cache.Delete(consumer.GetChannelIDSafely() + ":" + consumer.ConsumerID)
 		repo.cache.Delete(consumer.ID.String())
-		repo.mutex.Unlock()
 	}
 	return consumer, err
 }
@@ -211,10 +197,8 @@ func (repo *CachedConsumerRepository) Store(consumer *data.Consumer) (*data.Cons
 func (repo *CachedConsumerRepository) Delete(consumer *data.Consumer) error {
 	err := repo.delegate.Delete(consumer)
 	if err == nil {
-		repo.mutex.Lock()
 		repo.cache.Delete(consumer.GetChannelIDSafely() + ":" + consumer.ConsumerID)
 		repo.cache.Delete(consumer.ID.String())
-		repo.mutex.Unlock()
 	}
 	return err
 }
