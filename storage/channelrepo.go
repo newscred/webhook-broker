@@ -2,7 +2,6 @@ package storage
 
 import (
 	"database/sql"
-	"sync"
 	"time"
 
 	"github.com/newscred/webhook-broker/storage/data"
@@ -14,7 +13,6 @@ type PseudoChannelRepository ChannelRepository
 type CachedChannelRepository struct {
 	delegate ChannelRepository
 	cache    *MemoryCache[string, *data.Channel]
-	mutex    sync.RWMutex
 }
 
 // NewCachedChannelRepository creates a new CachedChannelRepository.
@@ -27,12 +25,9 @@ func NewCachedChannelRepository(delegate PseudoChannelRepository, ttl time.Durat
 
 // Get retrieves a channel by ID, first checking the cache.
 func (repo *CachedChannelRepository) Get(channelID string) (*data.Channel, error) {
-	repo.mutex.RLock()
 	if item, ok := repo.cache.Get(channelID); ok {
-		repo.mutex.RUnlock()
 		return item, nil // Cache hit
 	}
-	repo.mutex.RUnlock()
 
 	// Cache miss; fetch from the underlying repository
 	channel, err := repo.delegate.Get(channelID)
@@ -40,9 +35,7 @@ func (repo *CachedChannelRepository) Get(channelID string) (*data.Channel, error
 		return channel, err
 	}
 
-	repo.mutex.Lock()
 	repo.cache.Set(channelID, channel) // Cache the channel
-	repo.mutex.Unlock()
 
 	return channel, nil
 }
@@ -52,9 +45,7 @@ func (repo *CachedChannelRepository) Store(channel *data.Channel) (*data.Channel
 
 	channel, err := repo.delegate.Store(channel)
 	if err == nil {
-		repo.mutex.Lock()
 		repo.cache.Delete(channel.ChannelID)
-		repo.mutex.Unlock()
 	}
 	return channel, err
 }
