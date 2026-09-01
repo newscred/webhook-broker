@@ -510,14 +510,25 @@ func TestGetConfigurationFromCLIConfig(t *testing.T) {
 }
 
 func TestMigrationEnabled(t *testing.T) {
-	t.Run("MigrationEnabled", func(t *testing.T) {
+	t.Run("NoSourceNoRunFlag", func(t *testing.T) {
 		t.Parallel()
 		cliConfig := &CLIConfig{}
 		assert.False(t, cliConfig.IsMigrationEnabled())
 	})
-	t.Run("MigrationDisabled", func(t *testing.T) {
+	t.Run("SourceWithoutRunFlag", func(t *testing.T) {
 		t.Parallel()
+		// Migrations are opt-in: a source alone must not enable startup migrations.
 		cliConfig := &CLIConfig{MigrationSource: "file:///test/"}
+		assert.False(t, cliConfig.IsMigrationEnabled())
+	})
+	t.Run("RunFlagWithoutSource", func(t *testing.T) {
+		t.Parallel()
+		cliConfig := &CLIConfig{RunMigration: true}
+		assert.False(t, cliConfig.IsMigrationEnabled())
+	})
+	t.Run("SourceWithRunFlag", func(t *testing.T) {
+		t.Parallel()
+		cliConfig := &CLIConfig{MigrationSource: "file:///test/", RunMigration: true}
 		assert.True(t, cliConfig.IsMigrationEnabled())
 	})
 }

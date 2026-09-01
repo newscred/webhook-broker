@@ -37,4 +37,4 @@ ADD https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /etc/ssl/c
 WORKDIR /
 COPY --from=build-env /go/src/github.com/newscred/webhook-broker/webhook-broker /webhook-broker
 COPY --from=build-env /go/src/github.com/newscred/webhook-broker/migration /migration
-CMD [ "webhook-broker", "-migrate", "/migration/sqls/" ]
+CMD [ "webhook-broker", "-migrate", "/migration/sqls/", "-run-migration" ]

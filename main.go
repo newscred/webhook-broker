@@ -78,6 +78,7 @@ var (
 		commandString := flags.String("command", string(config.BrokerCMD), "What operation this process is supposed to do")
 		flags.StringVar(&conf.ConfigPath, "config", "", "Config file location")
 		flags.StringVar(&conf.MigrationSource, "migrate", "", "Migration source folder")
+		flags.BoolVar(&conf.RunMigration, "run-migration", false, "Apply DB migrations at startup (requires -migrate). Default off; run migrations out-of-band instead")
 		flags.BoolVar(&conf.StopOnConfigChange, "stop-on-conf-change", false, "Restart internally on -config change if this flag is absent")
 		flags.BoolVar(&conf.DoNotWatchConfigChange, "do-not-watch-conf-change", false, "Do not watch config change")
 
