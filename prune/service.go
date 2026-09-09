@@ -161,10 +161,15 @@ func PruneMessages(dataAccessor storage.DataAccessor, config config.MessagePruni
 	log.Debug().Msg("Writes initialized, now loading messages to archive")
 
 	messageIDsToDelete := []string{}
+	// Carried across batches so the scan resumes instead of restarting at the newest eligible
+	// message every time. Messages blocked by a non-delivered job are never pruned, so a restart
+	// re-reads all of them on every batch.
+	var page *data.Pagination
 	for moreMessages {
 		log.Debug().Msg("Loading messages to archive")
 		// Get all messages that are completely delivered for a certain period
-		messages := dataAccessor.GetMessageRepository().GetMessagesFromBeforeDurationThatAreCompletelyDelivered(time.Duration(config.GetMessageRetentionDays()*24*60*60)*time.Second, 1000)
+		messages, nextPage := dataAccessor.GetMessageRepository().GetMessagesFromBeforeDurationThatAreCompletelyDelivered(time.Duration(config.GetMessageRetentionDays()*24*60*60)*time.Second, 1000, page)
+		page = nextPage
 		log.Debug().Msgf("Loaded %d messages to archive", len(messages))
 		if len(messages) == 0 {
 			log.Info().Msg("No messages to prune")
