@@ -1,0 +1,1304 @@
+definitions:
+  config.SeedChannel:
+    properties:
+      id:
+        description: ID is the ID of the data
+        type: string
+      name:
+        description: Name is name of the data
+        type: string
+      token:
+        description: Token is the pre configured token of the data
+        type: string
+    type: object
+  config.SeedConsumer:
+    properties:
+      callbackURL:
+        description: CallbackURL represents the URl to call back
+        type: string
+      channel:
+        description: Channel represents which channel this consumer listens to
+        type: string
+      id:
+        description: ID is the ID of the data
+        type: string
+      name:
+        description: Name is name of the data
+        type: string
+      token:
+        description: Token is the pre configured token of the data
+        type: string
+      type:
+        type: string
+    type: object
+  config.SeedData:
+    properties:
+      channels:
+        items:
+          $ref: '#/definitions/config.SeedChannel'
+        type: array
+      consumers:
+        items:
+          $ref: '#/definitions/config.SeedConsumer'
+        type: array
+      dataHash:
+        type: string
+      producers:
+        items:
+          $ref: '#/definitions/config.SeedProducer'
+        type: array
+    type: object
+  config.SeedProducer:
+    properties:
+      id:
+        description: ID is the ID of the data
+        type: string
+      name:
+        description: Name is name of the data
+        type: string
+      token:
+        description: Token is the pre configured token of the data
+        type: string
+    type: object
+  controllers.AppData:
+    properties:
+      appStatus:
+        $ref: '#/definitions/data.AppStatus'
+      seedData:
+        $ref: '#/definitions/config.SeedData'
+    type: object
+  controllers.ChannelModel:
+    properties:
+      broadcastURL:
+        type: string
+      changedAt:
+        type: string
+      consumersURL:
+        type: string
+      id:
+        type: string
+      messagesStatusURL:
+        type: string
+      messagesURL:
+        type: string
+      name:
+        type: string
+      token:
+        type: string
+    type: object
+  controllers.ConsumerModel:
+    properties:
+      callbackURL:
+        type: string
+      changedAt:
+        type: string
+      deadLetterQueueURL:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      token:
+        type: string
+      type:
+        type: string
+    type: object
+  controllers.DLQConsumerModel:
+    properties:
+      channelId:
+        type: string
+      channelName:
+        type: string
+      consumerId:
+        type: string
+      consumerName:
+        type: string
+      deadCount:
+        type: integer
+    type: object
+  controllers.DLQList:
+    properties:
+      deadJobs:
+        items:
+          $ref: '#/definitions/controllers.DeadDeliveryJobModel'
+        type: array
+      pages:
+        additionalProperties:
+          type: string
+        type: object
+    type: object
+  controllers.DLQStatusModel:
+    properties:
+      consumers:
+        items:
+          $ref: '#/definitions/controllers.DLQConsumerModel'
+        type: array
+    type: object
+  controllers.DeadDeliveryJobModel:
+    properties:
+      jobRequeueURL:
+        type: string
+      listenerEndpoint:
+        type: string
+      listenerName:
+        type: string
+      messageURL:
+        type: string
+      status:
+        type: string
+      statusChangedAt:
+        type: string
+    type: object
+  controllers.DeliveryJobModel:
+    properties:
+      listenerEndpoint:
+        type: string
+      listenerName:
+        type: string
+      status:
+        type: string
+      statusChangedAt:
+        type: string
+    type: object
+  controllers.HyperlinkedDeliveryJobModel:
+    properties:
+      channelURL:
+        type: string
+      consumerURL:
+        type: string
+      jobRequeueURL:
+        type: string
+      listenerEndpoint:
+        type: string
+      listenerName:
+        type: string
+      messageURL:
+        type: string
+      producerURL:
+        type: string
+      status:
+        type: string
+      statusChangedAt:
+        type: string
+    type: object
+  controllers.JobListResult:
+    properties:
+      result:
+        items:
+          $ref: '#/definitions/controllers.QueuedDeliveryJobModel'
+        type: array
+    type: object
+  controllers.JobStatusUpdateRequest:
+    properties:
+      IncrementalTimeout:
+        type: integer
+      NextState:
+        type: string
+    type: object
+  controllers.ListResult:
+    properties:
+      links:
+        additionalProperties:
+          type: string
+        type: object
+      pages:
+        additionalProperties:
+          type: string
+        type: object
+      result:
+        items:
+          type: string
+        type: array
+    type: object
+  controllers.MessageModel:
+    properties:
+      contentType:
+        type: string
+      dispatchedAt:
+        type: string
+      headers:
+        $ref: '#/definitions/data.HeadersMap'
+      id:
+        type: string
+      jobs:
+        items:
+          $ref: '#/definitions/controllers.DeliveryJobModel'
+        type: array
+      payload:
+        type: string
+      producedBy:
+        type: string
+      receivedAt:
+        type: string
+      status:
+        type: string
+    type: object
+  controllers.MessagesStatusResponse:
+    properties:
+      counts:
+        additionalProperties:
+          $ref: '#/definitions/controllers.TheCount'
+        type: object
+      next_scheduled_message_at:
+        type: string
+    type: object
+  controllers.MsgStakeholder:
+    properties:
+      changedAt:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      token:
+        type: string
+    type: object
+  controllers.QeuedMessageModel:
+    properties:
+      contentType:
+        type: string
+      headers:
+        $ref: '#/definitions/data.HeadersMap'
+      messageID:
+        type: string
+      payload:
+        type: string
+    type: object
+  controllers.QueuedDeliveryJobModel:
+    properties:
+      id:
+        items:
+          format: int32
+          type: integer
+        type: array
+      incrementalTimeout:
+        description: in second
+        type: integer
+      message:
+        $ref: '#/definitions/controllers.QeuedMessageModel'
+      priority:
+        type: integer
+    type: object
+  controllers.ScheduledMessageModel:
+    properties:
+      contentType:
+        type: string
+      dispatchSchedule:
+        type: string
+      dispatchedAt:
+        type: string
+      headers:
+        $ref: '#/definitions/data.HeadersMap'
+      id:
+        type: string
+      messageId:
+        type: string
+      payload:
+        type: string
+      priority:
+        type: integer
+      producedBy:
+        type: string
+      status:
+        type: string
+    type: object
+  controllers.ScheduledMessagesListResponse:
+    properties:
+      pages:
+        additionalProperties:
+          type: string
+        type: object
+      result:
+        items:
+          type: string
+        type: array
+    type: object
+  controllers.TheCount:
+    properties:
+      count:
+        type: integer
+      links:
+        additionalProperties:
+          type: string
+        type: object
+    type: object
+  data.AppStatus:
+    enum:
+    - 1
+    - 2
+    - 3
+    type: integer
+    x-enum-varnames:
+    - NotInitialized
+    - Initializing
+    - Initialized
+  data.HeadersMap:
+    additionalProperties:
+      type: string
+    type: object
+info:
+  contact: {}
+  description: This is a fully HTTP-based Pub/Sub Broker designed to simplify system
+    architecture in SOA or Microservice architecture.
+  title: Webhook Broker API
+  version: 1.0.0
+paths:
+  /_status:
+    get:
+      description: Retrieves the current status of the Webhook Broker application,
+        including seed data and application state.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.AppData'
+        "500":
+          description: Internal Server Error
+      summary: Get Application Status
+      tags:
+      - Status
+  /channel/{channelId}:
+    get:
+      description: Retrieves details for a specific channel.
+      parameters:
+      - description: Channel ID
+        in: path
+        name: channelId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.ChannelModel'
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+      summary: Get Channel Details
+      tags:
+      - Channels
+    put:
+      consumes:
+      - application/x-www-form-urlencoded
+      description: Updates a channel's name and/or token.
+      parameters:
+      - description: Channel ID
+        in: path
+        name: channelId
+        required: true
+        type: string
+      - description: Only update if the resource has not been modified since this
+          timestamp
+        in: header
+        name: If-Unmodified-Since
+        type: string
+      - description: Token
+        in: formData
+        name: token
+        type: string
+      - description: Name
+        in: formData
+        name: name
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.ChannelModel'
+        "400":
+          description: Bad Request
+        "412":
+          description: Precondition Failed
+        "415":
+          description: Unsupported Media Type
+        "500":
+          description: Internal Server Error
+      summary: Update Channel
+      tags:
+      - Channels
+  /channel/{channelId}/broadcast:
+    post:
+      consumes:
+      - application/octet-stream
+      description: Broadcasts a message to all consumers of a channel. Messages can
+        be broadcast immediately or scheduled for future delivery.
+      parameters:
+      - description: Channel ID
+        in: path
+        name: channelId
+        required: true
+        type: string
+      - description: Channel authentication token
+        in: header
+        name: X-Broker-Channel-Token
+        required: true
+        type: string
+      - description: Producer identifier
+        in: header
+        name: X-Broker-Producer-ID
+        required: true
+        type: string
+      - description: Producer authentication token
+        in: header
+        name: X-Broker-Producer-Token
+        required: true
+        type: string
+      - description: Optional custom message ID for idempotent broadcasting
+        in: header
+        name: X-Broker-Message-ID
+        type: string
+      - description: Message priority (higher value = higher priority)
+        in: header
+        name: X-Broker-Message-Priority
+        type: integer
+      - description: RFC3339 timestamp for scheduled message delivery
+        in: header
+        name: X-Broker-Scheduled-For
+        type: string
+      - description: Comma-separated list of header names to include as message metadata
+        in: header
+        name: X-Broker-Metadata-Headers
+        type: string
+      - default: application/octet-stream
+        description: Message content type
+        in: header
+        name: Content-Type
+        type: string
+      responses:
+        "201":
+          description: Created
+        "400":
+          description: Bad Request
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "404":
+          description: Not Found
+        "409":
+          description: Conflict
+        "412":
+          description: Precondition Failed
+        "500":
+          description: Internal Server Error
+      security:
+      - ChannelToken: []
+        ProducerID: []
+        ProducerToken: []
+      summary: Broadcast Message
+      tags:
+      - Broadcast
+  /channel/{channelId}/consumer/{consumerId}:
+    delete:
+      description: Deletes a consumer from a channel.
+      parameters:
+      - description: Channel ID
+        in: path
+        name: channelId
+        required: true
+        type: string
+      - description: Consumer ID
+        in: path
+        name: consumerId
+        required: true
+        type: string
+      - description: Only delete if the resource has not been modified since this
+          timestamp
+        in: header
+        name: If-Unmodified-Since
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+        "412":
+          description: Precondition Failed
+        "500":
+          description: Internal Server Error
+      summary: Delete Consumer
+      tags:
+      - Consumers
+    get:
+      description: Retrieves details for a specific consumer.
+      parameters:
+      - description: Channel ID
+        in: path
+        name: channelId
+        required: true
+        type: string
+      - description: Consumer ID
+        in: path
+        name: consumerId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.ConsumerModel'
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+      summary: Get Consumer Details
+      tags:
+      - Consumers
+    put:
+      consumes:
+      - application/x-www-form-urlencoded
+      description: Creates or updates a consumer for a channel.
+      parameters:
+      - description: Channel ID
+        in: path
+        name: channelId
+        required: true
+        type: string
+      - description: Consumer ID
+        in: path
+        name: consumerId
+        required: true
+        type: string
+      - description: Only update if the resource has not been modified since this
+          timestamp
+        in: header
+        name: If-Unmodified-Since
+        type: string
+      - description: Token
+        in: formData
+        name: token
+        type: string
+      - description: Name
+        in: formData
+        name: name
+        type: string
+      - description: Callback URL
+        in: formData
+        name: callbackUrl
+        type: string
+      - description: Consumer type
+        in: formData
+        name: type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.ConsumerModel'
+        "400":
+          description: Bad Request
+        "404":
+          description: Not Found
+        "412":
+          description: Precondition Failed
+        "415":
+          description: Unsupported Media Type
+        "500":
+          description: Internal Server Error
+      summary: Update Consumer
+      tags:
+      - Consumers
+  /channel/{channelId}/consumer/{consumerId}/dlq:
+    delete:
+      description: Purge all dead jobs for a consumer.
+      parameters:
+      - description: Channel ID
+        in: path
+        name: channelId
+        required: true
+        type: string
+      - description: Consumer ID
+        in: path
+        name: consumerId
+        required: true
+        type: string
+      - description: Channel authentication token
+        in: header
+        name: X-Broker-Channel-Token
+        required: true
+        type: string
+      - description: Consumer authentication token
+        in: header
+        name: X-Broker-Consumer-Token
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: deletedCount
+          schema:
+            type: object
+        "403":
+          description: Forbidden
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+      security:
+      - ChannelToken: []
+        ConsumerToken: []
+      summary: Purge Dead Jobs
+      tags:
+      - DLQ
+    get:
+      description: Retrieves all dead (failed) delivery jobs for a consumer.
+      parameters:
+      - description: Channel ID
+        in: path
+        name: channelId
+        required: true
+        type: string
+      - description: Consumer ID
+        in: path
+        name: consumerId
+        required: true
+        type: string
+      - description: Pagination cursor for previous page
+        in: query
+        name: previous
+        type: string
+      - description: Pagination cursor for next page
+        in: query
+        name: next
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.DLQList'
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+      summary: Get Dead Jobs for Consumer
+      tags:
+      - DLQ
+    post:
+      consumes:
+      - application/x-www-form-urlencoded
+      description: Requeues all dead jobs for a consumer for another delivery attempt.
+      parameters:
+      - description: Channel ID
+        in: path
+        name: channelId
+        required: true
+        type: string
+      - description: Consumer ID
+        in: path
+        name: consumerId
+        required: true
+        type: string
+      - description: Consumer token for requeue validation
+        in: formData
+        name: requeue
+        required: true
+        type: string
+      responses:
+        "202":
+          description: Accepted
+        "400":
+          description: Bad Request
+        "404":
+          description: Not Found
+        "415":
+          description: Unsupported Media Type
+        "500":
+          description: Internal Server Error
+      summary: Requeue All Dead Jobs
+      tags:
+      - DLQ
+  /channel/{channelId}/consumer/{consumerId}/job/{jobId}:
+    delete:
+      description: Delete a single dead job.
+      parameters:
+      - description: Channel ID
+        in: path
+        name: channelId
+        required: true
+        type: string
+      - description: Consumer ID
+        in: path
+        name: consumerId
+        required: true
+        type: string
+      - description: Job ID
+        in: path
+        name: jobId
+        required: true
+        type: string
+      - description: Channel authentication token
+        in: header
+        name: X-Broker-Channel-Token
+        required: true
+        type: string
+      - description: Consumer authentication token
+        in: header
+        name: X-Broker-Consumer-Token
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "403":
+          description: Forbidden
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+      security:
+      - ChannelToken: []
+        ConsumerToken: []
+      summary: Delete Single Dead Job
+      tags:
+      - DLQ
+    get:
+      description: Retrieves detailed information about a specific delivery job.
+      parameters:
+      - description: Channel ID
+        in: path
+        name: channelId
+        required: true
+        type: string
+      - description: Consumer ID
+        in: path
+        name: consumerId
+        required: true
+        type: string
+      - description: Job ID
+        in: path
+        name: jobId
+        required: true
+        type: string
+      - description: Channel authentication token
+        in: header
+        name: X-Broker-Channel-Token
+        required: true
+        type: string
+      - description: Consumer authentication token
+        in: header
+        name: X-Broker-Consumer-Token
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.HyperlinkedDeliveryJobModel'
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "404":
+          description: Not Found
+        "412":
+          description: Precondition Failed
+        "500":
+          description: Internal Server Error
+      security:
+      - ChannelToken: []
+        ConsumerToken: []
+      summary: Get Job Details
+      tags:
+      - Jobs
+    post:
+      consumes:
+      - application/json
+      description: Updates the status of a delivery job. Used by pull-based consumers
+        to transition jobs through their lifecycle.
+      parameters:
+      - description: Channel ID
+        in: path
+        name: channelId
+        required: true
+        type: string
+      - description: Consumer ID
+        in: path
+        name: consumerId
+        required: true
+        type: string
+      - description: Job ID
+        in: path
+        name: jobId
+        required: true
+        type: string
+      - description: Channel authentication token
+        in: header
+        name: X-Broker-Channel-Token
+        required: true
+        type: string
+      - description: Consumer authentication token
+        in: header
+        name: X-Broker-Consumer-Token
+        required: true
+        type: string
+      - description: Job update data
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/controllers.JobStatusUpdateRequest'
+      responses:
+        "202":
+          description: Accepted
+        "400":
+          description: Bad Request
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "404":
+          description: Not Found
+        "412":
+          description: Precondition Failed
+        "500":
+          description: Internal Server Error
+      security:
+      - ChannelToken: []
+        ConsumerToken: []
+      summary: Update Job Status (Pull-Based)
+      tags:
+      - Jobs
+  /channel/{channelId}/consumer/{consumerId}/job/{jobId}/requeue-dead-job:
+    post:
+      consumes:
+      - application/json
+      description: Requeues a specific dead job for another delivery attempt.
+      parameters:
+      - description: Channel ID
+        in: path
+        name: channelId
+        required: true
+        type: string
+      - description: Consumer ID
+        in: path
+        name: consumerId
+        required: true
+        type: string
+      - description: Job ID
+        in: path
+        name: jobId
+        required: true
+        type: string
+      - description: Channel authentication token
+        in: header
+        name: X-Broker-Channel-Token
+        required: true
+        type: string
+      - description: Consumer authentication token
+        in: header
+        name: X-Broker-Consumer-Token
+        required: true
+        type: string
+      responses:
+        "202":
+          description: Accepted
+        "400":
+          description: Bad Request
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "404":
+          description: Not Found
+        "412":
+          description: Precondition Failed
+        "500":
+          description: Internal Server Error
+      security:
+      - ChannelToken: []
+        ConsumerToken: []
+      summary: Requeue Single Dead Job
+      tags:
+      - Jobs
+  /channel/{channelId}/consumer/{consumerId}/queued-jobs:
+    get:
+      description: Retrieves prioritized queued jobs for a pull-based consumer.
+      parameters:
+      - description: Channel ID
+        in: path
+        name: channelId
+        required: true
+        type: string
+      - description: Consumer ID
+        in: path
+        name: consumerId
+        required: true
+        type: string
+      - default: 25
+        description: Page size
+        in: query
+        maximum: 100
+        name: limit
+        type: integer
+      - description: Channel authentication token
+        in: header
+        name: X-Broker-Channel-Token
+        required: true
+        type: string
+      - description: Consumer authentication token
+        in: header
+        name: X-Broker-Consumer-Token
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.JobListResult'
+        "400":
+          description: Bad Request
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "404":
+          description: Not Found
+        "412":
+          description: Precondition Failed
+        "500":
+          description: Internal Server Error
+      security:
+      - ChannelToken: []
+        ConsumerToken: []
+      summary: Get Queued Jobs for Consumer (Pull-Based)
+      tags:
+      - Jobs
+  /channel/{channelId}/consumers:
+    get:
+      description: Retrieves a paginated list of all consumers for a specific channel.
+      parameters:
+      - description: Channel ID
+        in: path
+        name: channelId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.ListResult'
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+      summary: List Consumers for a Channel
+      tags:
+      - Consumers
+  /channel/{channelId}/message/{messageId}:
+    get:
+      description: Retrieves details of a specific message including all delivery
+        jobs.
+      parameters:
+      - description: Channel ID
+        in: path
+        name: channelId
+        required: true
+        type: string
+      - description: Message ID
+        in: path
+        name: messageId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.MessageModel'
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+      summary: Get Message Details
+      tags:
+      - Messages
+  /channel/{channelId}/messages:
+    get:
+      description: Retrieves a paginated list of messages for a channel with optional
+        status filtering.
+      parameters:
+      - description: Channel ID
+        in: path
+        name: channelId
+        required: true
+        type: string
+      - description: Filter by message status
+        in: query
+        name: status
+        type: integer
+      - description: Pagination cursor for previous page
+        in: query
+        name: previous
+        type: string
+      - description: Pagination cursor for next page
+        in: query
+        name: next
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.ListResult'
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+      summary: List Messages for a Channel
+      tags:
+      - Messages
+  /channel/{channelId}/messages-status:
+    get:
+      description: Retrieves message status counts for a channel, including both regular
+        and scheduled messages.
+      parameters:
+      - description: Channel ID
+        in: path
+        name: channelId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.MessagesStatusResponse'
+        "500":
+          description: Internal Server Error
+      summary: Get Message Status Counts
+      tags:
+      - Messages
+  /channel/{channelId}/scheduled-message/{messageId}:
+    get:
+      description: Retrieves details of a specific scheduled message.
+      parameters:
+      - description: Channel ID
+        in: path
+        name: channelId
+        required: true
+        type: string
+      - description: Message ID
+        in: path
+        name: messageId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.ScheduledMessageModel'
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+      summary: Get Scheduled Message Details
+      tags:
+      - Scheduled Messages
+  /channel/{channelId}/scheduled-messages:
+    get:
+      description: Retrieves a paginated list of scheduled messages for a channel
+        with optional status filtering.
+      parameters:
+      - description: Channel ID
+        in: path
+        name: channelId
+        required: true
+        type: string
+      - description: Filter by scheduled message status
+        in: query
+        name: status
+        type: integer
+      - description: Pagination cursor for previous page
+        in: query
+        name: previous
+        type: string
+      - description: Pagination cursor for next page
+        in: query
+        name: next
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.ScheduledMessagesListResponse'
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+      summary: List Scheduled Messages for a Channel
+      tags:
+      - Scheduled Messages
+  /channels:
+    get:
+      description: Retrieves a paginated list of all channels.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.ListResult'
+        "500":
+          description: Internal Server Error
+      summary: List All Channels
+      tags:
+      - Channels
+  /dlq-status:
+    get:
+      description: Get DLQ status summary across all consumers.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.DLQStatusModel'
+        "500":
+          description: Internal Server Error
+      summary: Get DLQ Status
+      tags:
+      - DLQ
+  /job-status:
+    get:
+      description: Retrieves job status counts grouped by consumer.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+        "500":
+          description: Internal Server Error
+      summary: Get Job Status Counts
+      tags:
+      - Status
+  /producer/{producerId}:
+    get:
+      description: Retrieves details for a specific producer.
+      parameters:
+      - description: Producer ID
+        in: path
+        name: producerId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.MsgStakeholder'
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+      summary: Get Producer Details
+      tags:
+      - Producers
+    put:
+      consumes:
+      - application/x-www-form-urlencoded
+      description: Updates a producer's name and/or token.
+      parameters:
+      - description: Producer ID
+        in: path
+        name: producerId
+        required: true
+        type: string
+      - description: Only update if the resource has not been modified since this
+          timestamp
+        in: header
+        name: If-Unmodified-Since
+        type: string
+      - description: Token
+        in: formData
+        name: token
+        type: string
+      - description: Name
+        in: formData
+        name: name
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.MsgStakeholder'
+        "400":
+          description: Bad Request
+        "412":
+          description: Precondition Failed
+        "415":
+          description: Unsupported Media Type
+        "500":
+          description: Internal Server Error
+      summary: Update Producer
+      tags:
+      - Producers
+  /producers:
+    get:
+      description: Retrieves a paginated list of all producers.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.ListResult'
+        "500":
+          description: Internal Server Error
+      summary: List All Producers
+      tags:
+      - Producers
+securityDefinitions:
+  ChannelToken:
+    description: Channel authentication token issued when the channel was created
+      or last rotated.
+    in: header
+    name: X-Broker-Channel-Token
+    type: apiKey
+  ConsumerToken:
+    description: Consumer authentication token issued when the consumer was created
+      or last rotated.
+    in: header
+    name: X-Broker-Consumer-Token
+    type: apiKey
+  ProducerID:
+    description: Identifier of the producer originating the request.
+    in: header
+    name: X-Broker-Producer-ID
+    type: apiKey
+  ProducerToken:
+    description: Producer authentication token issued when the producer was created
+      or last rotated.
+    in: header
+    name: X-Broker-Producer-Token
+    type: apiKey
+swagger: "2.0"

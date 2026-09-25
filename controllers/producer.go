@@ -83,6 +83,15 @@ type ProducerController struct {
 }
 
 // Get implements the /producer/:prodId GET endpoint
+// @Summary Get Producer Details
+// @Description Retrieves details for a specific producer.
+// @Tags Producers
+// @Produce json
+// @Param producerId path string true "Producer ID"
+// @Success 200 {object} MsgStakeholder
+// @Failure 404
+// @Failure 500
+// @Router /producer/{producerId} [get]
 func (prodController *ProducerController) Get(w http.ResponseWriter, r *http.Request, param httprouter.Params) {
 	producerID := param.ByName(producerIDPathParamKey)
 	producerModel, err := prodController.ProducerRepo.Get(producerID)
@@ -90,6 +99,21 @@ func (prodController *ProducerController) Get(w http.ResponseWriter, r *http.Req
 }
 
 // Put implements the /producer/:prodId PUT endpoint
+// @Summary Update Producer
+// @Description Updates a producer's name and/or token.
+// @Tags Producers
+// @Accept x-www-form-urlencoded
+// @Produce json
+// @Param producerId path string true "Producer ID"
+// @Param If-Unmodified-Since header string false "Only update if the resource has not been modified since this timestamp"
+// @Param token formData string false "Token"
+// @Param name formData string false "Name"
+// @Success 200 {object} MsgStakeholder
+// @Failure 400
+// @Failure 412
+// @Failure 415
+// @Failure 500
+// @Router /producer/{producerId} [put]
 func (prodController *ProducerController) Put(w http.ResponseWriter, r *http.Request, param httprouter.Params) {
 	validRequest := checkFormContentType(r, w)
 	producerID := param.ByName(producerIDPathParamKey)
@@ -134,6 +158,13 @@ type ProducersController struct {
 }
 
 // Get implements the /producers endpoint
+// @Summary List All Producers
+// @Description Retrieves a paginated list of all producers.
+// @Tags Producers
+// @Produce json
+// @Success 200 {object} ListResult
+// @Failure 500
+// @Router /producers [get]
 func (prodController *ProducersController) Get(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	producers, resultPagination, err := prodController.ProducerRepo.GetList(getPagination(r))
 	if err != nil {

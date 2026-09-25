@@ -20,6 +20,13 @@ jobs:
       run: mkdir ./dist/
     - name: Run Test & Build
       run: make os-deps dep-tools deps build ci-test
+    - name: Verify Swagger spec is up to date
+      run: |
+        make open-api-spec
+        if ! git diff --exit-code docs/open-api-spec/; then
+          echo "::error::Swagger spec is out of date. Run 'make open-api-spec' and commit the result."
+          exit 1
+        fi
     - name: Upload build artifact
       uses: actions/upload-artifact@v4
       with:

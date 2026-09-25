@@ -61,6 +61,20 @@ func (controller *DLQPurgeController) FormatAsRelativeLink(params ...httprouter.
 }
 
 // Delete implements DELETE /channel/:channelId/consumer/:consumerId/dlq
+// @Summary Purge Dead Jobs
+// @Description Purge all dead jobs for a consumer.
+// @Tags DLQ
+// @Produce json
+// @Param channelId path string true "Channel ID"
+// @Param consumerId path string true "Consumer ID"
+// @Param X-Broker-Channel-Token header string true "Channel authentication token"
+// @Param X-Broker-Consumer-Token header string true "Consumer authentication token"
+// @Success 200 {object} object "deletedCount"
+// @Failure 403
+// @Failure 404
+// @Failure 500
+// @Security ChannelToken && ConsumerToken
+// @Router /channel/{channelId}/consumer/{consumerId}/dlq [delete]
 func (controller *DLQPurgeController) Delete(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 	consumer, valid := getChannelConsumerWithAuth(w, r, params, controller.ChannelRepo, controller.ConsumerRepo)
 	if !valid {
@@ -121,6 +135,20 @@ func (controller *DeadJobDeleteController) FormatAsRelativeLink(params ...httpro
 }
 
 // Delete implements DELETE /channel/:channelId/consumer/:consumerId/job/:jobId
+// @Summary Delete Single Dead Job
+// @Description Delete a single dead job.
+// @Tags DLQ
+// @Param channelId path string true "Channel ID"
+// @Param consumerId path string true "Consumer ID"
+// @Param jobId path string true "Job ID"
+// @Param X-Broker-Channel-Token header string true "Channel authentication token"
+// @Param X-Broker-Consumer-Token header string true "Consumer authentication token"
+// @Success 204
+// @Failure 403
+// @Failure 404
+// @Failure 500
+// @Security ChannelToken && ConsumerToken
+// @Router /channel/{channelId}/consumer/{consumerId}/job/{jobId} [delete]
 func (controller *DeadJobDeleteController) Delete(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 	logger := hlog.FromRequest(r)
 	consumer, valid := getChannelConsumerWithAuth(w, r, params, controller.ChannelRepo, controller.ConsumerRepo)

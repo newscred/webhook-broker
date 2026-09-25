@@ -37,6 +37,16 @@ func NewConsumerController(channelRepo storage.ChannelRepository, consumerRepo s
 }
 
 // Get implements the GET /channel/:channelId/consumer/:consumerId endpoint
+// @Summary Get Consumer Details
+// @Description Retrieves details for a specific consumer.
+// @Tags Consumers
+// @Produce json
+// @Param channelId path string true "Channel ID"
+// @Param consumerId path string true "Consumer ID"
+// @Success 200 {object} ConsumerModel
+// @Failure 404
+// @Failure 500
+// @Router /channel/{channelId}/consumer/{consumerId} [get]
 func (controller *ConsumerController) Get(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 	consumer, err := controller.ConsumerRepo.Get(findParam(params, channelIDPathParamKey), findParam(params, consumerIDPathParamKey))
 	consumerModel := controller.getConsumerModel(consumer)
@@ -56,6 +66,25 @@ func (controller *ConsumerController) getConsumerModel(consumer *data.Consumer) 
 }
 
 // Put implements the PUT /channel/:channelId/consumer/:consumerId endpoint
+// @Summary Update Consumer
+// @Description Creates or updates a consumer for a channel.
+// @Tags Consumers
+// @Accept x-www-form-urlencoded
+// @Produce json
+// @Param channelId path string true "Channel ID"
+// @Param consumerId path string true "Consumer ID"
+// @Param If-Unmodified-Since header string false "Only update if the resource has not been modified since this timestamp"
+// @Param token formData string false "Token"
+// @Param name formData string false "Name"
+// @Param callbackUrl formData string false "Callback URL"
+// @Param type formData string false "Consumer type"
+// @Success 200 {object} ConsumerModel
+// @Failure 400
+// @Failure 404
+// @Failure 412
+// @Failure 415
+// @Failure 500
+// @Router /channel/{channelId}/consumer/{consumerId} [put]
 func (controller *ConsumerController) Put(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 	validRequest := checkFormContentType(r, w)
 	var channel *data.Channel
@@ -97,6 +126,17 @@ func (controller *ConsumerController) Put(w http.ResponseWriter, r *http.Request
 }
 
 // Delete implements the DELETE /channel/:channelId/consumer/:consumerId endpoint
+// @Summary Delete Consumer
+// @Description Deletes a consumer from a channel.
+// @Tags Consumers
+// @Param channelId path string true "Channel ID"
+// @Param consumerId path string true "Consumer ID"
+// @Param If-Unmodified-Since header string false "Only delete if the resource has not been modified since this timestamp"
+// @Success 204
+// @Failure 404
+// @Failure 412
+// @Failure 500
+// @Router /channel/{channelId}/consumer/{consumerId} [delete]
 func (controller *ConsumerController) Delete(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 	consumer, err := controller.ConsumerRepo.Get(findParam(params, channelIDPathParamKey), findParam(params, consumerIDPathParamKey))
 	switch err {
@@ -137,6 +177,15 @@ func NewConsumersController(consumerEndpoint *ConsumerController, consumerRepo s
 }
 
 // Get implements the GET /channel/:channelId/consumers endpoint
+// @Summary List Consumers for a Channel
+// @Description Retrieves a paginated list of all consumers for a specific channel.
+// @Tags Consumers
+// @Produce json
+// @Param channelId path string true "Channel ID"
+// @Success 200 {object} ListResult
+// @Failure 404
+// @Failure 500
+// @Router /channel/{channelId}/consumers [get]
 func (controller *ConsumersController) Get(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 	channelID := findParam(params, channelIDPathParamKey)
 	consumers, resultPagination, err := controller.ConsumerRepo.GetList(channelID, getPagination(r))
