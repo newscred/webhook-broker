@@ -441,6 +441,103 @@ func TestStatusBasedJobsListing(t *testing.T) {
 			assert.True(t, found)
 		}
 	})
+	t.Run("RetryListOrderedByEarliestNextAttemptAt", func(t *testing.T) {
+		thisJobs := djRepo.GetJobsReadyForInflightSince(configuration.RationalDelay, 4)
+		assert.True(t, sort.SliceIsSorted(thisJobs, func(i, j int) bool {
+			return thisJobs[i].EarliestNextAttemptAt.Before(thisJobs[j].EarliestNextAttemptAt)
+		}), "retry sweep must hand back oldest-due-first so long waiting jobs are not starved")
+	})
+	t.Run("RetryListQueryError", func(t *testing.T) {
+		var buf bytes.Buffer
+		oldLogger := log.Logger
+		log.Logger = log.Output(&buf)
+		defer func() { log.Logger = oldLogger }()
+		errString := "sample retry select error"
+		db, mock, _ := sqlmock.New()
+		errRepo := &DeliveryJobDBRepository{db: db}
+		mock.ExpectQuery("FROM job WHERE status").WillReturnError(errors.New(errString))
+		mock.MatchExpectationsInOrder(true)
+		thisJobs := errRepo.GetJobsReadyForInflightSince(configuration.RationalDelay, 4)
+		assert.Equal(t, 0, len(thisJobs))
+		assert.Contains(t, buf.String(), errString)
+	})
+}
+
+func TestGetJobsReadyForInflightSincePaginates(t *testing.T) {
+	djRepo := getDeliverJobRepository()
+	msgRepo := getMessageRepository()
+	pageOverflowChannel, err := data.NewChannel("channel-for-retry-paging", "sampletoken")
+	assert.Nil(t, err)
+	pageOverflowChannel.QuickFix()
+	pageOverflowChannel, err = getChannelRepo().Store(pageOverflowChannel)
+	assert.Nil(t, err)
+	jobCount := readyForInflightJobsPageSize + 20
+	pageConsumers := SetupForDeliveryJobTestsWithOptions(&DeliveryJobSetupOptions{IgnoreSettingConsumers: true,
+		ConsumerCount: jobCount, ConsumerIDPrefix: "retry-paging-consumer-", ConsumerChannel: pageOverflowChannel,
+		ConsumerRepo: getConsumerRepo()})
+	assert.Equal(t, jobCount, len(pageConsumers))
+
+	message := getMessageForJob()
+	assert.Nil(t, msgRepo.Create(message))
+	pageJobs := make([]*data.DeliveryJob, 0, jobCount)
+	for _, consumer := range pageConsumers {
+		job, _ := data.NewDeliveryJob(message, consumer)
+		pageJobs = append(pageJobs, job)
+	}
+	assert.Nil(t, djRepo.DispatchMessage(message, pageJobs...))
+	defer func() { assert.Nil(t, djRepo.DeleteJobsForMessage(message)) }()
+
+	// Spread earliestNextAttemptAt so the rows straddle pages instead of colliding on one timestamp.
+	pastTime := time.Now().Add(-1 * time.Hour)
+	for index, job := range pageJobs {
+		_, err := testDB.Exec("UPDATE job SET earliestNextAttemptAt = ? WHERE id like ?",
+			pastTime.Add(time.Duration(index)*time.Second), job.ID)
+		assert.Nil(t, err)
+	}
+
+	foundJobs := djRepo.GetJobsReadyForInflightSince(configuration.RationalDelay, 4)
+	assert.Less(t, readyForInflightJobsPageSize, len(foundJobs), "fixture must overflow a single page")
+	seen := make(map[xid.ID]int)
+	for _, job := range foundJobs {
+		seen[job.ID] = seen[job.ID] + 1
+	}
+	for _, job := range pageJobs {
+		assert.Equal(t, 1, seen[job.ID], "job "+job.ID.String()+" must be returned exactly once across pages")
+	}
+}
+
+// Regression guard: the ACTUAL queries used by GetJobsReadyForInflightSince must be served by
+// retry_job with no filesort, else the sweep degrades to ~190k rows per LIMIT 100 page. Binds to
+// the real query consts, so reverting the ORDER BY or the row-value cursor fails the test. Runs
+// on SQLite, which picks retry_job either way but reports the sort as "USE TEMP B-TREE FOR ORDER
+// BY" -- so that assertion, not the index name, is the one that catches a regression here.
+func TestReadyForInflightJobsQueryPlan(t *testing.T) {
+	explain := func(t *testing.T, query string, args ...interface{}) string {
+		rows, err := testDB.Query("EXPLAIN QUERY PLAN "+query, args...)
+		assert.NoError(t, err)
+		defer rows.Close()
+		var plan strings.Builder
+		for rows.Next() {
+			var id, parent, notused int
+			var detail string
+			assert.NoError(t, rows.Scan(&id, &parent, &notused, &detail))
+			plan.WriteString(detail)
+			plan.WriteString("\n")
+		}
+		assert.NoError(t, rows.Err())
+		return plan.String()
+	}
+	t.Run("FirstPage", func(t *testing.T) {
+		plan := explain(t, readyForInflightJobsFirstPageQuery, data.JobQueued, time.Now(), 4, data.PullConsumer)
+		assert.Contains(t, plan, "retry_job", "query should use the retry index; plan was:\n"+plan)
+		assert.NotContains(t, plan, "USE TEMP B-TREE FOR ORDER BY", "query should not filesort; plan was:\n"+plan)
+	})
+	t.Run("NextPage", func(t *testing.T) {
+		plan := explain(t, readyForInflightJobsNextPageQuery, data.JobQueued, time.Now(), 4, data.PullConsumer,
+			time.Now().Add(-1*time.Hour), xid.New().String())
+		assert.Contains(t, plan, "retry_job", "cursor query should use the retry index; plan was:\n"+plan)
+		assert.NotContains(t, plan, "USE TEMP B-TREE FOR ORDER BY", "cursor query should not filesort; plan was:\n"+plan)
+	})
 }
 
 func TestGetJobsForConsumer(t *testing.T) {
