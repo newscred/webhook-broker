@@ -209,13 +209,13 @@ var (
 
 		var buf bytes.Buffer
 		if _, err = io.Copy(&buf, file); err == nil {
-			log.Debug().Str("Content", buf.String()).Msg("Content generating hash for")
 			if buf.Len() == 0 {
 				return "", errTruncatedConfigFile
 			}
 			hasher := sha256.New()
 			if _, err = io.Copy(hasher, strings.NewReader(buf.String())); err == nil {
 				hashHex = hex.EncodeToString(hasher.Sum(nil))
+				log.Debug().Str("file", filePath).Str("hash", hashHex).Msg("generated config file hash")
 			}
 		}
 		return hashHex, err

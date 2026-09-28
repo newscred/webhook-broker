@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/assert"
 )
@@ -296,3 +297,27 @@ func TestCLIConfigPathChangeNotification(t *testing.T) {
 		assert.False(t, inConfig.IsConfigWatcherStarted())
 	})
 }
+
+func TestGetFileHashDoesNotLogContent(t *testing.T) {
+	secret := "super-secret-db-password-" + randomString()
+	filePath := wdTestPath + "webhook-broker.hash-log_" + randomString() + ".cfg"
+	err := writeToFile(filePath, "[rdbms]\nconnection-url=user:"+secret+"@tcp(localhost:3306)/broker\n")
+	assert.Nil(t, err)
+	defer os.Remove(filePath)
+	var buf bytes.Buffer
+	oldLogger := log.Logger
+	oldLevel := zerolog.GlobalLevel()
+	log.Logger = log.Output(&buf)
+	zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	defer func() {
+		log.Logger = oldLogger
+		zerolog.SetGlobalLevel(oldLevel)
+	}()
+	hash, err := getFileHash(filePath)
+	assert.Nil(t, err)
+	assert.NotEmpty(t, hash)
+	assert.Contains(t, buf.String(), hash)
+	assert.NotContains(t, buf.String(), secret)
+}
+
+// Generated with assistance from Claude AI
