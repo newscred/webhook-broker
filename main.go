@@ -201,7 +201,7 @@ var (
 )
 
 func main() {
-	log.Print("Webhook Broker - " + string(GetAppVersion()))
+	log.Info().Msg("Webhook Broker - " + string(GetAppVersion()))
 	inConfig, output, cliCfgErr := parseArgs(os.Args[0], os.Args[1:])
 	if cliCfgErr != nil {
 		consolePrintln(output)

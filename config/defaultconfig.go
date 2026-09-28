@@ -18,7 +18,7 @@ max-file-size-in-mb=200
 max-backups=3
 max-age-in-days=28
 compress-backups=true
-log-level=debug
+log-level=info
 [broker]
 max-message-queue-size=10000
 max-workers=200
