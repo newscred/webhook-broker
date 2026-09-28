@@ -105,7 +105,7 @@ func TestGetAutoConfiguration_Default(t *testing.T) {
 	assert.Equal(t, toSecond(uint(240)), config.GetHTTPReadTimeout())
 	assert.Equal(t, toSecond(uint(240)), config.GetHTTPWriteTimeout())
 	assert.Equal(t, "", config.GetLogFilename())
-	assert.Equal(t, Debug, config.GetLogLevel())
+	assert.Equal(t, Info, config.GetLogLevel())
 	assert.Equal(t, uint(200), config.GetMaxLogFileSize())
 	assert.Equal(t, uint(28), config.GetMaxAgeForALogFile())
 	assert.Equal(t, uint(3), config.GetMaxLogBackups())
@@ -160,7 +160,7 @@ func TestGetAutoConfiguration_WrongValues(t *testing.T) {
 	assert.Equal(t, toSecond(uint(180)), config.GetHTTPReadTimeout())
 	assert.Equal(t, toSecond(uint(180)), config.GetHTTPWriteTimeout())
 	assert.Equal(t, "/var/log/webhook-broker.log", config.GetLogFilename())
-	assert.Equal(t, Debug, config.GetLogLevel())
+	assert.Equal(t, Info, config.GetLogLevel())
 	assert.Equal(t, uint(50), config.GetMaxLogFileSize())
 	assert.Equal(t, uint(30), config.GetMaxAgeForALogFile())
 	assert.Equal(t, uint(1), config.GetMaxLogBackups())
@@ -320,6 +320,18 @@ func TestGetConfiguration(t *testing.T) {
 	`
 	config, err = GetConfigurationFromParseConfig(loadTestConfiguration(testConfig))
 	assert.Equal(t, Fatal, config.GetLogLevel())
+	assert.Nil(t, err)
+	testConfig = `[log]
+	log-level=debug
+	`
+	config, err = GetConfigurationFromParseConfig(loadTestConfiguration(testConfig))
+	assert.Equal(t, Debug, config.GetLogLevel())
+	assert.Nil(t, err)
+	testConfig = `[log]
+	filename=
+	`
+	config, err = GetConfigurationFromParseConfig(loadTestConfiguration(testConfig))
+	assert.Equal(t, Info, config.GetLogLevel())
 	assert.Nil(t, err)
 }
 

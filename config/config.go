@@ -497,15 +497,15 @@ func setupLogConfiguration(cfg *ini.File, configuration *Config) {
 	configuration.CompressBackupsEnabled = compressEnabledKey.MustBool(false)
 	logLevelKey, _ := logSection.GetKey("log-level")
 	var logLevel LogLevel
-	switch logLevelKey.MustString("debug") {
+	switch logLevelKey.MustString("info") {
 	case "fatal":
 		logLevel = Fatal
 	case "error":
 		logLevel = Error
-	case "info":
-		logLevel = Info
-	default:
+	case "debug":
 		logLevel = Debug
+	default:
+		logLevel = Info
 	}
 	configuration.LogLevel = logLevel
 }

@@ -36,7 +36,7 @@ This section has configuration for configuring how and where the log output shou
 | max-backups | 3 | Maximum number of backups to retain |
 | max-age-in-days | 28 | Oldest log back retention period |
 | compress-backups | true | Whether backup files are compressed or not |
-| log-level | debug | Logging level, valid values - debug, info, error and fatal |
+| log-level | info | Logging level, valid values - debug, info, error and fatal; unrecognized values fall back to info |
 
 ## Section - Broker Config `[broker]`
 
