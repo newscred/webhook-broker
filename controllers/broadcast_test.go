@@ -202,7 +202,7 @@ func TestBroadcastControllerPost(t *testing.T) {
 		mockDispatcher.AssertExpectations(t)
 	})
 	t.Run("Success:201-Created", func(t *testing.T) {
-		t.Parallel()
+		// Not parallel: it swaps the global logger, which would capture concurrent subtests' output
 		var buf bytes.Buffer
 		oldLogger := log.Logger
 		log.Logger = log.Output(&buf)
