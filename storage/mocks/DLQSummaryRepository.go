@@ -3,10 +3,10 @@
 package mocks
 
 import (
+	sql "database/sql"
+
 	data "github.com/newscred/webhook-broker/storage/data"
 	mock "github.com/stretchr/testify/mock"
-
-	sql "database/sql"
 
 	time "time"
 )
