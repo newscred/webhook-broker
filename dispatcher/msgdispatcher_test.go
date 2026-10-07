@@ -712,9 +712,43 @@ func TestJobWorkers(t *testing.T) {
 
 		retryQueuedJobs(impl)
 
-		assert.Equal(t, 3, inLockCallCount) // got called for both job
+		assert.Equal(t, 2, inLockCallCount) // pull jobs are left to their consumer even when out of retries
 		updatedJob, err := impl.djRepo.GetByID(pullJob.ID.String())
 		assert.Nil(t, err)
-		assert.Equal(t, data.JobDead, updatedJob.Status)
+		assert.Equal(t, data.JobQueued, updatedJob.Status)
+	})
+	t.Run("PullJobOutOfRetriesMarkedDeadOnInflightRecovery", func(t *testing.T) {
+		dispatcher := NewMessageDispatcher(getCompleteDispatcherConfiguration(dataAccessor.GetMessageRepository(), dataAccessor.GetDeliveryJobRepository(), dataAccessor.GetConsumerRepository(), brokerConf, configuration, dataAccessor.GetLockRepository()))
+		impl := dispatcher.(*MessageDispatcherImpl)
+
+		_, err := db.Exec("UPDATE job SET status = ?", data.JobDelivered)
+		assert.Nil(t, err)
+		defer func() {
+			_, err := db.Exec("UPDATE job SET status = ?", data.JobQueued)
+			assert.Nil(t, err)
+		}()
+
+		pushJob, err := setupTestJob(consumers[0])
+		assert.Nil(t, err)
+		pullJob, err := setupTestJob(consumers[len(consumers)-1])
+		assert.Nil(t, err)
+		assert.Equal(t, data.PullConsumer, pullJob.Listener.Type)
+
+		lastRetry := uint(impl.brokerConfig.GetMaxRetry()) - 1
+		longAgo := time.Now().Add(-1 * time.Hour)
+		for _, job := range []*data.DeliveryJob{pushJob, pullJob} {
+			_, err = db.Exec("UPDATE job SET status = ?, retryAttemptCount = ?, statusChangedAt = ?, incrementalTimeout = 0 WHERE id = ?", data.JobInflight, lastRetry, longAgo, job.ID)
+			assert.Nil(t, err)
+		}
+
+		recoverJobsFromLongInflight(impl)
+
+		updatedPullJob, err := impl.djRepo.GetByID(pullJob.ID.String())
+		assert.Nil(t, err)
+		assert.Equal(t, data.JobDead, updatedPullJob.Status)
+		updatedPushJob, err := impl.djRepo.GetByID(pushJob.ID.String())
+		assert.Nil(t, err)
+		assert.Equal(t, data.JobQueued, updatedPushJob.Status)
+		assert.Equal(t, lastRetry+1, updatedPushJob.RetryAttemptCount)
 	})
 }
