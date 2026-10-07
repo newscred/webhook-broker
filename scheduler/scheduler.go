@@ -119,6 +119,20 @@ func (scheduler *MessageSchedulerImpl) dispatchMessage(scheduledMsg *data.Schedu
 	}()
 
 	err := inLockRun(scheduler.lockRepo, scheduledMsg, func() error {
+		// Re-check status after acquiring the lock. Another replica may have
+		// dispatched this row between our SELECT and our lock acquisition;
+		// without this check, we would proceed and collide on the duplicate
+		// message-ID constraint, producing the duplicate-key error storm.
+		fresh, err := scheduler.scheduledMsgRepo.GetByID(scheduledMsg.ID.String())
+		if err != nil {
+			log.Error().Err(err).Str("scheduledId", scheduledMsg.ID.String()).Msg("Failed to refresh scheduled message after acquiring lock")
+			scheduler.metricsCollector.IncreaseSchedulingErrorCount()
+			return err
+		}
+		if fresh.Status != data.ScheduledMsgStatusScheduled {
+			return nil
+		}
+
 		// Create regular message from scheduled message
 		message, err := data.NewMessage(
 			scheduledMsg.BroadcastedTo,
@@ -140,17 +154,8 @@ func (scheduler *MessageSchedulerImpl) dispatchMessage(scheduledMsg *data.Schedu
 		// Create the message in the regular message table
 		err = scheduler.msgRepo.Create(message)
 		if err != nil {
-			if err == storage.ErrDuplicateMessageIDForChannel {
-				// Handle potential race condition
-				time.Sleep(100 * time.Millisecond)
-				refreshedMsg, getErr := scheduler.scheduledMsgRepo.GetByID(scheduledMsg.ID.String())
-				if getErr == nil && refreshedMsg.Status == data.ScheduledMsgStatusScheduled {
-					log.Error().Str("messageId", message.MessageID).Msg("Race condition detected: Message already created but status not updated")
-				}
-			} else {
-				log.Error().Err(err).Str("messageId", message.MessageID).Msg("Failed to create message from scheduled message")
-				scheduler.metricsCollector.IncreaseSchedulingErrorCount()
-			}
+			log.Error().Err(err).Str("messageId", message.MessageID).Msg("Failed to create message from scheduled message")
+			scheduler.metricsCollector.IncreaseSchedulingErrorCount()
 			return err
 		}
 

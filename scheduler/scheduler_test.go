@@ -3,7 +3,6 @@ package scheduler
 import (
 	"errors"
 	dispatcherMocks "github.com/newscred/webhook-broker/dispatcher/mocks"
-	"github.com/newscred/webhook-broker/storage"
 	"github.com/newscred/webhook-broker/storage/data"
 	"github.com/newscred/webhook-broker/storage/mocks"
 	"github.com/stretchr/testify/assert"
@@ -187,6 +186,9 @@ func TestProcessScheduledMessages(t *testing.T) {
 	lockRepo.On("TryLock", mock.Anything).Return(nil)
 	lockRepo.On("ReleaseLock", mock.Anything).Return(nil)
 
+	// Re-check after acquiring the lock: status is still Scheduled, proceed
+	scheduledMsgRepo.On("GetByID", scheduledMsg.ID.String()).Return(scheduledMsg, nil)
+
 	// For message creation and dispatching
 	msgRepo.On("Create", mock.MatchedBy(func(msg *data.Message) bool {
 		return msg.MessageID == "test-message-id"
@@ -244,8 +246,16 @@ func TestProcessScheduledMessages(t *testing.T) {
 	dispatcherSvc.AssertCalled(t, "Dispatch", mock.Anything)
 }
 
-func TestRaceConditionHandling(t *testing.T) {
-	// Arrange
+// TestCrossReplicaRaceLoserSkipsAfterStatusFlip reproduces the cross-replica
+// race that produced the duplicate-key error storm: two replicas SELECT the
+// same scheduled-message batch, one wins the per-message lock and flips the
+// status to DISPATCHED, then releases the lock. The loser acquires the lock
+// afterwards and — before the fix — proceeded to call msgRepo.Create, hitting
+// a duplicate-key error.
+//
+// With the check-after-acquire fix, the loser re-reads the row inside the lock,
+// sees status=DISPATCHED, and returns without touching msgRepo at all.
+func TestCrossReplicaRaceLoserSkipsAfterStatusFlip(t *testing.T) {
 	scheduledMsgRepo := &mocks.ScheduledMessageRepository{}
 	msgRepo := &mocks.MessageRepository{}
 	dispatcherSvc := &dispatcherMocks.MessageDispatcher{}
@@ -256,25 +266,22 @@ func TestRaceConditionHandling(t *testing.T) {
 	}
 	lockRepo := &mocks.LockRepository{}
 
-	// Create test objects
+	// scheduledMsg as observed by the loser: it was SELECTed before the winner
+	// flipped the row, so its in-memory status is still Scheduled.
 	scheduledMsg := createTestScheduledMessage(t)
 
-	// Set up expectations
-	scheduledMsgRepo.On("GetMessagesReadyForDispatch", 10).Return([]*data.ScheduledMessage{scheduledMsg})
+	// The fresh DB read inside the lock returns the post-winner state:
+	// status=Dispatched, dispatchedAt populated.
+	dispatchedFresh := createTestScheduledMessage(t)
+	dispatchedFresh.ID = scheduledMsg.ID
+	dispatchedFresh.Status = data.ScheduledMsgStatusDispatched
+	dispatchedFresh.DispatchedAt = time.Now()
 
-	// For locking
+	scheduledMsgRepo.On("GetMessagesReadyForDispatch", 10).Return([]*data.ScheduledMessage{scheduledMsg})
 	lockRepo.On("TryLock", mock.Anything).Return(nil)
 	lockRepo.On("ReleaseLock", mock.Anything).Return(nil)
+	scheduledMsgRepo.On("GetByID", scheduledMsg.ID.String()).Return(dispatchedFresh, nil)
 
-	// Simulate duplicate message ID error
-	msgRepo.On("Create", mock.MatchedBy(func(msg *data.Message) bool {
-		return msg.MessageID == "test-message-id"
-	})).Return(storage.ErrDuplicateMessageIDForChannel)
-
-	// Return the message when checking status
-	scheduledMsgRepo.On("GetByID", scheduledMsg.ID.String()).Return(scheduledMsg, nil)
-
-	// Create the scheduler
 	scheduler := NewMessageScheduler(&SchedulerConfiguration{
 		ScheduledMsgRepo: scheduledMsgRepo,
 		MsgRepo:          msgRepo,
@@ -283,19 +290,16 @@ func TestRaceConditionHandling(t *testing.T) {
 		LockRepo:         lockRepo,
 	})
 
-	// Act
 	impl := scheduler.(*MessageSchedulerImpl)
 	impl.processScheduledMessages()
-
-	// Give time for goroutines to complete
 	time.Sleep(200 * time.Millisecond)
 
-	// Assert
-	msgRepo.AssertCalled(t, "Create", mock.Anything)
-	scheduledMsgRepo.AssertCalled(t, "GetByID", scheduledMsg.ID.String())
-
-	// Dispatch should not be called due to error
+	// The loser must not touch msgRepo, MarkDispatched, or the dispatcher.
+	// Before the fix, msgRepo.Create was called and returned a duplicate-key error.
+	msgRepo.AssertNotCalled(t, "Create", mock.Anything)
+	scheduledMsgRepo.AssertNotCalled(t, "MarkDispatched", mock.Anything)
 	dispatcherSvc.AssertNotCalled(t, "Dispatch", mock.Anything)
+	assert.Equal(t, uint64(0), impl.metricsCollector.SchedulingErrors)
 }
 
 func TestErrorHandling(t *testing.T) {
@@ -319,6 +323,9 @@ func TestErrorHandling(t *testing.T) {
 	// For locking
 	lockRepo.On("TryLock", mock.Anything).Return(nil)
 	lockRepo.On("ReleaseLock", mock.Anything).Return(nil)
+
+	// Re-check after acquiring the lock: status is still Scheduled, proceed
+	scheduledMsgRepo.On("GetByID", scheduledMsg.ID.String()).Return(scheduledMsg, nil)
 
 	// Test database error
 	msgRepo.On("Create", mock.MatchedBy(func(msg *data.Message) bool {
