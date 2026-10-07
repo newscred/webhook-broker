@@ -176,29 +176,17 @@ func (msgRepo *MessageDBRepository) getMessages(baseQuery string, args ...interf
 }
 
 // GetMessagesNotDispatchedForCertainPeriod retrieves messages in acknowledged state despite `delta` being passed.
+// Returns a single batch of up to 100 messages. Callers should loop until an empty result is returned.
 func (msgRepo *MessageDBRepository) GetMessagesNotDispatchedForCertainPeriod(delta time.Duration) []*data.Message {
-	messages := make([]*data.Message, 0, 100)
 	if delta > 0 {
 		delta = -1 * delta
 	}
 	earliestReceivedAt := time.Now().Add(delta)
-	page := data.NewPagination(nil, nil)
-	more := true
-	for more {
-		baseQuery := messageSelectRowCommonQuery + " status = ? AND receivedAt <= ?" + getPaginationQueryFragmentWithConfigurablePageSize(page, true, largePageSizeWithOrder)
-		pageMessages, pagination, err := msgRepo.getMessages(baseQuery, appendWithPaginationArgs(page, data.MsgStatusAcknowledged, earliestReceivedAt)...)
-		if err == nil {
-			msgCount := len(pageMessages)
-			if msgCount <= 0 {
-				more = false
-			} else {
-				messages = append(messages, pageMessages...)
-				page.Next = pagination.Next
-			}
-		} else {
-			log.Error().Err(err).Msg("error - could get list messages needing to be dispatched")
-			more = false
-		}
+	baseQuery := messageSelectRowCommonQuery + " status = ? AND receivedAt <= ? " + string(largePageSizeWithOrder)
+	messages, _, err := msgRepo.getMessages(baseQuery, data.MsgStatusAcknowledged, earliestReceivedAt)
+	if err != nil {
+		log.Error().Err(err).Msg("error - could get list messages needing to be dispatched")
+		return make([]*data.Message, 0)
 	}
 	return messages
 }
