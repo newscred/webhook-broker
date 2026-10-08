@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"regexp"
 	"testing"
 	"time"
 
@@ -412,7 +413,7 @@ func TestGetMessagesFromBeforeDurationThatAreCompletelyDelivered(t *testing.T) {
 		dataAccessor.On("GetDeliveryJobRepository").Return(getDeliverJobRepository())
 		dataAccessor.On("GetScheduledMessageRepository").Return(getScheduledMessageRepository())
 		msg, _ := SetupPruneableMessageFixture(dataAccessor, channelForPrune, producer1, pruneConsumers, 50)
-		pruneAbleMessages := msgRepo.GetMessagesFromBeforeDurationThatAreCompletelyDelivered(40*time.Second, 1000)
+		pruneAbleMessages, _ := msgRepo.GetMessagesFromBeforeDurationThatAreCompletelyDelivered(40*time.Second, 1000, nil)
 		assert.Equal(t, 1, len(pruneAbleMessages))
 		assert.Equal(t, msg.MessageID, pruneAbleMessages[0].MessageID)
 		// create such that pagination query gets triggered
@@ -424,7 +425,7 @@ func TestGetMessagesFromBeforeDurationThatAreCompletelyDelivered(t *testing.T) {
 			msgIds[i] = msg.MessageID
 		}
 		msgIds[iterLength] = pruneAbleMessages[0].MessageID
-		pruneAbleMessages = msgRepo.GetMessagesFromBeforeDurationThatAreCompletelyDelivered(40*time.Second, 1000)
+		pruneAbleMessages, _ = msgRepo.GetMessagesFromBeforeDurationThatAreCompletelyDelivered(40*time.Second, 1000, nil)
 		// make sure every msg is returned
 		assert.Equal(t, iterLength+1, len(pruneAbleMessages))
 		for index := range pruneAbleMessages {
@@ -432,7 +433,7 @@ func TestGetMessagesFromBeforeDurationThatAreCompletelyDelivered(t *testing.T) {
 			msgIds = utils.DeleteFromSlice(msgIds, utils.FindIndex(msgIds, pruneAbleMessages[index].MessageID))
 		}
 		assert.Equal(t, 0, len(msgIds))
-		pruneAbleMessages = msgRepo.GetMessagesFromBeforeDurationThatAreCompletelyDelivered(40*time.Second, 10)
+		pruneAbleMessages, _ = msgRepo.GetMessagesFromBeforeDurationThatAreCompletelyDelivered(40*time.Second, 10, nil)
 		// First page size is 100, so absolute max of 10 should return 100
 		assert.Equal(t, 100, len(pruneAbleMessages))
 
@@ -449,10 +450,45 @@ func TestGetMessagesFromBeforeDurationThatAreCompletelyDelivered(t *testing.T) {
 		msgRepo := NewMessageRepository(db, NewChannelRepository(testDB), NewProducerRepository(testDB))
 		mock.ExpectQuery("SELECT").WillReturnError(expectedErr)
 		mock.MatchExpectationsInOrder(true)
-		msgs := msgRepo.GetMessagesFromBeforeDurationThatAreCompletelyDelivered(2*time.Second, 1000)
+		msgs, _ := msgRepo.GetMessagesFromBeforeDurationThatAreCompletelyDelivered(2*time.Second, 1000, nil)
 		assert.Equal(t, 0, len(msgs))
 		assert.Contains(t, buf.String(), errString)
 		assert.Nil(t, mock.ExpectationsWereMet())
+	})
+}
+
+// Prune archives and deletes in successive batches. Messages whose jobs are not all delivered are
+// never eligible, so if each batch restarted the scan at the newest eligible message it would
+// re-read that entire blocked set every time - quadratic in the size of the dead-job backlog, and
+// the reason prune stopped completing. Feeding the returned pagination back in must resume the
+// scan from the cursor instead.
+func TestGetMessagesFromBeforeDurationThatAreCompletelyDeliveredResumesFromPage(t *testing.T) {
+	t.Run("ResumesFromSuppliedCursor", func(t *testing.T) {
+		t.Parallel()
+		db, sqlMock, _ := sqlmock.New()
+		msgRepo := NewMessageRepository(db, NewChannelRepository(testDB), NewProducerRepository(testDB))
+		cursorID := "d9s70oon62os73f0k3dg"
+		page := &data.Pagination{Next: &data.Cursor{ID: cursorID, Timestamp: time.Now()}}
+		// Error short-circuits the loop after the first query, which is all we need to inspect.
+		sqlMock.ExpectQuery(regexp.QuoteMeta("m.id < '" + cursorID + "'")).WillReturnError(errors.New("stop"))
+		sqlMock.MatchExpectationsInOrder(true)
+		msgs, returnedPage := msgRepo.GetMessagesFromBeforeDurationThatAreCompletelyDelivered(2*time.Second, 1000, page)
+		assert.Equal(t, 0, len(msgs))
+		assert.Equal(t, page, returnedPage)
+		assert.Nil(t, sqlMock.ExpectationsWereMet())
+	})
+	t.Run("NilPageStartsFromNewest", func(t *testing.T) {
+		t.Parallel()
+		db, sqlMock, _ := sqlmock.New()
+		msgRepo := NewMessageRepository(db, NewChannelRepository(testDB), NewProducerRepository(testDB))
+		// A nil page must not emit a cursor predicate at all.
+		sqlMock.ExpectQuery("SELECT").WillReturnError(errors.New("stop"))
+		sqlMock.MatchExpectationsInOrder(true)
+		msgs, returnedPage := msgRepo.GetMessagesFromBeforeDurationThatAreCompletelyDelivered(2*time.Second, 1000, nil)
+		assert.Equal(t, 0, len(msgs))
+		assert.NotNil(t, returnedPage)
+		assert.Nil(t, returnedPage.Next)
+		assert.Nil(t, sqlMock.ExpectationsWereMet())
 	})
 }
 
@@ -469,7 +505,7 @@ func TestDeleteMessageJobs(t *testing.T) {
 		for index := range jobs {
 			markJobDelivered(deliverJobRepo, jobs[index])
 		}
-		pruneAbleMessages := msgRepo.GetMessagesFromBeforeDurationThatAreCompletelyDelivered(40*time.Second, 1000)
+		pruneAbleMessages, _ := msgRepo.GetMessagesFromBeforeDurationThatAreCompletelyDelivered(40*time.Second, 1000, nil)
 		assert.GreaterOrEqual(t, len(pruneAbleMessages), 1)
 		for index := range pruneAbleMessages {
 			d_jobs, _, err := deliverJobRepo.GetJobsForMessage(pruneAbleMessages[index], &data.Pagination{})
