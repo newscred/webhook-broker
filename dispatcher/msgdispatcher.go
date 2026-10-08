@@ -142,25 +142,14 @@ var (
 
 	retryQueuedJobs = func(msgDispatcher *MessageDispatcherImpl) {
 		defer genericPanicRecoveryFunc()
-		jobs := msgDispatcher.djRepo.GetJobsReadyForInflightSince(msgDispatcher.rationalDelay, int(msgDispatcher.brokerConfig.GetMaxRetry()))
+		jobs := msgDispatcher.djRepo.GetJobsReadyForInflightSince(msgDispatcher.rationalDelay)
 		for _, job := range jobs {
-			if job.Listener.Type == data.PullConsumer {
-				if job.RetryAttemptCount >= uint(msgDispatcher.brokerConfig.GetMaxRetry()) {
-					err := inLockRun(msgDispatcher.lockRepo, job, func() error {
-						return msgDispatcher.djRepo.MarkQueuedJobAsDead(job)
-					})
-					if err != nil {
-						log.Error().Err(err).Msg("error - could not mark job dead " + job.ID.String())
-					}
-				}
-			} else {
-				err := inLockRun(msgDispatcher.lockRepo, job, func() error {
-					queueJob(msgDispatcher, job)
-					return nil
-				})
-				if err != nil {
-					log.Error().Err(err).Msg("error - could not retry job" + job.ID.String())
-				}
+			err := inLockRun(msgDispatcher.lockRepo, job, func() error {
+				queueJob(msgDispatcher, job)
+				return nil
+			})
+			if err != nil {
+				log.Error().Err(err).Msg("error - could not retry job" + job.ID.String())
 			}
 		}
 	}
@@ -178,8 +167,12 @@ var (
 			if !shouldEnqueueLongInflightJob(job, msgDispatcher) {
 				continue
 			}
-			// Ignore max retry intentionally since we are recovering likely from a process crash during delivery.
+			// Push jobs ignore max retry intentionally since we are recovering likely from a process crash during delivery.
+			// Pull jobs only get here when the consumer did not finish them in time, so this is where they run out of retries.
 			err := inLockRun(msgDispatcher.lockRepo, job, func() error {
+				if job.Listener.Type == data.PullConsumer && job.RetryAttemptCount+1 >= uint(msgDispatcher.brokerConfig.GetMaxRetry()) {
+					return msgDispatcher.djRepo.MarkJobDead(job)
+				}
 				msgDispatcher.djRepo.MarkJobRetry(job, computeEarliestDelta(job.RetryAttemptCount+1, msgDispatcher.brokerConfig))
 				return nil
 			})
