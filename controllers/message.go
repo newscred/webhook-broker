@@ -70,8 +70,10 @@ type TheCount struct {
 	Links map[string]string
 }
 
-type StatusCount struct {
-	Counts map[string]TheCount
+// MessagesStatusResponse represents the response for message status counts
+type MessagesStatusResponse struct {
+	Counts                 map[string]TheCount `json:"counts"`
+	NextScheduledMessageAt *time.Time          `json:"next_scheduled_message_at,omitempty"`
 }
 
 func newMessageModel(message *data.Message, jobs ...*data.DeliveryJob) *MessageModel {
@@ -137,6 +139,16 @@ func (messageController *MessageController) FormatAsRelativeLink(params ...httpr
 }
 
 // Get implements GET /channel/:channelId/message/:messageId
+// @Summary Get Message Details
+// @Description Retrieves details of a specific message including all delivery jobs.
+// @Tags Messages
+// @Produce json
+// @Param channelId path string true "Channel ID"
+// @Param messageId path string true "Message ID"
+// @Success 200 {object} MessageModel
+// @Failure 404
+// @Failure 500
+// @Router /channel/{channelId}/message/{messageId} [get]
 func (messageController *MessageController) Get(w http.ResponseWriter, r *http.Request, param httprouter.Params) {
 	channelID := param.ByName(channelIDPathParamKey)
 	messageID := param.ByName(messageIDParamKey)
@@ -188,6 +200,18 @@ func (messagesController *MessagesController) FormatAsRelativeLink(params ...htt
 }
 
 // Get implements GET /channel/:channelId/messages
+// @Summary List Messages for a Channel
+// @Description Retrieves a paginated list of messages for a channel with optional status filtering.
+// @Tags Messages
+// @Produce json
+// @Param channelId path string true "Channel ID"
+// @Param status query int false "Filter by message status"
+// @Param previous query string false "Pagination cursor for previous page"
+// @Param next query string false "Pagination cursor for next page"
+// @Success 200 {object} ListResult
+// @Failure 404
+// @Failure 500
+// @Router /channel/{channelId}/messages [get]
 func (messagesController *MessagesController) Get(w http.ResponseWriter, r *http.Request, param httprouter.Params) {
 	channelID := param.ByName(channelIDPathParamKey)
 	statusFilters := extractMsgStatusFilters(r)
@@ -256,6 +280,14 @@ func (messagesStatusController *MessagesStatusController) FormatAsRelativeLink(p
 }
 
 // Get implements GET /channel/:channelId/messages-status
+// @Summary Get Message Status Counts
+// @Description Retrieves message status counts for a channel, including both regular and scheduled messages.
+// @Tags Messages
+// @Produce json
+// @Param channelId path string true "Channel ID"
+// @Success 200 {object} MessagesStatusResponse
+// @Failure 500
+// @Router /channel/{channelId}/messages-status [get]
 func (messagesStatusController *MessagesStatusController) Get(w http.ResponseWriter, r *http.Request, param httprouter.Params) {
 	channelID := param.ByName(channelIDPathParamKey)
 	log.Debug().Msgf("Channel ID: %s", channelID)
@@ -287,7 +319,7 @@ func (messagesStatusController *MessagesStatusController) Get(w http.ResponseWri
 	}
 
 	// Build response with both regular and scheduled message counts
-	statusCountOutput := &StatusCount{}
+	statusCountOutput := &MessagesStatusResponse{}
 	statusCountOutput.Counts = make(map[string]TheCount)
 
 	// Add regular message counts
@@ -312,16 +344,9 @@ func (messagesStatusController *MessagesStatusController) Get(w http.ResponseWri
 		}
 	}
 
-	// Add next scheduled message time if available
-	responseData := map[string]interface{}{
-		"counts": statusCountOutput.Counts,
-	}
+	statusCountOutput.NextScheduledMessageAt = nextScheduledTime
 
-	if nextScheduledTime != nil {
-		responseData["next_scheduled_message_at"] = nextScheduledTime
-	}
-
-	writeJSON(w, responseData)
+	writeJSON(w, statusCountOutput)
 }
 
 // DLQController represents the GET and POST endpoint for reading dead and requeuing all dead messages for delivery.
@@ -348,6 +373,18 @@ func (controller *DLQController) FormatAsRelativeLink(params ...httprouter.Param
 }
 
 // Get Retrieves dead jobs for a specific consumer
+// @Summary Get Dead Jobs for Consumer
+// @Description Retrieves all dead (failed) delivery jobs for a consumer.
+// @Tags DLQ
+// @Produce json
+// @Param channelId path string true "Channel ID"
+// @Param consumerId path string true "Consumer ID"
+// @Param previous query string false "Pagination cursor for previous page"
+// @Param next query string false "Pagination cursor for next page"
+// @Success 200 {object} DLQList
+// @Failure 404
+// @Failure 500
+// @Router /channel/{channelId}/consumer/{consumerId}/dlq [get]
 func (controller *DLQController) Get(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 	consumer := controller.getConsumer(w, params)
 	if consumer != nil {
@@ -376,6 +413,19 @@ func (controller *DLQController) getConsumer(w http.ResponseWriter, params httpr
 }
 
 // Post Requeue dead jobs for another single delivery attempt
+// @Summary Requeue All Dead Jobs
+// @Description Requeues all dead jobs for a consumer for another delivery attempt.
+// @Tags DLQ
+// @Accept x-www-form-urlencoded
+// @Param channelId path string true "Channel ID"
+// @Param consumerId path string true "Consumer ID"
+// @Param requeue formData string true "Consumer token for requeue validation"
+// @Success 202
+// @Failure 400
+// @Failure 404
+// @Failure 415
+// @Failure 500
+// @Router /channel/{channelId}/consumer/{consumerId}/dlq [post]
 func (controller *DLQController) Post(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 	validRequest := checkFormContentType(r, w)
 	if !validRequest {

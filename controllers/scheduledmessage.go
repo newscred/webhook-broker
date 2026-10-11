@@ -2,15 +2,31 @@ package controllers
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/newscred/webhook-broker/storage"
+	"github.com/newscred/webhook-broker/storage/data"
 	"github.com/rs/zerolog/hlog"
 )
 
 const (
 	scheduledMessagePath = channelPath + "/scheduled-message/:messageId"
 )
+
+// ScheduledMessageModel represents the response for a scheduled message
+type ScheduledMessageModel struct {
+	ID               string         `json:"id"`
+	MessageID        string         `json:"messageId"`
+	ContentType      string         `json:"contentType"`
+	Priority         uint           `json:"priority"`
+	ProducedBy       string         `json:"producedBy"`
+	DispatchSchedule time.Time      `json:"dispatchSchedule"`
+	DispatchedAt     *time.Time     `json:"dispatchedAt"`
+	Status           string         `json:"status"`
+	Payload          string         `json:"payload"`
+	Headers          data.HeadersMap `json:"headers"`
+}
 
 // ScheduledMessageController handles retrieving a single scheduled message
 type ScheduledMessageController struct {
@@ -24,6 +40,16 @@ func NewScheduledMessageController(scheduledMsgRepo storage.ScheduledMessageRepo
 }
 
 // Get retrieves a specific scheduled message by channel ID and message ID
+// @Summary Get Scheduled Message Details
+// @Description Retrieves details of a specific scheduled message.
+// @Tags Scheduled Messages
+// @Produce json
+// @Param channelId path string true "Channel ID"
+// @Param messageId path string true "Message ID"
+// @Success 200 {object} ScheduledMessageModel
+// @Failure 404
+// @Failure 500
+// @Router /channel/{channelId}/scheduled-message/{messageId} [get]
 func (controller *ScheduledMessageController) Get(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 	logger := hlog.FromRequest(r)
 	channelID := params.ByName(channelIDPathParamKey)
@@ -36,25 +62,23 @@ func (controller *ScheduledMessageController) Get(w http.ResponseWriter, r *http
 		return
 	}
 
-	responseData := map[string]interface{}{
-		"id":               scheduledMessage.ID.String(),
-		"messageId":        scheduledMessage.MessageID,
-		"contentType":      scheduledMessage.ContentType,
-		"priority":         scheduledMessage.Priority,
-		"producedBy":       scheduledMessage.ProducedBy.ProducerID,
-		"dispatchSchedule": scheduledMessage.DispatchSchedule,
-		"dispatchedAt":   nil,
-		"status":           scheduledMessage.Status.String(),
-		"payload":          scheduledMessage.Payload,
-		"headers":          scheduledMessage.Headers,
+	model := &ScheduledMessageModel{
+		ID:               scheduledMessage.ID.String(),
+		MessageID:        scheduledMessage.MessageID,
+		ContentType:      scheduledMessage.ContentType,
+		Priority:         scheduledMessage.Priority,
+		ProducedBy:       scheduledMessage.ProducedBy.ProducerID,
+		DispatchSchedule: scheduledMessage.DispatchSchedule,
+		Status:           scheduledMessage.Status.String(),
+		Payload:          scheduledMessage.Payload,
+		Headers:          scheduledMessage.Headers,
 	}
 
-	// Only include dispatched date if it's set (not zero value)
 	if !scheduledMessage.DispatchedAt.IsZero() {
-		responseData["dispatchedAt"] = scheduledMessage.DispatchedAt
+		model.DispatchedAt = &scheduledMessage.DispatchedAt
 	}
 
-	writeJSON(w, responseData)
+	writeJSON(w, model)
 }
 
 // GetPath returns the endpoint's path

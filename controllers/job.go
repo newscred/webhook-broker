@@ -79,11 +79,35 @@ func newQueuedDeliveryJobModel(job *data.DeliveryJob) *QueuedDeliveryJobModel {
 	}
 }
 
+// JobStatusUpdateRequest represents the request body for updating a job's status
+type JobStatusUpdateRequest struct {
+	NextState          string `json:"NextState"`
+	IncrementalTimeout uint   `json:"IncrementalTimeout"`
+}
+
 type JobListResult struct {
 	Result []*QueuedDeliveryJobModel
 }
 
 // Get implements the GET /channel/:channelId/consumer/:consumerId/queued-jobs endpoint
+// @Summary Get Queued Jobs for Consumer (Pull-Based)
+// @Description Retrieves prioritized queued jobs for a pull-based consumer.
+// @Tags Jobs
+// @Produce json
+// @Param channelId path string true "Channel ID"
+// @Param consumerId path string true "Consumer ID"
+// @Param limit query int false "Page size" default(25) maximum(100)
+// @Param X-Broker-Channel-Token header string true "Channel authentication token"
+// @Param X-Broker-Consumer-Token header string true "Consumer authentication token"
+// @Success 200 {object} JobListResult
+// @Failure 400
+// @Failure 401
+// @Failure 403
+// @Failure 404
+// @Failure 412
+// @Failure 500
+// @Security ChannelToken && ConsumerToken
+// @Router /channel/{channelId}/consumer/{consumerId}/queued-jobs [get]
 func (controller *JobsController) Get(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 	consumer, valid := getConsumerWithValidation(w, r, params, controller.ChannelRepo, controller.ConsumerRepo)
 	if !valid {
@@ -191,6 +215,24 @@ func (controller *JobRequeueController) FormatAsRelativeLink(params ...httproute
 }
 
 // Post implements the POST /channel/:channelId/consumer/:consumerId/job/:jobId/requeue-dead-job
+// @Summary Requeue Single Dead Job
+// @Description Requeues a specific dead job for another delivery attempt.
+// @Tags Jobs
+// @Accept json
+// @Param channelId path string true "Channel ID"
+// @Param consumerId path string true "Consumer ID"
+// @Param jobId path string true "Job ID"
+// @Param X-Broker-Channel-Token header string true "Channel authentication token"
+// @Param X-Broker-Consumer-Token header string true "Consumer authentication token"
+// @Success 202
+// @Failure 400
+// @Failure 401
+// @Failure 403
+// @Failure 404
+// @Failure 412
+// @Failure 500
+// @Security ChannelToken && ConsumerToken
+// @Router /channel/{channelId}/consumer/{consumerId}/job/{jobId}/requeue-dead-job [post]
 func (controller *JobRequeueController) Post(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 	job, valid := getJobWithValidation(w, r, params, controller.ChannelRepo, controller.ConsumerRepo, controller.DeliveryJobRepo)
 	if !valid {
@@ -225,6 +267,23 @@ func NewJobController(msgController *MessageController, channelController *Chann
 }
 
 // Get implements the GET /channel/:channelId/consumer/:consumerId/job/:jobId endpoint
+// @Summary Get Job Details
+// @Description Retrieves detailed information about a specific delivery job.
+// @Tags Jobs
+// @Produce json
+// @Param channelId path string true "Channel ID"
+// @Param consumerId path string true "Consumer ID"
+// @Param jobId path string true "Job ID"
+// @Param X-Broker-Channel-Token header string true "Channel authentication token"
+// @Param X-Broker-Consumer-Token header string true "Consumer authentication token"
+// @Success 200 {object} HyperlinkedDeliveryJobModel
+// @Failure 401
+// @Failure 403
+// @Failure 404
+// @Failure 412
+// @Failure 500
+// @Security ChannelToken && ConsumerToken
+// @Router /channel/{channelId}/consumer/{consumerId}/job/{jobId} [get]
 func (controller *JobController) Get(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 	job, valid := getJobWithValidation(w, r, params, controller.ChannelRepo, controller.ConsumerRepo, controller.DeliveryJobRepo)
 	if !valid {
@@ -246,16 +305,32 @@ func (controller *JobController) Get(w http.ResponseWriter, r *http.Request, par
 }
 
 // Post implements the POST /channel/:channelId/consumer/:consumerId/job/:jobId endpoint
+// @Summary Update Job Status (Pull-Based)
+// @Description Updates the status of a delivery job. Used by pull-based consumers to transition jobs through their lifecycle.
+// @Tags Jobs
+// @Accept json
+// @Param channelId path string true "Channel ID"
+// @Param consumerId path string true "Consumer ID"
+// @Param jobId path string true "Job ID"
+// @Param X-Broker-Channel-Token header string true "Channel authentication token"
+// @Param X-Broker-Consumer-Token header string true "Consumer authentication token"
+// @Param body body JobStatusUpdateRequest true "Job update data"
+// @Success 202
+// @Failure 400
+// @Failure 401
+// @Failure 403
+// @Failure 404
+// @Failure 412
+// @Failure 500
+// @Security ChannelToken && ConsumerToken
+// @Router /channel/{channelId}/consumer/{consumerId}/job/{jobId} [post]
 func (controller *JobController) Post(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 	job, valid := getJobWithValidation(w, r, params, controller.ChannelRepo, controller.ConsumerRepo, controller.DeliveryJobRepo)
 	if !valid {
 		return
 	}
 
-	updateData := struct {
-		NextState          string
-		IncrementalTimeout uint
-	}{}
+	updateData := JobStatusUpdateRequest{}
 	err := json.NewDecoder(r.Body).Decode(&updateData)
 	if err != nil {
 		writeErr(w, err)

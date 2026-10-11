@@ -63,8 +63,12 @@ generate:
 	mockery --name ConsumerRepository --structname "MockConsumerRepository" --dir "./storage/" --output "./storage" --testonly --outpkg "storage"
 	mockery --name ProducerRepository --structname "MockProducerRepository" --dir "./storage/" --output "./storage" --testonly --outpkg "storage"
 
+open-api-spec:
+	swag init --parseDependency --parseInternal --output docs/open-api-spec --outputTypes yaml
+
 dep-tools:
 	go install github.com/google/wire/cmd/wire@v0.6.0
+	go install github.com/swaggo/swag/cmd/swag@v1.16.6
 ifneq ($(OS),Alpine Linux)
 	go install github.com/golang-migrate/migrate/v4/cmd/migrate@v4.15.2
 	go install github.com/vektra/mockery/v2@v2.53.3

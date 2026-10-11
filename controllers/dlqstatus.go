@@ -46,6 +46,13 @@ func (controller *DLQStatusController) FormatAsRelativeLink(params ...httprouter
 }
 
 // Get implements GET /dlq-status
+// @Summary Get DLQ Status
+// @Description Get DLQ status summary across all consumers.
+// @Tags DLQ
+// @Produce json
+// @Success 200 {object} DLQStatusModel
+// @Failure 500
+// @Router /dlq-status [get]
 func (controller *DLQStatusController) Get(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 	summaries, err := controller.DLQSummaryRepo.GetAll()
 	if err != nil {

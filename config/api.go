@@ -85,7 +85,7 @@ type SeedChannel SeedProducer
 type SeedConsumer struct {
 	SeedProducer
 	// CallbackURL represents the URl to call back
-	CallbackURL *url.URL
+	CallbackURL *url.URL `swaggertype:"string"`
 	// Channel represents which channel this consumer listens to
 	Channel string
 	Type    string

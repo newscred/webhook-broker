@@ -140,6 +140,16 @@ Usage of ./webhook-broker:
 
 In addition consult our [configuration documentation](./docs/configuration.md) to setup the application.
 
+## API Documentation
+
+The OpenAPI spec is auto-generated from annotations in the controller source files using [swaggo/swag](https://github.com/swaggo/swag). The generated spec files are in `docs/open-api-spec/`.
+
+After modifying any `// @` annotations in `controllers/*.go`, regenerate with:
+
+```bash
+make open-api-spec
+```
+
 ## Implementation Details
 
 The Tech Specs are good place to understand the implementation details -

@@ -64,6 +64,29 @@ func NewBroadcastController(channelRepo storage.ChannelRepository, msgRepo stora
 }
 
 // Post Receives message to be broadcasted to a channel
+// @Summary Broadcast Message
+// @Description Broadcasts a message to all consumers of a channel. Messages can be broadcast immediately or scheduled for future delivery.
+// @Tags Broadcast
+// @Accept octet-stream
+// @Param channelId path string true "Channel ID"
+// @Param X-Broker-Channel-Token header string true "Channel authentication token"
+// @Param X-Broker-Producer-ID header string true "Producer identifier"
+// @Param X-Broker-Producer-Token header string true "Producer authentication token"
+// @Param X-Broker-Message-ID header string false "Optional custom message ID for idempotent broadcasting"
+// @Param X-Broker-Message-Priority header int false "Message priority (higher value = higher priority)"
+// @Param X-Broker-Scheduled-For header string false "RFC3339 timestamp for scheduled message delivery"
+// @Param X-Broker-Metadata-Headers header string false "Comma-separated list of header names to include as message metadata"
+// @Param Content-Type header string false "Message content type" default(application/octet-stream)
+// @Success 201
+// @Failure 400
+// @Failure 401
+// @Failure 404
+// @Failure 403
+// @Failure 409
+// @Failure 412
+// @Failure 500
+// @Security ChannelToken && ProducerToken && ProducerID
+// @Router /channel/{channelId}/broadcast [post]
 func (broadcastController *BroadcastController) Post(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 	channel, producer, valid := broadcastController.getChannelAndProducerWithValidation(w, r, params)
 	if !valid {
