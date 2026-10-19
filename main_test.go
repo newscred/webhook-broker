@@ -118,7 +118,7 @@ func TestMainFunc(t *testing.T) {
 			return nil, errors.New("No App Error")
 		}
 		exit = panicExit
-		os.Args = []string{"webhook-broker", "-migrate", "./migration/sqls/"}
+		os.Args = []string{"webhook-broker", "-migrate", "./migration/sqls/", "-run-migration"}
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
@@ -184,7 +184,7 @@ func TestMainFunc(t *testing.T) {
 		log.Logger = log.Output(&buf)
 		oldArgs := os.Args
 		os.WriteFile(configFilePath, []byte(notificationInitialContent), 0644)
-		os.Args = []string{"webhook-broker", "-migrate", "./migration/sqls/", "-config", configFilePath}
+		os.Args = []string{"webhook-broker", "-migrate", "./migration/sqls/", "-run-migration", "-config", configFilePath}
 		oldNotify := controllers.NotifyOnInterrupt
 		controllers.NotifyOnInterrupt = configChangeRestartMainFnBreaker
 		defer func() {
@@ -221,7 +221,7 @@ func TestMainFunc(t *testing.T) {
 		}
 		os.WriteFile(configFilePath2, []byte(notificationInitialContent), 0644)
 		oldArgs := os.Args
-		os.Args = []string{"webhook-broker", "-migrate", "./migration/sqls/", "-config", configFilePath2, "-stop-on-conf-change"}
+		os.Args = []string{"webhook-broker", "-migrate", "./migration/sqls/", "-run-migration", "-config", configFilePath2, "-stop-on-conf-change"}
 		defer func() {
 			os.Args = oldArgs
 		}()
@@ -362,9 +362,18 @@ func TestParseArgs(t *testing.T) {
 		assert.NotNil(t, err)
 		assert.Equal(t, err, ErrMigrationSrcNotDir)
 	})
+	t.Run("MigrationSourceWithoutRunMigration", func(t *testing.T) {
+		t.Parallel()
+		// -migrate resolves the source but migrations stay opt-in: without -run-migration
+		// they are not applied at startup.
+		cliConfig, _, err := parseArgs("webhook-broker", []string{"-migrate", "./migration"})
+		assert.Nil(t, err)
+		assert.False(t, cliConfig.IsMigrationEnabled())
+		assert.Equal(t, "file://"+absPath, cliConfig.MigrationSource)
+	})
 	t.Run("ValidMigrationSourceAbs", func(t *testing.T) {
 		t.Parallel()
-		cliConfig, _, err := parseArgs("webhook-broker", []string{"-migrate", "./migration"})
+		cliConfig, _, err := parseArgs("webhook-broker", []string{"-migrate", "./migration", "-run-migration"})
 		assert.Nil(t, err)
 		assert.True(t, cliConfig.IsMigrationEnabled())
 		assert.Equal(t, "file://"+absPath, cliConfig.MigrationSource)
@@ -372,7 +381,7 @@ func TestParseArgs(t *testing.T) {
 	})
 	t.Run("ValidMigrationSourceRelative", func(t *testing.T) {
 		t.Parallel()
-		cliConfig, _, err := parseArgs("webhook-broker", []string{"-migrate", absPath})
+		cliConfig, _, err := parseArgs("webhook-broker", []string{"-migrate", absPath, "-run-migration"})
 		assert.Nil(t, err)
 		assert.True(t, cliConfig.IsMigrationEnabled())
 		assert.Equal(t, "file://"+absPath, cliConfig.MigrationSource)
