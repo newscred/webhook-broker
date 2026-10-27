@@ -289,8 +289,10 @@ func TestScheduledMessageDispatchAsMessage(t *testing.T) {
 		assert.Nil(t, err)
 		assert.Nil(t, scheduledRepo.Create(scheduledMsg))
 		t.Cleanup(func() {
-			executeUpdateQuery(testDB, "DELETE FROM message WHERE channelId = ? AND messageId = ?", []interface{}{scheduledTestChannelID, scheduledMsg.MessageID})
-			executeUpdateQuery(testDB, "DELETE FROM scheduled_message WHERE id = ?", []interface{}{scheduledMsg.ID})
+			_, err := executeUpdateQuery(testDB, "DELETE FROM message WHERE channelId = ? AND messageId = ?", []interface{}{scheduledTestChannelID, scheduledMsg.MessageID})
+			assert.Nil(t, err)
+			_, err = executeUpdateQuery(testDB, "DELETE FROM scheduled_message WHERE id = ?", []interface{}{scheduledMsg.ID})
+			assert.Nil(t, err)
 		})
 		message, err := data.NewMessage(scheduledTestChannel, scheduledTestProducer, scheduledMsg.Payload, scheduledMsg.ContentType, scheduledMsg.Headers)
 		assert.Nil(t, err)

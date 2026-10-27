@@ -20,7 +20,9 @@ import (
 var dataAccessor storage.DataAccessor
 
 func TestMain(m *testing.M) {
-	os.Remove("./webhook-broker.sqlite3")
+	if err := os.Remove("./webhook-broker.sqlite3"); err != nil && !os.IsNotExist(err) {
+		panic(err)
+	}
 	configuration, err := config.GetAutoConfiguration()
 	if err != nil {
 		panic(err)
