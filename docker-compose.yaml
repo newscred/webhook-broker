@@ -15,7 +15,7 @@ services:
       - mysql:mysql
 
   mysql:
-    image: mysql:8.4.13
+    image: mysql:${MYSQL_VERSION:-8.0.37}
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: webhook-broker
