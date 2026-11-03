@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -26,6 +27,7 @@ import (
 	storagemocks "github.com/newscred/webhook-broker/storage/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -720,3 +722,87 @@ func TestJobWorkers(t *testing.T) {
 	})
 }
 
+func TestSlowConsumerDoesNotStarveOtherConsumers(t *testing.T) {
+	t.Cleanup(clearConsumerHandler)
+	slowConsumer := consumers[0]
+	fastConsumer := consumers[1]
+	slowHandlerKey := strings.TrimPrefix(slowConsumer.CallbackURL, consumerBaseURL(slowConsumer))
+	release := make(chan struct{})
+	var slowCalls atomic.Int32
+	// Earlier tests leave jobs for the same consumer behind, so count only this test's messages.
+	var ownMessageIDs sync.Map
+	consumerHandler[slowHandlerKey] = func(_ string, w http.ResponseWriter, r *http.Request) {
+		if _, own := ownMessageIDs.Load(r.Header.Get(headerMessageID)); own {
+			slowCalls.Add(1)
+			<-release
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+	var releaseOnce sync.Once
+	releaseSlow := func() { releaseOnce.Do(func() { close(release) }) }
+	defer releaseSlow()
+
+	brokerConf := new(configmocks.BrokerConfig)
+	brokerConf.On("GetMaxMessageQueueSize").Return(uint(100))
+	brokerConf.On("GetMaxWorkers").Return(uint(3))
+	brokerConf.On("IsRecoveryWorkersEnabled").Return(false)
+	brokerConf.On("GetRationalDelay").Return(100 * time.Millisecond)
+	brokerConf.On("GetMaxRetry").Return(uint8(5))
+	brokerConf.On("GetRetryBackoffDelays").Return([]time.Duration{5 * time.Second})
+	brokerConf.On("GetConsumerMaxConcurrency", channel.ChannelID, slowConsumer.ConsumerID).Return(uint(1))
+	brokerConf.On("GetConsumerMaxConcurrency", mock.Anything, mock.Anything).Return(uint(0))
+	dispatcher := NewMessageDispatcher(getCompleteDispatcherConfiguration(dataAccessor.GetMessageRepository(), dataAccessor.GetDeliveryJobRepository(), dataAccessor.GetConsumerRepository(), brokerConf, configuration, dataAccessor.GetLockRepository()))
+	defer dispatcher.Stop()
+
+	// With 3 workers and no per-consumer limit, the slow consumer's jobs alone would fill every worker.
+	messages := make([]*data.Message, 0, 4)
+	for i := 0; i < 4; i++ {
+		msg, _ := data.NewMessage(channel, producer, `{"key": "isolation"}`, "application/json", data.HeadersMap{})
+		require.NoError(t, dataAccessor.GetMessageRepository().Create(msg))
+		ownMessageIDs.Store(msg.MessageID, struct{}{})
+		dispatcher.Dispatch(msg)
+		messages = append(messages, msg)
+	}
+
+	fastDelivered := func() bool {
+		for _, msg := range messages {
+			jobs, _, err := dataAccessor.GetDeliveryJobRepository().GetJobsForMessage(msg, data.NewPagination(nil, nil))
+			if err != nil {
+				return false
+			}
+			for _, job := range jobs {
+				if job.Listener.ID == fastConsumer.ID && job.Status != data.JobDelivered {
+					return false
+				}
+			}
+		}
+		return true
+	}
+	assert.Eventually(t, fastDelivered, 10*time.Second, 50*time.Millisecond, "other consumers must be served while the slow one blocks")
+	assert.Equal(t, int32(1), slowCalls.Load(), "slow consumer must hold no more than its limit of workers")
+
+	releaseSlow()
+	slowDelivered := func() bool {
+		for _, msg := range messages {
+			jobs, _, err := dataAccessor.GetDeliveryJobRepository().GetJobsForMessage(msg, data.NewPagination(nil, nil))
+			if err != nil {
+				return false
+			}
+			for _, job := range jobs {
+				if job.Listener.Type == data.PushConsumer && job.Status != data.JobDelivered {
+					return false
+				}
+			}
+		}
+		return true
+	}
+	assert.Eventually(t, slowDelivered, 10*time.Second, 50*time.Millisecond)
+	assert.Equal(t, int32(4), slowCalls.Load())
+}
+
+func consumerBaseURL(consumer *data.Consumer) string {
+	parsed, _ := url.Parse(consumer.CallbackURL)
+	return parsed.Scheme + "://" + parsed.Host + "/"
+}
+
+// Generated with assistance from Claude AI
