@@ -114,7 +114,8 @@ type Config struct {
 	MaxRetry                  uint8
 	RationalDelay             time.Duration
 	RetryBackoffDelays        []time.Duration
-	ConsumerMaxConcurrency    uint
+	// DefaultConsumerMaxConcurrency applies to consumers without an override; 0 means no limit
+	DefaultConsumerMaxConcurrency uint
 	// ConsumerMaxConcurrencyOverrides is keyed by "channelID/consumerID" or "consumerID"
 	ConsumerMaxConcurrencyOverrides map[string]uint
 	LogLevel                        LogLevel
@@ -251,7 +252,7 @@ func (config *Config) GetMaxWorkers() uint {
 
 // GetConsumerMaxConcurrency returns how many deliveries to the consumer this instance may run at
 // once; 0 means no limit beyond max-workers. A "channelID/consumerID" override wins over a
-// "consumerID" override, which wins over the [broker] default.
+// "consumerID" override, which wins over default-consumer-max-concurrency.
 func (config *Config) GetConsumerMaxConcurrency(channelID, consumerID string) uint {
 	if limit, ok := config.ConsumerMaxConcurrencyOverrides[channelID+"/"+consumerID]; ok {
 		return limit
@@ -259,7 +260,7 @@ func (config *Config) GetConsumerMaxConcurrency(channelID, consumerID string) ui
 	if limit, ok := config.ConsumerMaxConcurrencyOverrides[consumerID]; ok {
 		return limit
 	}
-	return config.ConsumerMaxConcurrency
+	return config.DefaultConsumerMaxConcurrency
 }
 
 // IsPriorityDispatcherEnabled returns whether priority will be respected during dispatching from queue
@@ -685,7 +686,7 @@ func setupBrokerConfiguration(cfg *ini.File, configuration *Config) {
 		backoffDelays = append(backoffDelays, time.Duration(parsedBackoff)*time.Second)
 	}
 	configuration.RetryBackoffDelays = backoffDelays
-	configuration.ConsumerMaxConcurrency = broker.Key("consumer-max-concurrency").MustUint(0)
+	configuration.DefaultConsumerMaxConcurrency = broker.Key("default-consumer-max-concurrency").MustUint(0)
 	configuration.ConsumerMaxConcurrencyOverrides = parseConsumerMaxConcurrencyOverrides(cfg)
 }
 

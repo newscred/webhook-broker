@@ -28,7 +28,7 @@ max-retry=5
 rational-delay-in-seconds=2
 retry-backoff-delays-in-seconds=5,30,60
 recovery-workers-enabled=true
-consumer-max-concurrency=0
+default-consumer-max-concurrency=0
 [consumer-connection]
 token-header-name=X-Broker-Consumer-Token
 user-agent=Webhook Message Broker
