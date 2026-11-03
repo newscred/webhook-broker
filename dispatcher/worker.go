@@ -46,6 +46,8 @@ type Worker struct {
 	working                  bool
 	djRepo                   storage.DeliveryJobRepository
 	httpClient               *http.Client
+	// onDone tells the dispatcher the delivery attempt is over, freeing the consumer's slot
+	onDone func(*Job)
 }
 
 // NewWorker creates a Worker
@@ -106,6 +108,9 @@ func (w *Worker) Start() {
 			select {
 			case job := <-w.jobChannel:
 				deliverJob(w, job)
+				if w.onDone != nil {
+					w.onDone(job)
+				}
 			case <-w.quit:
 				// we have received a signal to stop
 				w.working = false
