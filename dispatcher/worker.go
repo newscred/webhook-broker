@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/rs/xid"
@@ -43,7 +44,7 @@ type Worker struct {
 	quit                     chan bool
 	consumerConnectionConfig config.ConsumerConnectionConfig
 	brokerConfig             config.BrokerConfig
-	working                  bool
+	working                  int32 // read and written atomically; Stop polls it from another goroutine
 	djRepo                   storage.DeliveryJobRepository
 	httpClient               *http.Client
 	// onDone tells the dispatcher the delivery attempt is over, freeing the consumer's slot
@@ -56,7 +57,6 @@ func NewWorker(workerPool chan chan *Job, consumerConfig config.ConsumerConnecti
 		workerPool:               workerPool,
 		jobChannel:               make(chan *Job, 1),
 		quit:                     make(chan bool, 1),
-		working:                  false,
 		consumerConnectionConfig: consumerConfig,
 		brokerConfig:             brokerConfig,
 		djRepo:                   deliveryJobRepo,
@@ -100,7 +100,7 @@ var deliverJob = func(w *Worker, job *Job) {
 // case we need to stop it
 func (w *Worker) Start() {
 	go func() {
-		w.working = true
+		atomic.StoreInt32(&w.working, 1)
 		for {
 			// register the current worker into the worker queue.
 			w.workerPool <- w.jobChannel
@@ -113,7 +113,7 @@ func (w *Worker) Start() {
 				}
 			case <-w.quit:
 				// we have received a signal to stop
-				w.working = false
+				atomic.StoreInt32(&w.working, 0)
 				return
 			}
 		}
@@ -184,7 +184,7 @@ func (w *Worker) executeJob(requestID string, logger zerolog.Logger, job *Job) (
 
 // IsWorking retrieves whether the work is active
 func (w *Worker) IsWorking() bool {
-	return w.working
+	return atomic.LoadInt32(&w.working) == 1
 }
 
 // Stop signals the worker to stop listening for work requests.
