@@ -281,6 +281,67 @@ func TestScheduledMessageMarkDispatched(t *testing.T) {
 	})
 }
 
+func TestScheduledMessageDispatchAsMessage(t *testing.T) {
+	setup := func(t *testing.T) (ScheduledMessageRepository, MessageRepository, *data.ScheduledMessage, *data.Message) {
+		scheduledRepo := getScheduledMessageRepository()
+		msgRepo := NewMessageRepository(testDB, NewChannelRepository(testDB), NewProducerRepository(testDB))
+		scheduledMsg, err := data.NewScheduledMessage(scheduledTestChannel, scheduledTestProducer, "dispatch-payload", "test/content-type", time.Now().Add(-time.Minute), data.HeadersMap{})
+		assert.Nil(t, err)
+		assert.Nil(t, scheduledRepo.Create(scheduledMsg))
+		t.Cleanup(func() {
+			_, err := executeUpdateQuery(testDB, "DELETE FROM message WHERE channelId = ? AND messageId = ?", []interface{}{scheduledTestChannelID, scheduledMsg.MessageID})
+			assert.Nil(t, err)
+			_, err = executeUpdateQuery(testDB, "DELETE FROM scheduled_message WHERE id = ?", []interface{}{scheduledMsg.ID})
+			assert.Nil(t, err)
+		})
+		message, err := data.NewMessage(scheduledTestChannel, scheduledTestProducer, scheduledMsg.Payload, scheduledMsg.ContentType, scheduledMsg.Headers)
+		assert.Nil(t, err)
+		message.MessageID = scheduledMsg.MessageID
+		scheduledMsg.Status = data.ScheduledMsgStatusDispatched
+		scheduledMsg.DispatchedAt = time.Now()
+		return scheduledRepo, msgRepo, scheduledMsg, message
+	}
+
+	t.Run("WritesBothRows", func(t *testing.T) {
+		scheduledRepo, msgRepo, scheduledMsg, message := setup(t)
+		assert.Nil(t, scheduledRepo.DispatchAsMessage(scheduledMsg, message))
+
+		stored, err := scheduledRepo.GetByID(scheduledMsg.ID.String())
+		assert.Nil(t, err)
+		assert.Equal(t, data.ScheduledMsgStatusDispatched, stored.Status)
+		_, err = msgRepo.Get(scheduledTestChannelID, scheduledMsg.MessageID)
+		assert.Nil(t, err)
+	})
+
+	t.Run("AlreadyDispatchedWritesNothing", func(t *testing.T) {
+		scheduledRepo, msgRepo, scheduledMsg, message := setup(t)
+		assert.Nil(t, scheduledRepo.DispatchAsMessage(scheduledMsg, message))
+
+		second, err := data.NewMessage(scheduledTestChannel, scheduledTestProducer, scheduledMsg.Payload, scheduledMsg.ContentType, scheduledMsg.Headers)
+		assert.Nil(t, err)
+		second.MessageID = "a-different-message-id-" + xid.New().String()
+		assert.Equal(t, ErrNoRowsUpdated, scheduledRepo.DispatchAsMessage(scheduledMsg, second))
+		_, err = msgRepo.Get(scheduledTestChannelID, second.MessageID)
+		assert.Equal(t, sql.ErrNoRows, err)
+	})
+
+	t.Run("FailedMessageInsertKeepsScheduledStatus", func(t *testing.T) {
+		scheduledRepo, msgRepo, scheduledMsg, message := setup(t)
+		assert.Nil(t, msgRepo.Create(message))
+
+		assert.NotNil(t, scheduledRepo.DispatchAsMessage(scheduledMsg, message))
+		stored, err := scheduledRepo.GetByID(scheduledMsg.ID.String())
+		assert.Nil(t, err)
+		assert.Equal(t, data.ScheduledMsgStatusScheduled, stored.Status)
+	})
+
+	t.Run("RequiresDispatchedStatus", func(t *testing.T) {
+		scheduledRepo, _, scheduledMsg, message := setup(t)
+		scheduledMsg.Status = data.ScheduledMsgStatusScheduled
+		assert.NotNil(t, scheduledRepo.DispatchAsMessage(scheduledMsg, message))
+	})
+}
+
 func TestScheduledMessageGetMessagesReadyForDispatch(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		msgRepo := getScheduledMessageRepository()

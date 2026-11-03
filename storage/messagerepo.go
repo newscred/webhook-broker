@@ -37,6 +37,7 @@ type ContextKey string
 
 const (
 	messageSelectRowCommonQuery            = "SELECT id, messageId, producerId, channelId, payload, contentType, priority, status, receivedAt, outboxedAt, headers, createdAt, updatedAt FROM message WHERE"
+	messageInsertQuery                     = "INSERT INTO message (id, channelId, producerId, messageId, payload, contentType, priority, status, receivedAt, outboxedAt, headers, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 	txContextKey                ContextKey = "tx"
 	pruneMessageQuery           string     = `SELECT
 		m.id, m.messageId, m.producerId, m.channelId, m.payload, m.contentType, m.priority, m.status, m.receivedAt, m.outboxedAt, m.headers, m.createdAt, m.updatedAt
@@ -59,12 +60,15 @@ func (msgRepo *MessageDBRepository) Create(message *data.Message) (err error) {
 		if msgErr == nil {
 			err = ErrDuplicateMessageIDForChannel
 		} else {
-			err = transactionalSingleRowWriteExec(msgRepo.db, emptyOps, "INSERT INTO message (id, channelId, producerId, messageId, payload, contentType, priority, status, receivedAt, outboxedAt, headers, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-				args2SliceFnWrapper(message.ID, message.BroadcastedTo.ChannelID, message.ProducedBy.ProducerID, message.MessageID, message.Payload, message.ContentType, message.Priority, message.Status, message.ReceivedAt, message.OutboxedAt, message.Headers, message.CreatedAt, message.UpdatedAt))
+			err = transactionalSingleRowWriteExec(msgRepo.db, emptyOps, messageInsertQuery, messageInsertArgs(message))
 			err = normalizeDBError(err, mysqlErrorMap)
 		}
 	}
 	return err
+}
+
+func messageInsertArgs(message *data.Message) func() []interface{} {
+	return args2SliceFnWrapper(message.ID, message.BroadcastedTo.ChannelID, message.ProducedBy.ProducerID, message.MessageID, message.Payload, message.ContentType, message.Priority, message.Status, message.ReceivedAt, message.OutboxedAt, message.Headers, message.CreatedAt, message.UpdatedAt)
 }
 
 // Get retrieves a message for a channel if it exists

@@ -32,6 +32,24 @@ func (_m *ScheduledMessageRepository) Create(message *data.ScheduledMessage) err
 	return r0
 }
 
+// DispatchAsMessage provides a mock function with given fields: scheduledMsg, message
+func (_m *ScheduledMessageRepository) DispatchAsMessage(scheduledMsg *data.ScheduledMessage, message *data.Message) error {
+	ret := _m.Called(scheduledMsg, message)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DispatchAsMessage")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*data.ScheduledMessage, *data.Message) error); ok {
+		r0 = rf(scheduledMsg, message)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // Get provides a mock function with given fields: channelID, messageID
 func (_m *ScheduledMessageRepository) Get(channelID string, messageID string) (*data.ScheduledMessage, error) {
 	ret := _m.Called(channelID, messageID)

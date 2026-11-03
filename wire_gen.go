@@ -103,7 +103,7 @@ func GetHTTPServer(cliConfig *config.CLIConfig) (*HTTPServiceContainer, error) {
 	}
 	router := controllers.NewRouter(controllersControllers)
 	server := controllers.ConfigureAPI(configConfig, serverLifecycleListenerImpl, router, configConfig)
-	schedulerConfiguration := scheduler.NewSchedulerConfiguration(scheduledMessageRepository, messageRepository, messageDispatcher, lockRepository, configConfig)
+	schedulerConfiguration := scheduler.NewSchedulerConfiguration(scheduledMessageRepository, messageDispatcher, lockRepository, configConfig)
 	messageScheduler := scheduler.NewMessageScheduler(schedulerConfiguration)
 	dlqSummaryUpdaterConfiguration := dlq.NewDLQSummaryUpdaterConfiguration(dlqSummaryRepository, deliveryJobRepository, consumerRepository, channelRepository, lockRepository, configConfig, metricsContainer)
 	dlqSummaryUpdater := dlq.NewDLQSummaryUpdater(dlqSummaryUpdaterConfiguration)
