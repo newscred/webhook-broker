@@ -14,6 +14,8 @@ var (
 type Job struct {
 	Data     *data.DeliveryJob
 	Priority uint
+	// seq is the order the job entered the dispatcher; it breaks ties between equal priorities.
+	seq uint64
 }
 
 // NewJob returns a new instance of Job. Only call this method if Job.IsInValidState() is true, else can result a panic

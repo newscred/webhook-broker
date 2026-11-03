@@ -18,7 +18,11 @@ func (jbs jobs) Swap(i, j int) {
 
 func (jbs jobs) Less(i, j int) bool {
 	// We want Pop to give us the highest, not lowest, priority so we use greater than here.
-	return jbs[i].Priority > jbs[j].Priority
+	if jbs[i].Priority != jbs[j].Priority {
+		return jbs[i].Priority > jbs[j].Priority
+	}
+	// Equal priority is first in, first out; the heap alone would return them in any order.
+	return jbs[i].seq < jbs[j].seq
 }
 
 func (jbs *jobs) Push(x any) {
