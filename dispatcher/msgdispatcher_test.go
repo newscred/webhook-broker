@@ -168,6 +168,7 @@ func getMockedBrokerConfig(workerEnabled ...interface{}) *configmocks.BrokerConf
 	}
 	mockedConfig.On("GetRationalDelay").Return(100 * time.Millisecond)
 	mockedConfig.On("GetMaxRetry").Return(uint8(5))
+	mockedConfig.On("GetConsumerMaxConcurrency", mock.Anything, mock.Anything).Return(uint(0))
 	if len(workerEnabled) <= 1 {
 		mockedConfig.On("GetRetryBackoffDelays").Return([]time.Duration{5 * time.Second})
 	} else {
@@ -718,3 +719,4 @@ func TestJobWorkers(t *testing.T) {
 		assert.Equal(t, data.JobDead, updatedJob.Status)
 	})
 }
+

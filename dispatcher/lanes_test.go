@@ -1,0 +1,214 @@
+package dispatcher
+
+import (
+	"net/url"
+	"testing"
+	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/newscred/webhook-broker/config"
+	"github.com/newscred/webhook-broker/storage/data"
+)
+
+func newLaneTestConsumer(t *testing.T, channelID, consumerID string) *data.Consumer {
+	t.Helper()
+	laneChannel, err := data.NewChannel(channelID, "token")
+	require.NoError(t, err)
+	laneChannel.QuickFix()
+	callbackURL, _ := url.Parse("http://localhost/" + consumerID)
+	consumer, err := data.NewConsumer(laneChannel, consumerID, "token", callbackURL, config.PushConsumerStr)
+	require.NoError(t, err)
+	consumer.QuickFix()
+	return consumer
+}
+
+func newLaneTestJob(consumer *data.Consumer, priority uint) *Job {
+	dj := &data.DeliveryJob{Listener: consumer, Priority: priority}
+	dj.BasePaginateable.QuickFix()
+	return NewJob(dj)
+}
+
+func fixedLimits(limits map[string]uint) func(channelID, consumerID string) uint {
+	return func(channelID, consumerID string) uint {
+		return limits[consumerID]
+	}
+}
+
+func gaugeValue(t *testing.T, gauge prometheus.Gauge) float64 {
+	t.Helper()
+	metric := &dto.Metric{}
+	require.NoError(t, gauge.Write(metric))
+	return metric.GetGauge().GetValue()
+}
+
+func drainReady(s *laneScheduler) []*Job {
+	taken := make([]*Job, 0)
+	for job := s.tryNext(); job != nil; job = s.tryNext() {
+		taken = append(taken, job)
+	}
+	return taken
+}
+
+func TestLaneScheduler_CapsInflightPerConsumer(t *testing.T) {
+	slow := newLaneTestConsumer(t, "lane-cap-channel", "lane-cap-slow")
+	s := newLaneScheduler(fixedLimits(map[string]uint{"lane-cap-slow": 2}), counter)
+	for i := 0; i < 5; i++ {
+		assert.True(t, s.enqueue(newLaneTestJob(slow, 0)))
+	}
+
+	running := drainReady(s)
+	assert.Len(t, running, 2)
+
+	s.done(running[0])
+	next := drainReady(s)
+	assert.Len(t, next, 1)
+	assert.Nil(t, s.tryNext())
+}
+
+func TestLaneScheduler_SlowConsumerDoesNotBlockOthers(t *testing.T) {
+	slow := newLaneTestConsumer(t, "lane-iso-channel", "lane-iso-slow")
+	fast := newLaneTestConsumer(t, "lane-iso-channel", "lane-iso-fast")
+	s := newLaneScheduler(fixedLimits(map[string]uint{"lane-iso-slow": 1}), counter)
+	for i := 0; i < 10; i++ {
+		s.enqueue(newLaneTestJob(slow, 0))
+	}
+	for i := 0; i < 3; i++ {
+		s.enqueue(newLaneTestJob(fast, 0))
+	}
+
+	taken := drainReady(s)
+	consumersTaken := make(map[string]int)
+	for _, job := range taken {
+		consumersTaken[job.Data.Listener.ConsumerID]++
+	}
+	assert.Equal(t, 1, consumersTaken["lane-iso-slow"])
+	assert.Equal(t, 3, consumersTaken["lane-iso-fast"])
+}
+
+func TestLaneScheduler_RoundRobinAcrossConsumers(t *testing.T) {
+	first := newLaneTestConsumer(t, "lane-rr-channel", "lane-rr-first")
+	second := newLaneTestConsumer(t, "lane-rr-channel", "lane-rr-second")
+	s := newLaneScheduler(fixedLimits(nil), counter)
+	for i := 0; i < 4; i++ {
+		s.enqueue(newLaneTestJob(first, 0))
+	}
+	for i := 0; i < 4; i++ {
+		s.enqueue(newLaneTestJob(second, 0))
+	}
+
+	order := make([]string, 0)
+	for _, job := range drainReady(s) {
+		order = append(order, job.Data.Listener.ConsumerID)
+	}
+	assert.Equal(t, []string{
+		"lane-rr-first", "lane-rr-second", "lane-rr-first", "lane-rr-second",
+		"lane-rr-first", "lane-rr-second", "lane-rr-first", "lane-rr-second",
+	}, order)
+}
+
+func TestLaneScheduler_DropsJobAlreadyQueuedOrRunning(t *testing.T) {
+	consumer := newLaneTestConsumer(t, "lane-dedup-channel", "lane-dedup")
+	s := newLaneScheduler(fixedLimits(nil), counter)
+	job := newLaneTestJob(consumer, 0)
+	duplicate := NewJob(job.Data)
+
+	assert.True(t, s.enqueue(job))
+	assert.False(t, s.enqueue(duplicate), "queued job must not be queued again")
+
+	running := s.tryNext()
+	require.NotNil(t, running)
+	assert.False(t, s.enqueue(duplicate), "running job must not be queued again")
+	assert.Nil(t, s.tryNext())
+
+	s.done(running)
+	assert.True(t, s.enqueue(duplicate), "job may be queued again once its attempt finished")
+}
+
+func TestLaneScheduler_PriorityThenFIFOWithinConsumer(t *testing.T) {
+	consumer := newLaneTestConsumer(t, "lane-order-channel", "lane-order")
+	s := newLaneScheduler(fixedLimits(nil), counter)
+	lowFirst := newLaneTestJob(consumer, 1)
+	lowSecond := newLaneTestJob(consumer, 1)
+	lowThird := newLaneTestJob(consumer, 1)
+	high := newLaneTestJob(consumer, 5)
+	for _, job := range []*Job{lowFirst, lowSecond, high, lowThird} {
+		s.enqueue(job)
+	}
+
+	assert.Equal(t, []*Job{high, lowFirst, lowSecond, lowThird}, drainReady(s))
+}
+
+func TestLaneScheduler_RemovesIdleLane(t *testing.T) {
+	consumer := newLaneTestConsumer(t, "lane-idle-channel", "lane-idle")
+	s := newLaneScheduler(fixedLimits(nil), counter)
+	s.enqueue(newLaneTestJob(consumer, 0))
+	job := s.tryNext()
+	require.NotNil(t, job)
+	assert.Len(t, s.lanes, 1)
+
+	s.done(job)
+	assert.Empty(t, s.lanes)
+	assert.Empty(t, s.tracked)
+}
+
+func TestLaneScheduler_ReadsLimitOnEnqueue(t *testing.T) {
+	consumer := newLaneTestConsumer(t, "lane-reload-channel", "lane-reload")
+	limits := map[string]uint{"lane-reload": 1}
+	s := newLaneScheduler(fixedLimits(limits), counter)
+	s.enqueue(newLaneTestJob(consumer, 0))
+	s.enqueue(newLaneTestJob(consumer, 0))
+	assert.Len(t, drainReady(s), 1)
+
+	limits["lane-reload"] = 3
+	s.enqueue(newLaneTestJob(consumer, 0))
+	assert.Len(t, drainReady(s), 2)
+}
+
+func TestLaneScheduler_NextWaitsForWorkAndStops(t *testing.T) {
+	consumer := newLaneTestConsumer(t, "lane-wait-channel", "lane-wait")
+	s := newLaneScheduler(fixedLimits(nil), counter)
+	stop := make(chan struct{})
+	got := make(chan *Job, 1)
+	go func() { got <- s.next(stop) }()
+
+	job := newLaneTestJob(consumer, 0)
+	s.enqueue(job)
+	select {
+	case taken := <-got:
+		assert.Equal(t, job, taken)
+	case <-time.After(2 * time.Second):
+		t.Fatal("next did not return the enqueued job")
+	}
+
+	go func() { got <- s.next(stop) }()
+	close(stop)
+	select {
+	case taken := <-got:
+		assert.Nil(t, taken)
+	case <-time.After(2 * time.Second):
+		t.Fatal("next did not return after stop")
+	}
+}
+
+func TestLaneScheduler_PerConsumerMetrics(t *testing.T) {
+	consumer := newLaneTestConsumer(t, "lane-metrics-channel", "lane-metrics")
+	s := newLaneScheduler(fixedLimits(map[string]uint{"lane-metrics": 1}), counter)
+	queued := counter.ConsumerQueuedJobCount.WithLabelValues("lane-metrics-channel", "lane-metrics")
+	inflight := counter.ConsumerInflightJobCount.WithLabelValues("lane-metrics-channel", "lane-metrics")
+	s.enqueue(newLaneTestJob(consumer, 0))
+	s.enqueue(newLaneTestJob(consumer, 0))
+	assert.Equal(t, float64(2), gaugeValue(t, queued))
+
+	job := s.tryNext()
+	assert.Equal(t, float64(1), gaugeValue(t, queued))
+	assert.Equal(t, float64(1), gaugeValue(t, inflight))
+
+	s.done(job)
+	assert.Equal(t, float64(0), gaugeValue(t, inflight))
+}
+
+// Generated with assistance from Claude AI

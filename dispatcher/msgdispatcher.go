@@ -32,7 +32,9 @@ type MessageDispatcherImpl struct {
 	workerPool                        chan chan *Job
 	workers                           []*Worker
 	jobQueue                          chan *Job
-	jobPriorityQueue                  *PriorityQueue
+	scheduler                         *laneScheduler
+	schedulerStop                     chan struct{}
+	schedulerStopOnce                 sync.Once
 	stopTimeout                       time.Duration
 	rationalDelay                     time.Duration
 	brokerConfig                      config.BrokerConfig
@@ -244,6 +246,7 @@ func (msgDispatcher *MessageDispatcherImpl) ensureMessageDispatched() {
 // StartDispatcher starts consuming jobs and should be called as a coroutine.
 func (msgDispatcher *MessageDispatcherImpl) StartDispatcher() {
 	go msgDispatcher.startMessageDispatcher()
+	go msgDispatcher.assignJobsToWorkers()
 	if msgDispatcher.recoveryWorkersEnabled {
 		go msgDispatcher.ensureMessageDispatched()
 		go msgDispatcher.recoverStaleInflight()
@@ -264,6 +267,7 @@ func (msgDispatcher *MessageDispatcherImpl) Stop() {
 		wg.Add(1)
 		go func() {
 			msgDispatcher.dispatcherStop <- true
+			msgDispatcher.schedulerStopOnce.Do(func() { close(msgDispatcher.schedulerStop) })
 			if msgDispatcher.recoveryWorkersEnabled {
 				msgDispatcher.messageRecoverWorkerStop <- true
 				msgDispatcher.jobRecoverRetryWorkerStop <- true
@@ -291,19 +295,26 @@ func (msgDispatcher *MessageDispatcherImpl) Stop() {
 	}
 }
 
-var asyncDequeueToWorker = func(msgDispatcher *MessageDispatcherImpl) {
-	// try to obtain a worker job channel that is available.
-	// this will block until a worker is idle
-	jobChannel := <-msgDispatcher.workerPool
-
-	// dispatch the job to the worker job channel
-	jobChannel <- msgDispatcher.jobPriorityQueue.Dequeue()
+// assignJobsToWorkers waits for an idle worker, then asks the scheduler for the next job. The job
+// is chosen only once a worker is free, so the round-robin across consumers sees the latest state.
+func (msgDispatcher *MessageDispatcherImpl) assignJobsToWorkers() {
+	for {
+		var jobChannel chan *Job
+		select {
+		case jobChannel = <-msgDispatcher.workerPool:
+		case <-msgDispatcher.schedulerStop:
+			return
+		}
+		job := msgDispatcher.scheduler.next(msgDispatcher.schedulerStop)
+		if job == nil {
+			return
+		}
+		jobChannel <- job
+	}
 }
 
 func (msgDispatcher *MessageDispatcherImpl) dispatchJob(job *Job) {
-	msgDispatcher.jobPriorityQueue.Enqueue(job)
-	// a job request has been received
-	go asyncDequeueToWorker(msgDispatcher)
+	msgDispatcher.scheduler.enqueue(job)
 }
 
 // Configuration represents the configuration for a dispatcher
@@ -332,13 +343,14 @@ func NewMessageDispatcher(configuration *Configuration) MessageDispatcher {
 	msgRepo := configuration.MsgRepo
 	lockRepo := configuration.LockRepo
 	dispatcherImpl := &MessageDispatcherImpl{djRepo: djRepo, consumerRepo: consumerRepo, msgRepo: msgRepo, dispatcherStop: make(chan bool),
-		workerPool: make(chan chan *Job, brokerConfig.GetMaxWorkers()), jobPriorityQueue: NewJobPriorityQueue(configuration.MetricsCollector.QueuedJobCount),
+		workerPool: make(chan chan *Job, brokerConfig.GetMaxWorkers()), scheduler: newLaneScheduler(brokerConfig.GetConsumerMaxConcurrency, configuration.MetricsCollector), schedulerStop: make(chan struct{}),
 		messageRecoverWorkerStop: make(chan bool), jobQueue: make(chan *Job, brokerConfig.GetMaxMessageQueueSize()),
 		rationalDelay: brokerConfig.GetRationalDelay(), lockRepo: lockRepo, recoveryWorkersEnabled: brokerConfig.IsRecoveryWorkersEnabled(),
 		jobRecoverStaleInflightWorkerStop: make(chan bool), jobRecoverRetryWorkerStop: make(chan bool), brokerConfig: brokerConfig}
 	workers := make([]*Worker, brokerConfig.GetMaxWorkers())
 	for i := 0; i < len(workers); i++ {
 		worker := NewWorker(dispatcherImpl.workerPool, consumerConfig, brokerConfig, djRepo)
+		worker.onDone = dispatcherImpl.scheduler.done
 		worker.Start()
 		workers[i] = &worker
 	}

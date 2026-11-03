@@ -17,8 +17,10 @@ var (
 )
 
 type MetricsContainer struct {
-	QueuedJobCount prometheus.Gauge
-	DeadJobCount   *prometheus.GaugeVec
+	QueuedJobCount           prometheus.Gauge
+	DeadJobCount             *prometheus.GaugeVec
+	ConsumerQueuedJobCount   *prometheus.GaugeVec
+	ConsumerInflightJobCount *prometheus.GaugeVec
 }
 
 func NewMetricsContainer() *MetricsContainer {
@@ -37,6 +39,14 @@ func newMetricsContainer() *MetricsContainer {
 	container.DeadJobCount = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "dead_job_count",
 		Help: "Number of dead jobs per consumer",
+	}, []string{"channel", "consumer"})
+	container.ConsumerQueuedJobCount = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "consumer_queued_job_count",
+		Help: "Jobs waiting in this instance's dispatcher, per consumer",
+	}, []string{"channel", "consumer"})
+	container.ConsumerInflightJobCount = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "consumer_inflight_job_count",
+		Help: "Deliveries this instance is running, per consumer",
 	}, []string{"channel", "consumer"})
 	return container
 }
