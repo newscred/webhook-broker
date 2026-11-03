@@ -668,7 +668,6 @@ func setupBrokerConfiguration(cfg *ini.File, configuration *Config) {
 	maxRetry, _ := broker.GetKey("max-retry")
 	rationalDelayInSecs, _ := broker.GetKey("rational-delay-in-seconds")
 	retryBackoffDelayInSecs, _ := broker.GetKey("retry-backoff-delays-in-seconds")
-	consumerMaxConcurrency, _ := broker.GetKey("consumer-max-concurrency")
 	configuration.MaxMessageQueueSize = maxMsgQueueSize.MustUint(100000)
 	configuration.MaxWorkers = maxWorkers.MustUint(100)
 	configuration.PriorityDispatcherEnabled = priorityDispatcher.MustBool(false)
@@ -686,7 +685,7 @@ func setupBrokerConfiguration(cfg *ini.File, configuration *Config) {
 		backoffDelays = append(backoffDelays, time.Duration(parsedBackoff)*time.Second)
 	}
 	configuration.RetryBackoffDelays = backoffDelays
-	configuration.ConsumerMaxConcurrency = consumerMaxConcurrency.MustUint(0)
+	configuration.ConsumerMaxConcurrency = broker.Key("consumer-max-concurrency").MustUint(0)
 	configuration.ConsumerMaxConcurrencyOverrides = parseConsumerMaxConcurrencyOverrides(cfg)
 }
 
