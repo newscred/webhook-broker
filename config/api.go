@@ -145,4 +145,5 @@ type BrokerConfig interface {
 	GetRationalDelay() time.Duration
 	GetRetryBackoffDelays() []time.Duration
 	IsRecoveryWorkersEnabled() bool
+	GetConsumerMaxConcurrency(channelID, consumerID string) uint
 }

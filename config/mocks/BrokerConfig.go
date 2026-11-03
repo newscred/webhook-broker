@@ -13,6 +13,24 @@ type BrokerConfig struct {
 	mock.Mock
 }
 
+// GetConsumerMaxConcurrency provides a mock function with given fields: channelID, consumerID
+func (_m *BrokerConfig) GetConsumerMaxConcurrency(channelID string, consumerID string) uint {
+	ret := _m.Called(channelID, consumerID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetConsumerMaxConcurrency")
+	}
+
+	var r0 uint
+	if rf, ok := ret.Get(0).(func(string, string) uint); ok {
+		r0 = rf(channelID, consumerID)
+	} else {
+		r0 = ret.Get(0).(uint)
+	}
+
+	return r0
+}
+
 // GetMaxMessageQueueSize provides a mock function with no fields
 func (_m *BrokerConfig) GetMaxMessageQueueSize() uint {
 	ret := _m.Called()

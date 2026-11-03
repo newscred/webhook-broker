@@ -45,6 +45,9 @@ rational-delay-in-seconds=2
 retry-backoff-delays-in-seconds=5,30,60
 # Whether to run recovery workers
 recovery-workers-enabled=true
+# Deliveries this instance may run at once to any one consumer; 0 means no limit beyond
+# max-workers. Override per consumer in [consumer-max-concurrency].
+consumer-max-concurrency=0
 
 # Settings around pruning of messages already sent
 [prune]
