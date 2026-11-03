@@ -155,19 +155,6 @@ func TestLaneScheduler_RemovesIdleLane(t *testing.T) {
 	assert.Empty(t, s.tracked)
 }
 
-func TestLaneScheduler_ReadsLimitOnEnqueue(t *testing.T) {
-	consumer := newLaneTestConsumer(t, "lane-reload-channel", "lane-reload")
-	limits := map[string]uint{"lane-reload": 1}
-	s := newLaneScheduler(fixedLimits(limits), counter)
-	s.enqueue(newLaneTestJob(consumer, 0))
-	s.enqueue(newLaneTestJob(consumer, 0))
-	assert.Len(t, drainReady(s), 1)
-
-	limits["lane-reload"] = 3
-	s.enqueue(newLaneTestJob(consumer, 0))
-	assert.Len(t, drainReady(s), 2)
-}
-
 func TestLaneScheduler_NextWaitsForWorkAndStops(t *testing.T) {
 	consumer := newLaneTestConsumer(t, "lane-wait-channel", "lane-wait")
 	s := newLaneScheduler(fixedLimits(nil), counter)

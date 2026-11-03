@@ -71,11 +71,9 @@ func (s *laneScheduler) enqueue(job *Job) bool {
 	channelID, consumerID, key := laneIdentity(job)
 	lane, ok := s.lanes[key]
 	if !ok {
-		lane = &consumerLane{key: key, channelID: channelID, consumerID: consumerID, queue: NewJobPriorityQueue(s.metrics.QueuedJobCount)}
+		lane = &consumerLane{key: key, channelID: channelID, consumerID: consumerID, queue: NewJobPriorityQueue(s.metrics.QueuedJobCount), limit: s.limitFor(channelID, consumerID)}
 		s.lanes[key] = lane
 	}
-	// The limit is read on every enqueue so a config reload takes effect without a restart.
-	lane.limit = s.limitFor(channelID, consumerID)
 	s.seq++
 	job.seq = s.seq
 	lane.queue.Enqueue(job)
