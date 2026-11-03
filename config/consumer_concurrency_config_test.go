@@ -22,7 +22,7 @@ func TestConsumerMaxConcurrency(t *testing.T) {
 	t.Run("broker default and overrides from ini file", func(t *testing.T) {
 		iniStr := `
 [broker]
-consumer-max-concurrency=8
+default-consumer-max-concurrency=8
 [consumer-max-concurrency]
 Slow-Consumer=2
 step-events/Slow-Consumer=5
