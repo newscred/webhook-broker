@@ -19,13 +19,24 @@ func TestPriorityQueueBasic(t *testing.T) {
 		messagePayload := strconv.Itoa(priority)
 		msg, _ := data.NewMessage(channel, producer, messagePayload, "application/json", data.HeadersMap{})
 		dj := &data.DeliveryJob{Message: msg}
-		pq.Enqueue(&Job{dj, uint(priority)})
+		pq.Enqueue(&Job{Data: dj, Priority: uint(priority)})
 	}
 	for expectedPriority := 99; expectedPriority >= 0; expectedPriority-- {
 		assert.Equal(t, pq.Len(), expectedPriority+1)
 		topJob := pq.Dequeue()
 		assert.Equal(t, uint(expectedPriority), topJob.Priority)
 		assert.Equal(t, strconv.Itoa(expectedPriority), topJob.Data.Message.Payload)
+	}
+}
+
+func TestPriorityQueueEqualPriorityIsFIFO(t *testing.T) {
+	pq := NewJobPriorityQueue(counter.QueuedJobCount)
+	for seq := uint64(1); seq <= 50; seq++ {
+		msg, _ := data.NewMessage(channel, producer, strconv.FormatUint(seq, 10), "application/json", data.HeadersMap{})
+		pq.Enqueue(&Job{Data: &data.DeliveryJob{Message: msg}, Priority: 1, seq: seq})
+	}
+	for seq := uint64(1); seq <= 50; seq++ {
+		assert.Equal(t, strconv.FormatUint(seq, 10), pq.Dequeue().Data.Message.Payload)
 	}
 }
 
@@ -45,7 +56,7 @@ func stressPriorityQueue() {
 		messagePayload := strconv.Itoa(priority)
 		msg, _ := data.NewMessage(channel, producer, messagePayload, contentType, data.HeadersMap{})
 		dj := &data.DeliveryJob{Message: msg}
-		pq.Enqueue(&Job{dj, uint(priority)})
+		pq.Enqueue(&Job{Data: dj, Priority: uint(priority)})
 	}
 
 	for i := 0; i < MaxQueueSize; i++ {
