@@ -6,6 +6,7 @@ import (
 	"net/url"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/newscred/webhook-broker/dispatcher"
 	"github.com/newscred/webhook-broker/storage"
 	"github.com/newscred/webhook-broker/storage/data"
 )
@@ -22,18 +23,28 @@ type ConsumerModel struct {
 	CallbackURL        string
 	DeadLetterQueueURL string
 	Type               string
+	// DispatchPaused is true while the consumer or the whole broker is paused (per this node's pause snapshot)
+	DispatchPaused bool
 }
 
 // ConsumerController represents all endpoints related to a single consumer for a channel
 type ConsumerController struct {
-	ConsumerRepo storage.ConsumerRepository
-	ChannelRepo  storage.ChannelRepository
-	DLQEndpoint  EndpointController
+	ConsumerRepo  storage.ConsumerRepository
+	ChannelRepo   storage.ChannelRepository
+	DLQEndpoint   EndpointController
+	PauseRegistry dispatcher.PauseRegistry
 }
 
 // NewConsumerController creates and returns a new instance of ConsumerController
 func NewConsumerController(channelRepo storage.ChannelRepository, consumerRepo storage.ConsumerRepository, DLQController *DLQController) *ConsumerController {
 	return &ConsumerController{ConsumerRepo: consumerRepo, ChannelRepo: channelRepo, DLQEndpoint: DLQController}
+}
+
+// NewConsumerControllerWithPauseRegistry creates a ConsumerController that reports DispatchPaused from the pause registry
+func NewConsumerControllerWithPauseRegistry(channelRepo storage.ChannelRepository, consumerRepo storage.ConsumerRepository, DLQController *DLQController, pauseRegistry dispatcher.PauseRegistry) *ConsumerController {
+	controller := NewConsumerController(channelRepo, consumerRepo, DLQController)
+	controller.PauseRegistry = pauseRegistry
+	return controller
 }
 
 // Get implements the GET /channel/:channelId/consumer/:consumerId endpoint
@@ -51,6 +62,7 @@ func (controller *ConsumerController) getConsumerModel(consumer *data.Consumer) 
 		CallbackURL:        consumer.CallbackURL,
 		DeadLetterQueueURL: controller.DLQEndpoint.FormatAsRelativeLink(channelIDParam, consumerIDParam),
 		Type:               consumer.Type.String(),
+		DispatchPaused:     controller.PauseRegistry != nil && controller.PauseRegistry.IsEffectivelyPaused(consumer.ID.String()),
 	}
 	return consumerModel
 }

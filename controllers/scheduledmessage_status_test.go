@@ -22,7 +22,7 @@ func TestUpdatedMessagesStatusController(t *testing.T) {
 	djRepo := new(storagemocks.DeliveryJobRepository)
 
 	// Create real controllers
-	msgController := NewMessageController(msgRepo, djRepo)
+	msgController := NewMessageController(msgRepo, djRepo, nil)
 	msgsController := NewMessagesController(msgController, msgRepo)
 
 	// Create a real ScheduledMessagesController with necessary dependencies

@@ -284,6 +284,13 @@ func (repo *JobParkingDBRepository) GetCountsByConsumer() ([]*data.ParkedJobCoun
 	return counts, err
 }
 
+// CountForConsumer returns the number of parked jobs of one consumer (internal id); served by job_parking_drain
+func (repo *JobParkingDBRepository) CountForConsumer(consumerInternalID string) (int64, error) {
+	var count int64
+	err := querySingleRow(repo.db, "SELECT COUNT(*) FROM job_parking WHERE consumerId = ?", args2SliceFnWrapper(consumerInternalID), args2SliceFnWrapper(&count))
+	return count, err
+}
+
 // NewJobParkingRepository creates a new JobParkingRepository
 func NewJobParkingRepository(db *sql.DB, msgRepo MessageRepository, consumerRepo ConsumerRepository) JobParkingRepository {
 	panicIfNoDBConnectionPool(db)

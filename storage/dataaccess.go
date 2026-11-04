@@ -125,6 +125,8 @@ type JobParkingRepository interface {
 	GetByID(id string) (*data.DeliveryJob, error)
 	GetForMessage(message *data.Message) ([]*data.DeliveryJob, error)
 	GetCountsByConsumer() ([]*data.ParkedJobCount, error)
+	// CountForConsumer returns the number of parked jobs of one consumer (internal id)
+	CountForConsumer(consumerInternalID string) (int64, error)
 }
 
 // DLQSummaryRepository allows storage operations over DLQSummary

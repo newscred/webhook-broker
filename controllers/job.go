@@ -37,14 +37,15 @@ var (
 
 // JobsController represents all endpoints related to the queued jobs for a consumer of a channel
 type JobsController struct {
-	ChannelRepo     storage.ChannelRepository
-	ConsumerRepo    storage.ConsumerRepository
-	DeliveryJobRepo storage.DeliveryJobRepository
+	ChannelRepo       storage.ChannelRepository
+	ConsumerRepo      storage.ConsumerRepository
+	DeliveryJobRepo   storage.DeliveryJobRepository
+	DispatchPauseRepo storage.DispatchPauseRepository
 }
 
 // NewJobsController creates and returns a new instance of JobsController
-func NewJobsController(channelRepo storage.ChannelRepository, consumerRepo storage.ConsumerRepository, deliveryJobRepo storage.DeliveryJobRepository) *JobsController {
-	return &JobsController{ChannelRepo: channelRepo, ConsumerRepo: consumerRepo, DeliveryJobRepo: deliveryJobRepo}
+func NewJobsController(channelRepo storage.ChannelRepository, consumerRepo storage.ConsumerRepository, deliveryJobRepo storage.DeliveryJobRepository, dispatchPauseRepo storage.DispatchPauseRepository) *JobsController {
+	return &JobsController{ChannelRepo: channelRepo, ConsumerRepo: consumerRepo, DeliveryJobRepo: deliveryJobRepo, DispatchPauseRepo: dispatchPauseRepo}
 }
 
 type QeuedMessageModel struct {
@@ -92,6 +93,13 @@ func (controller *JobsController) Get(w http.ResponseWriter, r *http.Request, pa
 
 	pageSize, valid := getPageSizeFromURL(w, r)
 	if !valid {
+		return
+	}
+
+	if isConsumerEffectivelyPaused(controller.DispatchPauseRepo, consumer) {
+		// 200 with an empty list so existing pull clients keep polling instead of erroring
+		w.Header().Set(headerDispatchPaused, "true")
+		writeJSON(w, JobListResult{Result: []*QueuedDeliveryJobModel{}})
 		return
 	}
 
@@ -217,11 +225,12 @@ type JobController struct {
 	ChannelRepo        storage.ChannelRepository
 	ConsumerRepo       storage.ConsumerRepository
 	DeliveryJobRepo    storage.DeliveryJobRepository
+	DispatchPauseRepo  storage.DispatchPauseRepository
 }
 
 // NewJobController creates and returns a new instance of JobController
-func NewJobController(msgController *MessageController, channelController *ChannelController, producerController *ProducerController, consumerController *ConsumerController, channelRepo storage.ChannelRepository, consumerRepo storage.ConsumerRepository, deliveryJobRepo storage.DeliveryJobRepository) *JobController {
-	return &JobController{MsgController: msgController, ChannelController: channelController, ProducerController: producerController, ConsumerController: consumerController, ChannelRepo: channelRepo, ConsumerRepo: consumerRepo, DeliveryJobRepo: deliveryJobRepo}
+func NewJobController(msgController *MessageController, channelController *ChannelController, producerController *ProducerController, consumerController *ConsumerController, channelRepo storage.ChannelRepository, consumerRepo storage.ConsumerRepository, deliveryJobRepo storage.DeliveryJobRepository, dispatchPauseRepo storage.DispatchPauseRepository) *JobController {
+	return &JobController{MsgController: msgController, ChannelController: channelController, ProducerController: producerController, ConsumerController: consumerController, ChannelRepo: channelRepo, ConsumerRepo: consumerRepo, DeliveryJobRepo: deliveryJobRepo, DispatchPauseRepo: dispatchPauseRepo}
 }
 
 // Get implements the GET /channel/:channelId/consumer/:consumerId/job/:jobId endpoint
@@ -270,13 +279,21 @@ func (controller *JobController) Post(w http.ResponseWriter, r *http.Request, pa
 		job.IncrementalTimeout = updateData.IncrementalTimeout
 	}
 
+	if job.Status == data.JobParked {
+		// A parked job belongs to a paused consumer; it can not transition until it is drained back
+		writeStatus(w, http.StatusConflict, errDispatchPaused)
+		return
+	}
+
 	if job.Status.String() == updateData.NextState {
 		writeStatus(w, http.StatusAccepted, nil)
 		return
 	}
 
+	handOut := false
 	switch updateData.NextState {
 	case data.JobInflight.String():
+		handOut = true
 		switch job.Status {
 		case data.JobQueued:
 			err = controller.DeliveryJobRepo.MarkJobInflight(job)
@@ -296,6 +313,11 @@ func (controller *JobController) Post(w http.ResponseWriter, r *http.Request, pa
 	}
 
 	if err != nil {
+		if handOut && isConsumerEffectivelyPaused(controller.DispatchPauseRepo, job.Listener) {
+			// The hand-out was refused in the database because the consumer is paused
+			writeStatus(w, http.StatusConflict, errDispatchPaused)
+			return
+		}
 		writeStatus(w, http.StatusBadRequest, errInvalidTransitionRequest)
 		return
 	}

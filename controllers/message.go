@@ -119,11 +119,12 @@ func newDeadDeliveryJobs(msgController EndpointController, jobRequeueController 
 type MessageController struct {
 	MessageRepo     storage.MessageRepository
 	DeliveryJobRepo storage.DeliveryJobRepository
+	JobParkingRepo  storage.JobParkingRepository
 }
 
 // NewMessageController initializes the message controller
-func NewMessageController(msgRepo storage.MessageRepository, djRepo storage.DeliveryJobRepository) *MessageController {
-	return &MessageController{MessageRepo: msgRepo, DeliveryJobRepo: djRepo}
+func NewMessageController(msgRepo storage.MessageRepository, djRepo storage.DeliveryJobRepository, jobParkingRepo storage.JobParkingRepository) *MessageController {
+	return &MessageController{MessageRepo: msgRepo, DeliveryJobRepo: djRepo, JobParkingRepo: jobParkingRepo}
 }
 
 // GetPath returns the endpoint's path
@@ -158,6 +159,15 @@ func (messageController *MessageController) Get(w http.ResponseWriter, r *http.R
 				page.Previous = nil
 			} else {
 				more = false
+			}
+		}
+		if err == nil && messageController.JobParkingRepo != nil {
+			// Jobs of paused consumers are parked outside the job table; list them with status PARKED
+			var parkedJobs []*data.DeliveryJob
+			if parkedJobs, err = messageController.JobParkingRepo.GetForMessage(message); err == nil {
+				jobs = append(jobs, parkedJobs...)
+			} else {
+				writeErr(w, err)
 			}
 		}
 		if err == nil {

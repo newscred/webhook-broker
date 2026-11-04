@@ -128,12 +128,12 @@ func getJobsControllerWithMockedRepo() *JobsController {
 	channelRepo := new(storagemocks.ChannelRepository)
 	consumerRepo := new(storagemocks.ConsumerRepository)
 	djRepo := new(storagemocks.DeliveryJobRepository)
-	return NewJobsController(channelRepo, consumerRepo, djRepo)
+	return NewJobsController(channelRepo, consumerRepo, djRepo, nil)
 }
 
 func TestJobsFormatAsRelativeLink(t *testing.T) {
 	t.Parallel()
-	controller := NewJobsController(channelRepo, consumerRepo, deliveryJobRepo)
+	controller := NewJobsController(channelRepo, consumerRepo, deliveryJobRepo, storage.NewDispatchPauseRepository(db))
 	assert.Equal(t, jobsPath, controller.GetPath())
 	formattedPath := controller.FormatAsRelativeLink(
 		httprouter.Param{Key: channelIDPathParamKey, Value: "someChannelId"},
@@ -143,7 +143,7 @@ func TestJobsFormatAsRelativeLink(t *testing.T) {
 }
 
 func TestJobsControllerGet_Success(t *testing.T) {
-	jobsController := NewJobsController(channelRepo, consumerRepo, deliveryJobRepo)
+	jobsController := NewJobsController(channelRepo, consumerRepo, deliveryJobRepo, storage.NewDispatchPauseRepository(db))
 	testRouter := createTestRouter(jobsController)
 	testURI := jobsController.FormatAsRelativeLink(
 		httprouter.Param{Key: channelIDPathParamKey, Value: jobTestChannel.ChannelID},
@@ -208,7 +208,7 @@ func TestJobsControllerGet_Success(t *testing.T) {
 }
 
 func TestJobsControllerGet_Error(t *testing.T) {
-	jobsController := NewJobsController(channelRepo, consumerRepo, deliveryJobRepo)
+	jobsController := NewJobsController(channelRepo, consumerRepo, deliveryJobRepo, storage.NewDispatchPauseRepository(db))
 	testRouter := createTestRouter(jobsController)
 	t.Run("400 Channel Not Found", func(t *testing.T) {
 		t.Parallel()
@@ -352,7 +352,7 @@ func TestJobsControllerGet_Error(t *testing.T) {
 func getJobController() *JobController {
 	return NewJobController(getMessageController(), getNewChannelController(channelRepo),
 		NewProducerController(producerRepo), getNewConsumerController(consumerRepo),
-		channelRepo, consumerRepo, deliveryJobRepo)
+		channelRepo, consumerRepo, deliveryJobRepo, storage.NewDispatchPauseRepository(db))
 }
 
 func TestJobFormatAsRelativeLink(t *testing.T) {

@@ -14,6 +14,34 @@ type JobParkingRepository struct {
 	mock.Mock
 }
 
+// CountForConsumer provides a mock function with given fields: consumerInternalID
+func (_m *JobParkingRepository) CountForConsumer(consumerInternalID string) (int64, error) {
+	ret := _m.Called(consumerInternalID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CountForConsumer")
+	}
+
+	var r0 int64
+	var r1 error
+	if rf, ok := ret.Get(0).(func(string) (int64, error)); ok {
+		return rf(consumerInternalID)
+	}
+	if rf, ok := ret.Get(0).(func(string) int64); ok {
+		r0 = rf(consumerInternalID)
+	} else {
+		r0 = ret.Get(0).(int64)
+	}
+
+	if rf, ok := ret.Get(1).(func(string) error); ok {
+		r1 = rf(consumerInternalID)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // DrainPage provides a mock function with given fields: consumerInternalID, pageSize, earliestNextAttemptAt
 func (_m *JobParkingRepository) DrainPage(consumerInternalID string, pageSize int, earliestNextAttemptAt time.Time) ([]*data.DeliveryJob, error) {
 	ret := _m.Called(consumerInternalID, pageSize, earliestNextAttemptAt)
