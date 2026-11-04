@@ -42,6 +42,18 @@ broken-consumer=abc
 		assert.Equal(t, uint(8), config.GetConsumerMaxConcurrency("any-channel", "broken-consumer"))
 		assert.Equal(t, uint(8), config.GetConsumerMaxConcurrency("any-channel", "slow-consumer"), "consumer ids are case sensitive")
 	})
+
+	t.Run("key with a colon needs backticks", func(t *testing.T) {
+		iniStr := "[consumer-max-concurrency]\n`ns:consumer`=2\nplain:consumer=3\n"
+		iniFile, err := ini.LooseLoad([]byte(DefaultConfiguration), []byte(iniStr))
+		require.NoError(t, err)
+		config := &Config{}
+
+		setupBrokerConfiguration(iniFile, config)
+
+		assert.Equal(t, uint(2), config.GetConsumerMaxConcurrency("any-channel", "ns:consumer"))
+		assert.Equal(t, uint(0), config.GetConsumerMaxConcurrency("any-channel", "plain:consumer"), "an unquoted colon splits the key")
+	})
 }
 
 // Generated with assistance from Claude AI

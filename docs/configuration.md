@@ -54,7 +54,7 @@ This section contains configuration pertaining to the broker application itself.
 
 ## Section - Consumer Max Concurrency `[consumer-max-concurrency]`
 
-Optional overrides of `default-consumer-max-concurrency` for single consumers. A key is either `channelID/consumerID` or `consumerID` (matches the consumer ID on every channel); the value is the limit, and `0` removes the limit for that consumer. `channelID/consumerID` wins over `consumerID`.
+Optional overrides of `default-consumer-max-concurrency` for single consumers. A key is either `channelID/consumerID` or `consumerID` (matches the consumer ID on every channel); the value is the limit, and `0` removes the limit for that consumer. `channelID/consumerID` wins over `consumerID`. The broker ignores a value that is not a non-negative integer and logs a warning. Wrap a key that contains `:` or `=` in backticks, for example `` `ns:consumer`=2 ``; without them the INI parser splits the key.
 
 ```ini
 [consumer-max-concurrency]
