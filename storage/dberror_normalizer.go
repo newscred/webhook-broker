@@ -11,6 +11,11 @@ func normalizeDBError(mysqlDriverErr error, mappedError map[uint16]error) (err e
 	err = mysqlDriverErr
 	if mysqlErr, ok := err.(*mysql.MySQLError); ok {
 		err = lookup(mysqlErr.Number, mappedError, mysqlErr)
+	} else if sqliteErr, ok := err.(sqlite.Error); ok {
+		// go-sqlite3 returns sqlite3.Error by value; only unique/primary key violations map to MySQL's duplicate key (1062)
+		if sqliteErr.ExtendedCode == sqlite.ErrConstraintUnique || sqliteErr.ExtendedCode == sqlite.ErrConstraintPrimaryKey {
+			err = lookup(1062, mappedError, sqliteErr)
+		}
 	} else if sqliteErr, ok := err.(*sqlite.ErrNoExtended); ok {
 		switch *sqliteErr {
 		case sqlite.ErrConstraintUnique:

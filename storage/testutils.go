@@ -1,6 +1,8 @@
 package storage
 
 import (
+	"database/sql"
+	"fmt"
 	"net/url"
 	"strconv"
 	"time"
@@ -119,3 +121,125 @@ func SetupPruneableMessageFixture(dataAccessor DataAccessor, channel *data.Chann
 }
 
 // NOTE: We're handling the setup in the test functions themselves
+
+// PauseFixture holds an isolated channel, producer and consumers for dispatch pause tests
+type PauseFixture struct {
+	Channel   *data.Channel
+	Producer  *data.Producer
+	Push      []*data.Consumer
+	Pull      []*data.Consumer
+	Consumers []*data.Consumer
+}
+
+// SetupPauseFixture creates a channel, a producer and push/pull consumers whose ids start with prefix.
+// callbackURLFor returns the callback URL for the i-th consumer (push consumers first, then pull).
+func SetupPauseFixture(dataAccessor DataAccessor, prefix string, push, pull int, callbackURLFor func(i int) *url.URL) (*PauseFixture, error) {
+	fixture := &PauseFixture{}
+	channel, err := data.NewChannel(prefix+"channel", successfulGetTestToken)
+	if err != nil {
+		return nil, err
+	}
+	if fixture.Channel, err = dataAccessor.GetChannelRepository().Store(channel); err != nil {
+		return nil, err
+	}
+	producer, err := data.NewProducer(prefix+"producer", successfulGetTestToken)
+	if err != nil {
+		return nil, err
+	}
+	producer.QuickFix()
+	if fixture.Producer, err = dataAccessor.GetProducerRepository().Store(producer); err != nil {
+		return nil, err
+	}
+	for i := 0; i < push+pull; i++ {
+		consumerType := data.PushConsumerStr
+		if i >= push {
+			consumerType = data.PullConsumerStr
+		}
+		consumer, consumerErr := data.NewConsumer(fixture.Channel, prefix+"consumer-"+strconv.Itoa(i), successfulGetTestToken, callbackURLFor(i), consumerType)
+		if consumerErr != nil {
+			return nil, consumerErr
+		}
+		consumer.QuickFix()
+		if consumer, consumerErr = dataAccessor.GetConsumerRepository().Store(consumer); consumerErr != nil {
+			return nil, consumerErr
+		}
+		fixture.Consumers = append(fixture.Consumers, consumer)
+		if i < push {
+			fixture.Push = append(fixture.Push, consumer)
+		} else {
+			fixture.Pull = append(fixture.Pull, consumer)
+		}
+	}
+	return fixture, nil
+}
+
+// JobPlacement returns how many rows for the (message, consumer) pair (internal ids) exist in job and in job_parking
+func JobPlacement(db *sql.DB, messageID, consumerID string) (inJob, inParking int, err error) {
+	if err = db.QueryRow("SELECT COUNT(*) FROM job WHERE messageId = ? AND consumerId = ?", messageID, consumerID).Scan(&inJob); err != nil {
+		return
+	}
+	err = db.QueryRow("SELECT COUNT(*) FROM job_parking WHERE messageId = ? AND consumerId = ?", messageID, consumerID).Scan(&inParking)
+	return
+}
+
+// CheckParkingInvariants verifies that (a) no job id is present in both job and job_parking, (b) no (message,
+// consumer) pair is present in both tables and (c) none of neverPausedConsumerIDs (internal ids) has parked rows.
+func CheckParkingInvariants(db *sql.DB, neverPausedConsumerIDs ...string) error {
+	overlap := 0
+	if err := db.QueryRow("SELECT COUNT(*) FROM job j JOIN job_parking p ON j.id = p.id").Scan(&overlap); err != nil {
+		return err
+	}
+	if overlap > 0 {
+		return fmt.Errorf("%d job ids present in both job and job_parking", overlap)
+	}
+	if err := db.QueryRow("SELECT COUNT(*) FROM job j JOIN job_parking p ON j.messageId = p.messageId AND j.consumerId = p.consumerId").Scan(&overlap); err != nil {
+		return err
+	}
+	if overlap > 0 {
+		return fmt.Errorf("%d message/consumer pairs present in both job and job_parking", overlap)
+	}
+	for _, consumerID := range neverPausedConsumerIDs {
+		parked := 0
+		if err := db.QueryRow("SELECT COUNT(*) FROM job_parking WHERE consumerId = ?", consumerID).Scan(&parked); err != nil {
+			return err
+		}
+		if parked > 0 {
+			return fmt.Errorf("consumer %s was never paused but has %d parked jobs", consumerID, parked)
+		}
+	}
+	return nil
+}
+
+// CheckMessageJobCount verifies the message (internal id) has exactly expected jobs across job and job_parking
+func CheckMessageJobCount(db *sql.DB, messageID string, expected int) error {
+	inJob, inParking := 0, 0
+	if err := db.QueryRow("SELECT COUNT(*) FROM job WHERE messageId = ?", messageID).Scan(&inJob); err != nil {
+		return err
+	}
+	if err := db.QueryRow("SELECT COUNT(*) FROM job_parking WHERE messageId = ?", messageID).Scan(&inParking); err != nil {
+		return err
+	}
+	if inJob+inParking != expected {
+		return fmt.Errorf("message %s has %d jobs and %d parked jobs, expected %d in total", messageID, inJob, inParking, expected)
+	}
+	return nil
+}
+
+// InsertPauseRow inserts a dispatch_pause row directly, simulating another node pausing behind a registry's back.
+// Pass an empty consumerID for the global pause (scope data.GlobalDispatchPauseScope).
+func InsertPauseRow(db *sql.DB, scope, consumerID string) error {
+	var consumerRef sql.NullString
+	if consumerID != "" {
+		consumerRef = sql.NullString{String: consumerID, Valid: true}
+	}
+	_, err := db.Exec("INSERT INTO dispatch_pause (scope, consumerId, reason, pausedAt) VALUES (?, ?, ?, ?)", scope, consumerRef, "test", time.Now())
+	return err
+}
+
+// DeletePauseRow deletes a dispatch_pause row directly
+func DeletePauseRow(db *sql.DB, scope string) error {
+	_, err := db.Exec("DELETE FROM dispatch_pause WHERE scope = ?", scope)
+	return err
+}
+
+// Generated with assistance from Claude AI

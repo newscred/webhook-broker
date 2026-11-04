@@ -27,6 +27,12 @@ type DeliveryJobDBRepository struct {
 
 // DispatchMessage saves the delivery jobs and updates the message status in one atomic state
 func (djRepo *DeliveryJobDBRepository) DispatchMessage(message *data.Message, deliveryJobs ...*data.DeliveryJob) (err error) {
+	return djRepo.DispatchMessageWithParking(message, deliveryJobs, nil)
+}
+
+// DispatchMessageWithParking saves the delivery jobs into job, the parked jobs (of effectively paused consumers)
+// into job_parking and updates the message status, all in one transaction
+func (djRepo *DeliveryJobDBRepository) DispatchMessageWithParking(message *data.Message, deliveryJobs []*data.DeliveryJob, parkedJobs []*data.DeliveryJob) (err error) {
 	if message == nil || !message.IsInValidState() {
 		err = ErrInvalidStateToSave
 	}
@@ -43,11 +49,24 @@ func (djRepo *DeliveryJobDBRepository) DispatchMessage(message *data.Message, de
 		}
 	}
 	if err == nil {
+		for _, job := range parkedJobs {
+			if job == nil || !job.IsInValidState() || job.Message.ID != message.ID {
+				err = ErrInvalidStateToSave
+				break
+			}
+		}
+	}
+	if err == nil {
 		query = query[:len(query)-1]
-		txs := make([]func(tx *sql.Tx) error, 0, 2)
+		txs := make([]func(tx *sql.Tx) error, 0, 3)
 		if len(deliveryJobs) > 0 {
 			txs = append(txs, func(tx *sql.Tx) error {
 				return inTransactionExec(tx, emptyOps, query, args2SliceFnWrapper(args...), int64(len(deliveryJobs)))
+			})
+		}
+		if len(parkedJobs) > 0 {
+			txs = append(txs, func(tx *sql.Tx) error {
+				return insertParkedJobsInTx(tx, parkedJobs, time.Now())
 			})
 		}
 		txs = append(txs, func(tx *sql.Tx) error {
@@ -55,12 +74,31 @@ func (djRepo *DeliveryJobDBRepository) DispatchMessage(message *data.Message, de
 		})
 		err = transactionalWrites(djRepo.db, txs...)
 	}
+	if err == nil {
+		for _, job := range parkedJobs {
+			job.Status = data.JobParked
+		}
+	}
 	return err
 }
 
+const (
+	updateJobStatusQuery = "UPDATE job SET status = ?, incrementalTimeout = ?, statusChangedAt = ?, updatedAt = ? WHERE id like ? and status = ?"
+)
+
+var (
+	// jobNotPausedClause is appended to hand-out transitions so a job is never handed to an effectively paused consumer,
+	// regardless of how stale a node's in-memory pause snapshot is
+	jobNotPausedClause = " AND " + fmt.Sprintf(notEffectivelyPausedFmt, "job.consumerId")
+)
+
 func (djRepo *DeliveryJobDBRepository) updateJobStatus(deliveryJob *data.DeliveryJob, from data.JobStatus, to data.JobStatus) (err error) {
+	return djRepo.updateJobStatusWithQuery(deliveryJob, from, to, updateJobStatusQuery)
+}
+
+func (djRepo *DeliveryJobDBRepository) updateJobStatusWithQuery(deliveryJob *data.DeliveryJob, from data.JobStatus, to data.JobStatus, query string) (err error) {
 	currentTime := time.Now()
-	err = transactionalSingleRowWriteExec(djRepo.db, emptyOps, "UPDATE job SET status = ?, incrementalTimeout = ?, statusChangedAt = ?, updatedAt = ? WHERE id like ? and status = ?", args2SliceFnWrapper(to, deliveryJob.IncrementalTimeout, currentTime, currentTime, deliveryJob.ID, from))
+	err = transactionalSingleRowWriteExec(djRepo.db, emptyOps, query, args2SliceFnWrapper(to, deliveryJob.IncrementalTimeout, currentTime, currentTime, deliveryJob.ID, from))
 	if err == nil {
 		deliveryJob.Status = to
 		deliveryJob.StatusChangedAt = currentTime
@@ -69,13 +107,15 @@ func (djRepo *DeliveryJobDBRepository) updateJobStatus(deliveryJob *data.Deliver
 	return err
 }
 
-// MarkJobInflight sets the status of the job to Inflight if the job is Queued in the DB and its retry attempt count still
-// matches the object's; else returns error. The retry count check refuses an out-of-date in-memory copy, for example one
-// read by another instance's recovery pass before a later attempt failed and put the job back to Queued with a higher
-// count. Delivering such a copy would skip the retry backoff and write a retry count that is too low.
+// MarkJobInflight sets the status of the job to Inflight if the job is Queued in the DB, its retry attempt count still
+// matches the object's, and its consumer is not effectively paused; else returns error (ErrNoRowsUpdated).
+// The retry count check refuses an out-of-date in-memory copy, for example one read by another instance's recovery pass
+// before a later attempt failed and put the job back to Queued with a higher count; delivering it would skip the retry
+// backoff and write a retry count that is too low. The pause check refuses a hand-out to a paused consumer no matter how
+// stale this node's pause snapshot is.
 func (djRepo *DeliveryJobDBRepository) MarkJobInflight(deliveryJob *data.DeliveryJob) (err error) {
 	currentTime := time.Now()
-	err = transactionalSingleRowWriteExec(djRepo.db, emptyOps, "UPDATE job SET status = ?, incrementalTimeout = ?, statusChangedAt = ?, updatedAt = ? WHERE id like ? and status = ? and retryAttemptCount = ?",
+	err = transactionalSingleRowWriteExec(djRepo.db, emptyOps, "UPDATE job SET status = ?, incrementalTimeout = ?, statusChangedAt = ?, updatedAt = ? WHERE id like ? and status = ? and retryAttemptCount = ?"+jobNotPausedClause,
 		args2SliceFnWrapper(data.JobInflight, deliveryJob.IncrementalTimeout, currentTime, currentTime, deliveryJob.ID, data.JobQueued, deliveryJob.RetryAttemptCount))
 	if err == nil {
 		deliveryJob.Status = data.JobInflight
@@ -117,7 +157,7 @@ func (djRepo *DeliveryJobDBRepository) MarkJobRetry(deliveryJob *data.DeliveryJo
 // MarkDeadJobAsInflight increases the retry attempt count and sets the status of the job to Queued if the job's current status is Dead in the object and DB; else returns error
 func (djRepo *DeliveryJobDBRepository) MarkDeadJobAsInflight(deliveryJob *data.DeliveryJob) (err error) {
 	currentTime := time.Now()
-	err = transactionalSingleRowWriteExec(djRepo.db, emptyOps, "UPDATE job SET status = ?, incrementalTimeout = ?, statusChangedAt = ?, updatedAt = ?, earliestNextAttemptAt = ?, retryAttemptCount = ? WHERE id like ? and status = ?", args2SliceFnWrapper(data.JobInflight, deliveryJob.IncrementalTimeout, currentTime, currentTime, currentTime, deliveryJob.RetryAttemptCount+1, deliveryJob.ID, data.JobDead))
+	err = transactionalSingleRowWriteExec(djRepo.db, emptyOps, "UPDATE job SET status = ?, incrementalTimeout = ?, statusChangedAt = ?, updatedAt = ?, earliestNextAttemptAt = ?, retryAttemptCount = ? WHERE id like ? and status = ?"+jobNotPausedClause, args2SliceFnWrapper(data.JobInflight, deliveryJob.IncrementalTimeout, currentTime, currentTime, currentTime, deliveryJob.RetryAttemptCount+1, deliveryJob.ID, data.JobDead))
 	if err == nil {
 		deliveryJob.Status = data.JobInflight
 		deliveryJob.StatusChangedAt = currentTime
@@ -378,6 +418,13 @@ func (djRepo *DeliveryJobDBRepository) GetByID(id string) (job *data.DeliveryJob
 	err = querySingleRow(djRepo.db, jobCommonSelectQuery+" id like ?", args2SliceFnWrapper(id),
 		args2SliceFnWrapper(&job.ID, &messageID, &consumerID, &job.Status, &job.DispatchReceivedAt, &job.RetryAttemptCount, &job.StatusChangedAt,
 			&job.EarliestNextAttemptAt, &job.CreatedAt, &job.UpdatedAt, &job.Priority, &job.IncrementalTimeout))
+	if err == sql.ErrNoRows {
+		// The job may be parked (its consumer is or was paused); a parked job is returned with Status data.JobParked
+		if parkedJob, parkedErr := loadParkedJobByID(djRepo.db, djRepo.mesageRepository, djRepo.consumerRepository, id); parkedErr == nil {
+			return parkedJob, nil
+		}
+		return job, err
+	}
 	if err == nil {
 		job.Message, err = djRepo.mesageRepository.GetByID(messageID)
 	}
@@ -409,6 +456,14 @@ GROUP BY c.channelId, j.consumerId, j.status`
 		return []interface{}{&statusCount.channelId, &statusCount.consumerId, &statusCount.status, &statusCount.count, &statusCount.oldest, &statusCount.newest}
 	}
 	err := queryRows(djRepo.db, query, nilArgs, scanStatusCount)
+	if err == nil {
+		// Parked jobs are not in the job table; report them under the virtual PARKED status
+		err = queryRows(djRepo.db, parkedCountsQuery, nilArgs, func() []interface{} {
+			statusCount := &statusRow{status: data.JobParked}
+			rows = append(rows, statusCount)
+			return []interface{}{&statusCount.channelId, &statusCount.consumerId, &statusCount.count, &statusCount.oldest, &statusCount.newest}
+		})
+	}
 	log.Info().Msg("Query: " + query + "; Status rows: " + strconv.Itoa(len(rows)))
 	result := make(map[Channel_ID]map[Consumer_ID][]*data.StatusCount[data.JobStatus])
 	if err == nil {
@@ -484,6 +539,28 @@ func (djRepo *DeliveryJobDBRepository) GetDeadJobCountsSinceCheckpoint(since tim
 	}
 	for _, row := range rows {
 		result[row.consumerID] = row.count
+	}
+	return result, nil
+}
+
+// GetQueuedJobsByIDs loads the jobs with the given ids that are currently QUEUED, with message and listener
+// populated. Unknown and non-QUEUED ids are skipped. Ids are queried in chunks of getJobsForMessagesChunkSize.
+func (djRepo *DeliveryJobDBRepository) GetQueuedJobsByIDs(ids []string) ([]*data.DeliveryJob, error) {
+	result := make([]*data.DeliveryJob, 0, len(ids))
+	for start := 0; start < len(ids); start += getJobsForMessagesChunkSize {
+		end := min(start+getJobsForMessagesChunkSize, len(ids))
+		chunk := ids[start:end]
+		args := make([]interface{}, 0, len(chunk)+1)
+		for _, id := range chunk {
+			args = append(args, id)
+		}
+		args = append(args, data.JobQueued)
+		query := jobCommonSelectQuery + " id IN (" + placeholders(len(chunk)) + ") AND status = ?"
+		jobs, _, err := djRepo.getJobs(query, nil, nil, args)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, jobs...)
 	}
 	return result, nil
 }
