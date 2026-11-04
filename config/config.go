@@ -687,8 +687,20 @@ func setupBrokerConfiguration(cfg *ini.File, configuration *Config) {
 		backoffDelays = append(backoffDelays, time.Duration(parsedBackoff)*time.Second)
 	}
 	configuration.RetryBackoffDelays = backoffDelays
-	configuration.DefaultConsumerMaxConcurrency = broker.Key("default-consumer-max-concurrency").MustUint(0)
+	configuration.DefaultConsumerMaxConcurrency = parseDefaultConsumerMaxConcurrency(broker.Key("default-consumer-max-concurrency"))
 	configuration.ConsumerMaxConcurrencyOverrides = parseConsumerMaxConcurrencyOverrides(cfg)
+}
+
+func parseDefaultConsumerMaxConcurrency(key *ini.Key) uint {
+	if key.Value() == "" {
+		return 0
+	}
+	limit, err := key.Uint()
+	if err != nil {
+		log.Warn().Str("value", key.Value()).Msg("ignoring default-consumer-max-concurrency: value is not a non-negative integer, so consumers have no limit")
+		return 0
+	}
+	return limit
 }
 
 func parseConsumerMaxConcurrencyOverrides(cfg *ini.File) map[string]uint {

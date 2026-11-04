@@ -1,9 +1,12 @@
 package config
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/go-ini/ini"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -41,6 +44,23 @@ broken-consumer=abc
 		assert.Equal(t, uint(0), config.GetConsumerMaxConcurrency("any-channel", "unlimited-consumer"))
 		assert.Equal(t, uint(8), config.GetConsumerMaxConcurrency("any-channel", "broken-consumer"))
 		assert.Equal(t, uint(8), config.GetConsumerMaxConcurrency("any-channel", "slow-consumer"), "consumer ids are case sensitive")
+	})
+
+	t.Run("invalid default means no limit and logs a warning", func(t *testing.T) {
+		for _, value := range []string{"abc", "-1", "2.5"} {
+			var logged bytes.Buffer
+			original := log.Logger
+			log.Logger = zerolog.New(&logged)
+			iniFile, err := ini.LooseLoad([]byte(DefaultConfiguration), []byte("[broker]\ndefault-consumer-max-concurrency="+value+"\n"))
+			require.NoError(t, err)
+			config := &Config{}
+
+			setupBrokerConfiguration(iniFile, config)
+			log.Logger = original
+
+			assert.Equal(t, uint(0), config.GetConsumerMaxConcurrency("any-channel", "any-consumer"), value)
+			assert.Contains(t, logged.String(), "ignoring default-consumer-max-concurrency", value)
+		}
 	})
 
 	t.Run("key with a colon needs backticks", func(t *testing.T) {
