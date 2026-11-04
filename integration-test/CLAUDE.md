@@ -10,6 +10,20 @@ make itest
 
 This uses `docker-compose.integration-test.yaml` to start MySQL, broker, pruner, and tester in containers.
 
+The compose cluster runs three broker nodes on one MySQL (`ibroker`, `ibroker2`, `ibroker-hmac`) plus an nginx load balancer (`ibroker-lb`) that is the `retrigger-base-endpoint` for dispatch pause hand-offs.
+
+If your default buildx builder can not start (e.g. a `docker-container` builder failing on host mounts), run with `BUILDX_BUILDER=default make itest`.
+
+### Running only the dispatch pause scenarios
+
+```bash
+make prep-itest itest-down
+docker compose -f docker-compose.integration-test.yaml build
+docker compose -f docker-compose.integration-test.yaml run --rm --name tester -e ITEST_ONLY=dispatch-pause tester
+```
+
+`--name tester` is required: `docker compose run` does not register the `tester` network alias the brokers use for consumer callbacks. The scenarios live in `dispatchpause.go` (exit codes 110-149). In the local single-node approach below they also run; the cross-node distribution check is skipped when `BROKER2_BASE_URL` is unreachable.
+
 ### Local Bash Approach (when Docker networking fails)
 
 If `make itest` fails due to Docker inter-container networking issues (e.g., broker cannot connect to MySQL with `connection timed out` errors despite both being on the same Docker network), use this approach:
