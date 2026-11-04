@@ -958,6 +958,8 @@ func TestRetryQueuedJobsSkipsHeldJobs(t *testing.T) {
 	}
 	heldJob, _ := dataAccessor.GetDeliveryJobRepository().GetByID(held.ID.String())
 	require.True(t, impl.scheduler.enqueue(NewJob(heldJob)))
+	// release the held job so the shared per-consumer gauges are left as found
+	defer impl.scheduler.discardQueued()
 
 	locked := map[string]bool{}
 	oldInLockRun := inLockRun
