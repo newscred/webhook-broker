@@ -204,3 +204,5 @@ func TestDeliverJob_RefusesStaleCopy(t *testing.T) {
 	assert.Equal(t, data.JobQueued, reloaded.Status)
 	assert.Equal(t, uint(1), reloaded.RetryAttemptCount)
 }
+
+// Generated with assistance from Claude AI

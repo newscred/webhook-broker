@@ -712,7 +712,7 @@ func TestJobWorkers(t *testing.T) {
 		_, err = db.Exec("UPDATE job SET status = ?, earliestNextAttemptAt = ?, retryAttemptCount = ? WHERE id = ?", data.JobQueued, current_time.Add(-110*time.Millisecond), msgDispatcher.brokerConfig.GetMaxRetry()+1, pullJob.ID)
 		assert.Nil(t, err)
 		// the recovery pass skips a job this instance still holds from the first pass
-		assert.Eventually(t, func() bool { return !impl.scheduler.isHeld(pushJob.ID.String()) }, 5*time.Second, 10*time.Millisecond)
+		assert.Eventually(t, func() bool { return !impl.scheduler.isHeld(pushJob) }, 5*time.Second, 10*time.Millisecond)
 
 		retryQueuedJobs(impl)
 
@@ -735,11 +735,19 @@ func TestSlowConsumerDoesNotStarveOtherConsumers(t *testing.T) {
 	// with "database is locked" on slow disks.
 	var ownMessageIDs sync.Map
 	var slowDelivered, fastDelivered sync.Map
+	var callsMu sync.Mutex
+	calls := map[string]int{} // consumer handler key + message id -> calls; a duplicate delivery must not go unnoticed
+	countCall := func(handlerKey, messageID string) {
+		callsMu.Lock()
+		calls[handlerKey+"/"+messageID]++
+		callsMu.Unlock()
+	}
 	var slowMu sync.Mutex
 	slowInflight, slowMaxInflight := 0, 0
 	consumerHandler[slowHandlerKey] = func(_ string, w http.ResponseWriter, r *http.Request) {
 		messageID := r.Header.Get(headerMessageID)
 		if _, own := ownMessageIDs.Load(messageID); own {
+			countCall(slowHandlerKey, messageID)
 			slowMu.Lock()
 			slowInflight++
 			if slowInflight > slowMaxInflight {
@@ -757,6 +765,7 @@ func TestSlowConsumerDoesNotStarveOtherConsumers(t *testing.T) {
 	consumerHandler[fastHandlerKey] = func(_ string, w http.ResponseWriter, r *http.Request) {
 		if messageID := r.Header.Get(headerMessageID); messageID != "" {
 			if _, own := ownMessageIDs.Load(messageID); own {
+				countCall(fastHandlerKey, messageID)
 				fastDelivered.Store(messageID, struct{}{})
 			}
 		}
@@ -806,6 +815,12 @@ func TestSlowConsumerDoesNotStarveOtherConsumers(t *testing.T) {
 	releaseSlow()
 	assert.Eventually(t, func() bool { return count(&slowDelivered) == 4 }, 10*time.Second, 20*time.Millisecond)
 	assert.Equal(t, 1, maxInflight(), "slow consumer never exceeded its limit")
+	callsMu.Lock()
+	defer callsMu.Unlock()
+	assert.Len(t, calls, 8, "4 messages to each of the 2 consumers")
+	for key, n := range calls {
+		assert.Equal(t, 1, n, "each message is delivered to each consumer exactly once: "+key)
+	}
 }
 
 func TestDispatcherStopClearsQueuedConsumerGauge(t *testing.T) {
@@ -865,7 +880,6 @@ func consumerBaseURL(consumer *data.Consumer) string {
 	return parsed.Scheme + "://" + parsed.Host + "/"
 }
 
-// Generated with assistance from Claude AI
 
 func TestDispatcherStopReleasesJobsLeftInStoppedWorkers(t *testing.T) {
 	origDeliver := deliverJob
@@ -963,3 +977,5 @@ func TestRetryQueuedJobsSkipsHeldJobs(t *testing.T) {
 	assert.True(t, queued[free.ID.String()])
 	assert.False(t, queued[held.ID.String()])
 }
+
+// Generated with assistance from Claude AI

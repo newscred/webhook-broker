@@ -787,8 +787,6 @@ func TestGetDeadJobCountsSinceCheckpoint(t *testing.T) {
 	})
 }
 
-// Generated with assistance from Claude AI
-
 // A copy of a job read before a later attempt failed must not be marked in flight: the job is queued again, but with a
 // higher retry attempt count and a later earliest next attempt. Delivering the old copy would skip the backoff and
 // write a retry count that is too low.
@@ -818,3 +816,5 @@ func TestMarkJobInflight_RefusesStaleCopy(t *testing.T) {
 	assert.Nil(t, djRepo.MarkJobInflight(reloaded))
 	assert.Equal(t, data.JobInflight, reloaded.Status)
 }
+
+// Generated with assistance from Claude AI

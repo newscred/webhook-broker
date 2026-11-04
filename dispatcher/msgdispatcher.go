@@ -157,10 +157,10 @@ var (
 					}
 				}
 			} else {
-				if msgDispatcher.scheduler.isHeld(job.ID.String()) {
-					// Already queued or running here; the scheduler would drop it anyway. Skipping it before taking the
-					// lock saves a lock insert and delete per held job on every pass, which matters when a consumer at
-					// its max concurrency keeps a large backlog.
+				if msgDispatcher.scheduler.isHeld(job) {
+					// Already queued or running here, and not out of date; the scheduler would drop it anyway. Skipping
+					// it before taking the lock saves a lock insert and delete per held job on every pass, which
+					// matters when a consumer at its max concurrency keeps a large backlog.
 					continue
 				}
 				err := inLockRun(msgDispatcher.lockRepo, job, func() error {
