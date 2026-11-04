@@ -126,17 +126,25 @@ var (
 		return active, parked
 	}
 
-	// queueJob puts a push job in the in-memory queue, unless the pause snapshot says its consumer is paused, in
-	// which case the job is re-parked (the re-park itself is conditional on the pause existing in the database)
+	// queueJob puts a push job in the in-memory queue, unless its consumer is paused, in which case the job is
+	// re-parked; see parkOrQueue
 	queueJob = func(msgDispatcher *MessageDispatcherImpl, job *data.DeliveryJob) {
 		if job.Listener.Type != data.PushConsumer {
 			return
 		}
-		if msgDispatcher.pauseRegistry.IsEffectivelyPaused(job.Listener.ID.String()) {
-			reparkJob(msgDispatcher.jobParkingRepo, msgDispatcher.metrics, job, ParkReasonRetry)
-			return
+		parkOrQueue(msgDispatcher, job, ParkReasonRetry)
+	}
+
+	// parkOrQueue re-parks the job if the pause snapshot says its consumer is paused and the re-park moved it (the
+	// re-park is conditional on the pause existing in the database); otherwise it queues the job. A stale snapshot
+	// (for example right after a resume) therefore never strands a job: the database is the authority and
+	// MarkJobInflight checks the pause again. Returns true if the job was queued.
+	parkOrQueue = func(msgDispatcher *MessageDispatcherImpl, job *data.DeliveryJob, reason string) bool {
+		if msgDispatcher.pauseRegistry.IsEffectivelyPaused(job.Listener.ID.String()) && reparkJob(msgDispatcher.jobParkingRepo, msgDispatcher.metrics, job, reason) {
+			return false
 		}
 		msgDispatcher.jobQueue <- NewJob(job)
+		return true
 	}
 
 	// reparkJob moves a QUEUED job to parking if its consumer is effectively paused in the database; returns true if moved
@@ -308,20 +316,17 @@ func (msgDispatcher *MessageDispatcherImpl) StartDispatcher() {
 	}
 }
 
-// EnqueueJobs puts QUEUED push jobs into this node's in-memory queue; jobs of consumers paused per the snapshot
-// are re-parked instead. Returns the number of jobs enqueued.
+// EnqueueJobs puts QUEUED push jobs into this node's in-memory queue; jobs of consumers that are paused (per the
+// snapshot and in the database) are re-parked instead. Returns the number of jobs enqueued.
 func (msgDispatcher *MessageDispatcherImpl) EnqueueJobs(jobs []*data.DeliveryJob) int {
 	enqueued := 0
 	for _, job := range jobs {
 		if job == nil || job.Listener == nil || job.Listener.Type != data.PushConsumer {
 			continue
 		}
-		if msgDispatcher.pauseRegistry.IsEffectivelyPaused(job.Listener.ID.String()) {
-			reparkJob(msgDispatcher.jobParkingRepo, msgDispatcher.metrics, job, ParkReasonHandoff)
-			continue
+		if parkOrQueue(msgDispatcher, job, ParkReasonHandoff) {
+			enqueued++
 		}
-		msgDispatcher.jobQueue <- NewJob(job)
-		enqueued++
 	}
 	return enqueued
 }
