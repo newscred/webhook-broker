@@ -89,6 +89,18 @@ func TestLaneScheduler_SlowConsumerDoesNotBlockOthers(t *testing.T) {
 	assert.Equal(t, 3, consumersTaken["lane-iso-fast"])
 }
 
+func TestLaneScheduler_RecreatedConsumerSharesLaneAndLimit(t *testing.T) {
+	original := newLaneTestConsumer(t, "lane-recreate-channel", "lane-recreate")
+	recreated := newLaneTestConsumer(t, "lane-recreate-channel", "lane-recreate")
+	require.NotEqual(t, original.ID, recreated.ID)
+	s := newLaneScheduler(fixedLimits(map[string]uint{"lane-recreate": 1}), counter)
+	s.enqueue(newLaneTestJob(original, 0))
+	s.enqueue(newLaneTestJob(recreated, 0))
+
+	assert.Len(t, drainReady(s), 1)
+	assert.Len(t, s.lanes, 1)
+}
+
 func TestLaneScheduler_RoundRobinAcrossConsumers(t *testing.T) {
 	first := newLaneTestConsumer(t, "lane-rr-channel", "lane-rr-first")
 	second := newLaneTestConsumer(t, "lane-rr-channel", "lane-rr-second")
