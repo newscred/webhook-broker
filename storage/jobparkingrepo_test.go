@@ -2,6 +2,8 @@ package storage
 
 import (
 	"database/sql"
+	"errors"
+	"net/url"
 	"math/rand"
 	"os"
 	"strconv"
@@ -607,6 +609,12 @@ func TestJobParkingGetForMessageAndCounts(t *testing.T) {
 		assert.Equal(t, lastMsg, job.Message)
 		assert.NotEmpty(t, job.Listener.ConsumerID)
 	}
+	single, err := parkingRepo.CountForConsumer(fixture.Push[0].ID.String())
+	assert.NoError(t, err)
+	assert.Equal(t, int64(3), single)
+	none, err := parkingRepo.CountForConsumer(fixture.Push[2].ID.String())
+	assert.NoError(t, err)
+	assert.Equal(t, int64(0), none)
 	counts, err := parkingRepo.GetCountsByConsumer()
 	assert.NoError(t, err)
 	found := 0
@@ -827,3 +835,89 @@ func TestParkingInvariants_Randomized(t *testing.T) {
 
 
 // Generated with assistance from Claude AI
+
+func failingDB(t *testing.T) *sql.DB {
+	t.Helper()
+	db, mock, _ := sqlmock.New()
+	mock.MatchExpectationsInOrder(false)
+	for i := 0; i < 10; i++ {
+		mock.ExpectQuery(".*").WillReturnError(errors.New("db down"))
+	}
+	return db
+}
+
+// Lookups of a parked job's message or consumer can fail independently of the parking row itself
+func TestJobParkingLookupFailures(t *testing.T) {
+	fixture := newPauseFixture(t, "lookup-failures", 1, 0)
+	consumer := fixture.Push[0]
+	pauseConsumerForTest(t, consumer)
+	msg := newParkingMessage(t, fixture)
+	_, parked := dispatchSplit(t, msg, fixture.Consumers, map[string]bool{consumer.ID.String(): true})
+	badDB := failingDB(t)
+	defer badDB.Close()
+	failingMsgRepo := NewMessageRepository(badDB, NewChannelRepository(testDB), NewProducerRepository(testDB))
+	failingConsumerRepo := NewConsumerRepository(badDB, NewChannelRepository(testDB))
+
+	_, err := NewJobParkingRepository(testDB, failingMsgRepo, getConsumerRepo()).GetByID(parked[0].ID.String())
+	assert.Error(t, err, "message lookup failure")
+	_, err = NewJobParkingRepository(testDB, getMessageRepository(), failingConsumerRepo).GetByID(parked[0].ID.String())
+	assert.Error(t, err, "consumer lookup failure")
+	_, err = NewJobParkingRepository(testDB, getMessageRepository(), failingConsumerRepo).GetForMessage(msg)
+	assert.Error(t, err, "listener lookup failure while listing a message's parked jobs")
+
+	resumeConsumerForTest(t, consumer)
+	// The page is committed before messages are loaded; a load failure is reported but the jobs are already QUEUED
+	// (the retry worker delivers them after the hand-off lease)
+	_, err = NewJobParkingRepository(testDB, failingMsgRepo, getConsumerRepo()).DrainPage(consumer.ID.String(), 10, time.Now())
+	assert.Error(t, err)
+	assertPlacement(t, msg, consumer, 1, 0)
+	reloaded, err := getDeliverJobRepository().GetByID(parked[0].ID.String())
+	assert.NoError(t, err)
+	assert.Equal(t, data.JobQueued, reloaded.Status)
+}
+
+func TestDrainPageListenerLookupFailure(t *testing.T) {
+	fixture := newPauseFixture(t, "drain-listener-failure", 1, 0)
+	consumer := fixture.Push[0]
+	pauseConsumerForTest(t, consumer)
+	dispatchSplit(t, newParkingMessage(t, fixture), fixture.Consumers, map[string]bool{consumer.ID.String(): true})
+	resumeConsumerForTest(t, consumer)
+	badDB := failingDB(t)
+	defer badDB.Close()
+	_, err := NewJobParkingRepository(testDB, getMessageRepository(), NewConsumerRepository(badDB, NewChannelRepository(testDB))).DrainPage(consumer.ID.String(), 10, time.Now())
+	assert.Error(t, err)
+}
+
+func TestInsertParkedJobsInTxEmpty(t *testing.T) {
+	assert.NoError(t, transactionalWrites(testDB, func(tx *sql.Tx) error { return insertParkedJobsInTx(tx, nil, time.Now()) }))
+}
+
+func TestGetQueuedJobsByIDsError(t *testing.T) {
+	badDB := failingDB(t)
+	defer badDB.Close()
+	_, err := NewDeliveryJobRepository(badDB, getMessageRepository(), getConsumerRepo()).GetQueuedJobsByIDs([]string{"a"})
+	assert.Error(t, err)
+}
+
+func TestPauseTestHelpers(t *testing.T) {
+	badDB := failingDB(t)
+	defer badDB.Close()
+	_, _, err := JobPlacement(badDB, "m", "c")
+	assert.Error(t, err)
+	assert.Error(t, CheckParkingInvariants(badDB))
+	assert.Error(t, CheckMessageJobCount(badDB, "m", 1))
+	assert.Error(t, InsertPauseRow(badDB, "s", ""))
+
+	fixture := newPauseFixture(t, "helpers", 2, 0)
+	never, parkedConsumer := fixture.Push[0], fixture.Push[1]
+	msg := newParkingMessage(t, fixture)
+	dispatchSplit(t, msg, fixture.Consumers, map[string]bool{parkedConsumer.ID.String(): true})
+	assert.NoError(t, CheckParkingInvariants(testDB, never.ID.String()))
+	assert.Error(t, CheckParkingInvariants(testDB, parkedConsumer.ID.String()), "a consumer declared never-paused must not have parked jobs")
+	assert.NoError(t, CheckMessageJobCount(testDB, msg.ID.String(), 2))
+	assert.Error(t, CheckMessageJobCount(testDB, msg.ID.String(), 3))
+
+	relative, _ := url.Parse("relative/callback")
+	_, err = SetupPauseFixture(getPauseTestAccessor(), "helpers-invalid-"+xid.New().String()+"-", 1, 0, func(int) *url.URL { return relative })
+	assert.Error(t, err, "an invalid consumer callback fails the fixture")
+}

@@ -45,18 +45,18 @@ func GetHTTPServer(cliConfig *config.CLIConfig) (*HTTPServiceContainer, error) {
 	consumerRepository := newConsumerRepository(dataAccessor)
 	messageRepository := newMessageRepository(dataAccessor)
 	deliveryJobRepository := newDeliveryJobRepository(dataAccessor)
-	messageController := controllers.NewMessageController(messageRepository, deliveryJobRepository)
+	jobParkingRepository := newJobParkingRepository(dataAccessor)
+	messageController := controllers.NewMessageController(messageRepository, deliveryJobRepository, jobParkingRepository)
 	jobRequeueController := controllers.NewJobRequeueController(deliveryJobRepository, channelRepository, consumerRepository)
 	dlqController := controllers.NewDLQController(messageController, jobRequeueController, deliveryJobRepository, consumerRepository)
-	consumerController := controllers.NewConsumerController(channelRepository, consumerRepository, dlqController)
+	dispatchPauseRepository := newDispatchPauseRepository(dataAccessor)
+	metricsContainer := dispatcher.NewMetricsContainer()
+	pauseRegistry := dispatcher.NewPauseRegistry(dispatchPauseRepository, consumerRepository, configConfig, metricsContainer)
+	consumerController := controllers.NewConsumerControllerWithPauseRegistry(channelRepository, consumerRepository, dlqController, pauseRegistry)
 	consumersController := controllers.NewConsumersController(consumerController, consumerRepository)
 	messagesController := controllers.NewMessagesController(messageController, messageRepository)
 	scheduledMessageRepository := newScheduledMessageRepository(dataAccessor)
 	lockRepository := newLockRepository(dataAccessor)
-	metricsContainer := dispatcher.NewMetricsContainer()
-	dispatchPauseRepository := newDispatchPauseRepository(dataAccessor)
-	pauseRegistry := dispatcher.NewPauseRegistry(dispatchPauseRepository, consumerRepository, configConfig, metricsContainer)
-	jobParkingRepository := newJobParkingRepository(dataAccessor)
 	configuration := &dispatcher.Configuration{
 		DeliveryJobRepo:          deliveryJobRepository,
 		ConsumerRepo:             consumerRepository,
@@ -73,8 +73,8 @@ func GetHTTPServer(cliConfig *config.CLIConfig) (*HTTPServiceContainer, error) {
 	scheduledMessagesController := controllers.NewScheduledMessagesController(scheduledMessageRepository, channelRepository)
 	messagesStatusController := controllers.NewMessagesStatusController(messagesController, scheduledMessagesController, messageRepository, scheduledMessageRepository)
 	channelController := controllers.NewChannelController(consumersController, messagesController, broadcastController, messagesStatusController, channelRepository)
-	jobsController := controllers.NewJobsController(channelRepository, consumerRepository, deliveryJobRepository)
-	jobController := controllers.NewJobController(messageController, channelController, producerController, consumerController, channelRepository, consumerRepository, deliveryJobRepository)
+	jobsController := controllers.NewJobsController(channelRepository, consumerRepository, deliveryJobRepository, dispatchPauseRepository)
+	jobController := controllers.NewJobController(messageController, channelController, producerController, consumerController, channelRepository, consumerRepository, deliveryJobRepository, dispatchPauseRepository)
 	channelsController := controllers.NewChannelsController(channelRepository, channelController)
 	jobStatusController := controllers.NewJobStatusController(deliveryJobRepository)
 	scheduledMessageController := controllers.NewScheduledMessageController(scheduledMessageRepository, channelRepository)
@@ -83,31 +83,37 @@ func GetHTTPServer(cliConfig *config.CLIConfig) (*HTTPServiceContainer, error) {
 	dlqPurgeController := controllers.NewDLQPurgeController(channelRepository, consumerRepository, deliveryJobRepository, dlqSummaryRepository, configConfig, metricsContainer)
 	deadJobDeleteController := controllers.NewDeadJobDeleteController(channelRepository, consumerRepository, deliveryJobRepository, dlqSummaryRepository, configConfig, metricsContainer)
 	internalJobEnqueueController := controllers.NewInternalJobEnqueueController(deliveryJobRepository, messageDispatcher, configConfig)
+	consumerDispatchPauseController := controllers.NewConsumerDispatchPauseController(channelRepository, consumerRepository, dispatchPauseRepository, jobParkingRepository, pauseRegistry)
+	globalDispatchPauseController := controllers.NewGlobalDispatchPauseController(dispatchPauseRepository, jobParkingRepository, pauseRegistry, configConfig)
+	dispatchPausesController := controllers.NewDispatchPausesController(dispatchPauseRepository, jobParkingRepository, consumerRepository, configConfig)
 	handler := dispatcher.NewPrometheusHandler()
 	controllersControllers := &controllers.Controllers{
-		StatusController:             statusController,
-		ProducersController:          producersController,
-		ProducerController:           producerController,
-		ChannelController:            channelController,
-		ConsumerController:           consumerController,
-		ConsumersController:          consumersController,
-		JobsController:               jobsController,
-		JobController:                jobController,
-		BroadcastController:          broadcastController,
-		MessageController:            messageController,
-		MessagesController:           messagesController,
-		DLQController:                dlqController,
-		ChannelsController:           channelsController,
-		MessagesStatusController:     messagesStatusController,
-		JobRequeueController:         jobRequeueController,
-		JobStatusController:          jobStatusController,
-		ScheduledMessageController:   scheduledMessageController,
-		ScheduledMessagesController:  scheduledMessagesController,
-		DLQStatusController:          dlqStatusController,
-		DLQPurgeController:           dlqPurgeController,
-		DeadJobDeleteController:      deadJobDeleteController,
-		InternalJobEnqueueController: internalJobEnqueueController,
-		MetricsHandler:               handler,
+		StatusController:                statusController,
+		ProducersController:             producersController,
+		ProducerController:              producerController,
+		ChannelController:               channelController,
+		ConsumerController:              consumerController,
+		ConsumersController:             consumersController,
+		JobsController:                  jobsController,
+		JobController:                   jobController,
+		BroadcastController:             broadcastController,
+		MessageController:               messageController,
+		MessagesController:              messagesController,
+		DLQController:                   dlqController,
+		ChannelsController:              channelsController,
+		MessagesStatusController:        messagesStatusController,
+		JobRequeueController:            jobRequeueController,
+		JobStatusController:             jobStatusController,
+		ScheduledMessageController:      scheduledMessageController,
+		ScheduledMessagesController:     scheduledMessagesController,
+		DLQStatusController:             dlqStatusController,
+		DLQPurgeController:              dlqPurgeController,
+		DeadJobDeleteController:         deadJobDeleteController,
+		InternalJobEnqueueController:    internalJobEnqueueController,
+		ConsumerDispatchPauseController: consumerDispatchPauseController,
+		GlobalDispatchPauseController:   globalDispatchPauseController,
+		DispatchPausesController:        dispatchPausesController,
+		MetricsHandler:                  handler,
 	}
 	router := controllers.NewRouter(controllersControllers)
 	server := controllers.ConfigureAPI(configConfig, serverLifecycleListenerImpl, router, configConfig)

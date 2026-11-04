@@ -338,7 +338,12 @@ paths:
           description: Consumer authentication token
       responses:
         '200':
-          description: Successful response
+          description: Successful response. While the consumer (or the whole broker) is paused the list is empty and the X-Broker-Dispatch-Paused header is set.
+          headers:
+            X-Broker-Dispatch-Paused:
+              description: Present with value "true" while dispatching to this consumer is paused
+              schema:
+                type: string
           content:
             application/json:
               schema:
@@ -499,6 +504,8 @@ paths:
           description: Forbidden - token does not match
         '404':
           description: Job not found
+        '409':
+          description: Dispatch paused - the job is PARKED, or a QUEUED/DEAD to INFLIGHT transition was refused because the consumer is paused. INFLIGHT to DELIVERED/DEAD is still allowed.
         '412':
           description: Precondition failed
     delete:
@@ -850,7 +857,227 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DLQStatus'
+  /channel/{channelId}/consumer/{consumerId}/dispatch-pause:
+    put:
+      summary: Pause dispatching to a consumer
+      description: Broadcasts are still accepted; jobs for this consumer are parked until it is resumed. Idempotent - pausing an already paused consumer returns the existing pause.
+      tags:
+        - Dispatch Pause
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: consumerId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: X-Broker-Channel-Token
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: X-Broker-Consumer-Token
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  maxLength: 1024
+      responses:
+        '200':
+          description: Consumer paused
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DispatchPause'
+        '400':
+          description: Reason too long
+        '403':
+          description: Token mismatch
+        '404':
+          description: Channel or consumer not found
+    get:
+      summary: Get the consumer's dispatch pause
+      tags:
+        - Dispatch Pause
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: consumerId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: X-Broker-Channel-Token
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: X-Broker-Consumer-Token
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The consumer is paused
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DispatchPause'
+        '403':
+          description: Token mismatch
+        '404':
+          description: Channel or consumer not found, or the consumer is not paused
+    delete:
+      summary: Resume dispatching to a consumer
+      description: The drainer moves the consumer's parked jobs back into the job queue on its next run (unless a global pause is active).
+      tags:
+        - Dispatch Pause
+      parameters:
+        - name: channelId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: consumerId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: X-Broker-Channel-Token
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: X-Broker-Consumer-Token
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Consumer resumed
+        '403':
+          description: Token mismatch
+        '404':
+          description: Channel or consumer not found, or the consumer was not paused
+  /dispatch-pause:
+    put:
+      summary: Pause dispatching to every consumer
+      description: Disabled (404) unless [dispatch-pause] admin-token is configured. Idempotent.
+      tags:
+        - Dispatch Pause
+      security:
+        - AdminToken: []
+      requestBody:
+        required: false
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  maxLength: 1024
+      responses:
+        '200':
+          description: Broker paused
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DispatchPause'
+        '400':
+          description: Reason too long
+        '401':
+          description: Admin token missing or not matching
+        '404':
+          description: Admin token not configured
+    delete:
+      summary: Resume dispatching globally
+      description: Consumers with their own pause stay paused.
+      tags:
+        - Dispatch Pause
+      security:
+        - AdminToken: []
+      responses:
+        '204':
+          description: Broker resumed
+        '401':
+          description: Admin token missing or not matching
+        '404':
+          description: Admin token not configured, or the broker was not paused
+  /dispatch-pauses:
+    get:
+      summary: List all dispatch pauses and parked job counts
+      description: Requires the admin token when one is configured; open otherwise. Parked entries include consumers that were resumed but are still draining.
+      tags:
+        - Dispatch Pause
+      security:
+        - AdminToken: []
+        - {}
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DispatchPauses'
+        '401':
+          description: Admin token configured but missing or not matching
+  /_internal/jobs/enqueue:
+    post:
+      summary: (Internal) Enqueue handed-off jobs on this node
+      description: Called by the parking drainer through the load-balanced [broker] retrigger-base-endpoint. Not for public use. Disabled (404) unless [dispatch-pause] admin-token is configured; subject to gateway HMAC auth when enabled.
+      tags:
+        - Internal
+      security:
+        - AdminToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnqueueRequest'
+      responses:
+        '202':
+          description: Jobs enqueued; accepted excludes ids that were no longer QUEUED or whose consumer was paused again
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnqueueResponse'
+        '400':
+          description: Malformed body or more ids than drain-page-size
+        '401':
+          description: Admin token missing or not matching
+        '404':
+          description: Admin token not configured
+        '503':
+          description: Node queue above the hand-off high-water mark; retry (the load balancer picks another node)
+          headers:
+            Retry-After:
+              schema:
+                type: integer
 components:
+  securitySchemes:
+    AdminToken:
+      type: apiKey
+      in: header
+      name: X-Broker-Admin-Token
   schemas:
     MsgStakeholder:
       type: object
@@ -909,6 +1136,9 @@ components:
           format: uri
         Type:
           type: string
+        DispatchPaused:
+          type: boolean
+          description: True while the consumer or the whole broker is paused
     AppData:
       type: object
       properties:
@@ -979,6 +1209,8 @@ components:
           type: string
         Status:
           type: string
+          enum: [QUEUED, INFLIGHT, DELIVERED, DEAD, PARKED]
+          description: PARKED is a virtual status for jobs of a paused consumer that are held in job parking
         StatusChangedAt:
           type: string
           format: date-time
@@ -1100,3 +1332,63 @@ components:
           format: uri
           nullable: true
           minLength: 0
+    DispatchPause:
+      type: object
+      properties:
+        scope:
+          type: string
+          enum: [consumer, global]
+        channelId:
+          type: string
+        consumerId:
+          type: string
+        reason:
+          type: string
+        pausedAt:
+          type: string
+          format: date-time
+        globallyPaused:
+          type: boolean
+          description: True when a global pause is active; resuming a consumer does not restart delivery while it is
+        parkedJobCount:
+          type: integer
+          format: int64
+    ParkedJobs:
+      type: object
+      properties:
+        channelId:
+          type: string
+        consumerId:
+          type: string
+        count:
+          type: integer
+          format: int64
+        oldestParkedAt:
+          type: string
+        paused:
+          type: boolean
+    DispatchPauses:
+      type: object
+      properties:
+        globallyPaused:
+          type: boolean
+        pauses:
+          type: array
+          items:
+            $ref: '#/components/schemas/DispatchPause'
+        parked:
+          type: array
+          items:
+            $ref: '#/components/schemas/ParkedJobs'
+    EnqueueRequest:
+      type: object
+      properties:
+        jobIds:
+          type: array
+          items:
+            type: string
+    EnqueueResponse:
+      type: object
+      properties:
+        accepted:
+          type: integer

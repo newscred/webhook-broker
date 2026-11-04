@@ -82,7 +82,7 @@ func MessageTestSetup() {
 }
 
 func getMessageController() *MessageController {
-	return NewMessageController(messageRepo, djRepo)
+	return NewMessageController(messageRepo, djRepo, storage.NewJobParkingRepository(db, messageRepo, consumerRepo))
 }
 
 func getMessagesController() *MessagesController {
@@ -151,7 +151,7 @@ func TestMessageGet(t *testing.T) {
 		mockedDJRepo := new(storagemocks.DeliveryJobRepository)
 		expectedErr := errors.New("test error")
 		mockedDJRepo.On("GetJobsForMessage", mock.Anything, mock.Anything).Return(nil, nil, expectedErr)
-		mockedRouter := createTestRouter(NewMessageController(messageRepo, mockedDJRepo))
+		mockedRouter := createTestRouter(NewMessageController(messageRepo, mockedDJRepo, nil))
 		messageURL := baseURL + "0"
 		req, _ := http.NewRequest(http.MethodGet, messageURL, nil)
 		rr := httptest.NewRecorder()
@@ -422,7 +422,7 @@ func TestMessagesStatusController_Get(t *testing.T) {
 	djRepo := new(storagemocks.DeliveryJobRepository)
 
 	// Create controllers
-	msgController := NewMessageController(msgRepo, djRepo)
+	msgController := NewMessageController(msgRepo, djRepo, nil)
 	msgsController := NewMessagesController(msgController, msgRepo)
 
 	// Create a proper ScheduledMessagesController for testing
