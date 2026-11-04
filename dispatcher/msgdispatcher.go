@@ -273,6 +273,8 @@ func (msgDispatcher *MessageDispatcherImpl) Stop() {
 				msgDispatcher.jobRecoverRetryWorkerStop <- true
 				msgDispatcher.jobRecoverStaleInflightWorkerStop <- true
 			}
+			// Nothing enqueues any more, so the jobs still waiting can be dropped.
+			msgDispatcher.scheduler.discardQueued()
 			wg.Done()
 		}()
 		log.Print("stopping workers", len(msgDispatcher.workers))

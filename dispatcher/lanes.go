@@ -172,4 +172,24 @@ func (s *laneScheduler) done(job *Job) {
 	s.signal()
 }
 
+// discardQueued drops every queued job when the dispatcher stops, so that the per-consumer gauges,
+// which outlive the dispatcher, do not keep counting them. The jobs stay queued in the database for
+// the next dispatcher. Running jobs still release their slot through done.
+func (s *laneScheduler) discardQueued() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for key, lane := range s.lanes {
+		for lane.queue.Len() > 0 {
+			job := lane.queue.Dequeue()
+			delete(s.tracked, job.Data.ID.String())
+			s.metrics.ConsumerQueuedJobCount.WithLabelValues(lane.channelID, lane.consumerID).Dec()
+		}
+		lane.ready = false
+		if lane.inflight == 0 {
+			delete(s.lanes, key)
+		}
+	}
+	s.ready = nil
+}
+
 // Generated with assistance from Claude AI

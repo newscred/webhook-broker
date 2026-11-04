@@ -800,6 +800,58 @@ func TestSlowConsumerDoesNotStarveOtherConsumers(t *testing.T) {
 	assert.Equal(t, int32(4), slowCalls.Load())
 }
 
+func TestDispatcherStopClearsQueuedConsumerGauge(t *testing.T) {
+	t.Cleanup(clearConsumerHandler)
+	blocked := consumers[3]
+	handlerKey := strings.TrimPrefix(blocked.CallbackURL, consumerBaseURL(blocked))
+	release := make(chan struct{})
+	var ownMessageIDs sync.Map
+	consumerHandler[handlerKey] = func(_ string, w http.ResponseWriter, r *http.Request) {
+		if _, own := ownMessageIDs.Load(r.Header.Get(headerMessageID)); own {
+			<-release
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+	brokerConf := new(configmocks.BrokerConfig)
+	brokerConf.On("GetMaxMessageQueueSize").Return(uint(100))
+	brokerConf.On("GetMaxWorkers").Return(uint(3))
+	brokerConf.On("IsRecoveryWorkersEnabled").Return(false)
+	brokerConf.On("GetRationalDelay").Return(100 * time.Millisecond)
+	brokerConf.On("GetMaxRetry").Return(uint8(5))
+	brokerConf.On("GetRetryBackoffDelays").Return([]time.Duration{5 * time.Second})
+	brokerConf.On("GetConsumerMaxConcurrency", channel.ChannelID, blocked.ConsumerID).Return(uint(1))
+	brokerConf.On("GetConsumerMaxConcurrency", mock.Anything, mock.Anything).Return(uint(0))
+	queued := counter.ConsumerQueuedJobCount.WithLabelValues(channel.ChannelID, blocked.ConsumerID)
+	inflight := counter.ConsumerInflightJobCount.WithLabelValues(channel.ChannelID, blocked.ConsumerID)
+	queuedBefore, inflightBefore := gaugeValue(t, queued), gaugeValue(t, inflight)
+
+	dispatcher := NewMessageDispatcher(getCompleteDispatcherConfiguration(dataAccessor.GetMessageRepository(), dataAccessor.GetDeliveryJobRepository(), dataAccessor.GetConsumerRepository(), brokerConf, configuration, dataAccessor.GetLockRepository()))
+	for i := 0; i < 3; i++ {
+		msg, _ := data.NewMessage(channel, producer, `{"key": "stop-gauge"}`, "application/json", data.HeadersMap{})
+		require.NoError(t, dataAccessor.GetMessageRepository().Create(msg))
+		ownMessageIDs.Store(msg.MessageID, struct{}{})
+		dispatcher.Dispatch(msg)
+	}
+	require.Eventually(t, func() bool {
+		return gaugeValue(t, queued)-queuedBefore == 2 && gaugeValue(t, inflight)-inflightBefore == 1
+	}, 5*time.Second, 20*time.Millisecond)
+
+	stopped := make(chan struct{})
+	go func() {
+		dispatcher.Stop()
+		close(stopped)
+	}()
+	time.Sleep(200 * time.Millisecond)
+	close(release)
+	select {
+	case <-stopped:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Stop did not return")
+	}
+	assert.Equal(t, float64(0), gaugeValue(t, inflight)-inflightBefore)
+	assert.Equal(t, float64(0), gaugeValue(t, queued)-queuedBefore)
+}
+
 func consumerBaseURL(consumer *data.Consumer) string {
 	parsed, _ := url.Parse(consumer.CallbackURL)
 	return parsed.Scheme + "://" + parsed.Host + "/"
