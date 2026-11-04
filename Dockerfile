@@ -27,6 +27,7 @@ ADD utils ./utils
 ADD prune ./prune
 ADD scheduler ./scheduler
 ADD dlq ./dlq
+ADD parking ./parking
 
 RUN make build
 RUN make test

@@ -39,7 +39,6 @@ CREATE TABLE IF NOT EXISTS `job_parking` (
 );
 -- Drain pages (consumerId = ? ORDER BY createdAt, seq) and SELECT DISTINCT consumerId.
 CREATE INDEX `job_parking_drain` ON `job_parking` (`consumerId`, `createdAt`, `seq`);
--- Prune NOT EXISTS check and per-message job listings.
-CREATE INDEX `job_parking_message` ON `job_parking` (`messageId`);
+-- The prune NOT EXISTS check and per-message listings use UNIQUE (messageId, consumerId) above.
 
 -- Generated with assistance from Claude AI

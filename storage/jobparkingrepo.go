@@ -26,21 +26,23 @@ const (
 		"FROM job j WHERE j.id = ? AND j.status = ? AND "
 	reparkDeleteQuery = "DELETE FROM job WHERE id = ? AND status = ?"
 
-	// drainableConsumersQuery lists consumers that have parked jobs and are not effectively paused
-	drainableConsumersQuery = "SELECT DISTINCT p.consumerId FROM job_parking p WHERE "
-	// drainPageSelectQuery picks the oldest parked jobs of a consumer that is not effectively paused
-	drainPageSelectQuery = "SELECT " + parkedJobColumns + " FROM job_parking p WHERE p.consumerId = ? AND "
-	drainPageOrderBy     = " ORDER BY p.createdAt, p.seq LIMIT ?"
-	drainJobInsertQuery  = "INSERT INTO job (id, messageId, consumerId, dispatchReceivedAt, statusChangedAt, earliestNextAttemptAt, status, createdAt, updatedAt, priority, incrementalTimeout, retryAttemptCount) VALUES"
-	drainJobRowArgCount  = 12
+	// parkedConsumersQuery lists consumers that have parked jobs; a plain DISTINCT on the leading column of
+	// job_parking_drain lets MySQL use a loose index scan (paused consumers are filtered out in Go)
+	parkedConsumersQuery = "SELECT DISTINCT consumerId FROM job_parking"
+	pauseScopesQuery     = "SELECT scope FROM dispatch_pause"
+	// drainPageQuery picks the oldest parked jobs of a consumer that is not effectively paused. The pause check takes
+	// the consumer id as a parameter (not correlated on p.consumerId) so it is evaluated once and the
+	// job_parking_drain index serves the ORDER BY without a filesort and LIMIT can stop early.
+	drainPageQuery = "SELECT " + parkedJobColumns + " FROM job_parking p WHERE p.consumerId = ? AND " +
+		"NOT EXISTS (SELECT 1 FROM dispatch_pause d WHERE d.scope IN (?, '" + data.GlobalDispatchPauseScope + "')) ORDER BY p.createdAt, p.seq LIMIT ?"
+	drainJobInsertQuery = "INSERT INTO job (id, messageId, consumerId, dispatchReceivedAt, statusChangedAt, earliestNextAttemptAt, status, createdAt, updatedAt, priority, incrementalTimeout, retryAttemptCount) VALUES"
+	drainJobRowArgCount = 12
 
 	parkedCountsQuery = "SELECT c.channelId, p.consumerId, COUNT(p.id), MIN(p.parkedAt), MAX(p.parkedAt) FROM job_parking p JOIN consumer c ON p.consumerId = c.id GROUP BY c.channelId, p.consumerId"
 )
 
 var (
-	reparkQuery                 = reparkInsertQuery + fmt.Sprintf(effectivelyPausedFmt, "j.consumerId")
-	drainableConsumersFullQuery = drainableConsumersQuery + fmt.Sprintf(notEffectivelyPausedFmt, "p.consumerId")
-	drainPageQuery              = drainPageSelectQuery + fmt.Sprintf(notEffectivelyPausedFmt, "p.consumerId") + drainPageOrderBy
+	reparkQuery = reparkInsertQuery + fmt.Sprintf(effectivelyPausedFmt, "j.consumerId")
 )
 
 // parkedJobRow is a scanned job_parking row
@@ -144,12 +146,36 @@ func (repo *JobParkingDBRepository) ReparkQueuedJob(job *data.DeliveryJob) (bool
 
 // GetDrainableConsumerIDs returns internal ids of consumers that have parked jobs and are not effectively paused
 func (repo *JobParkingDBRepository) GetDrainableConsumerIDs() ([]string, error) {
-	consumerIDs := make([]string, 0)
-	err := queryRows(repo.db, drainableConsumersFullQuery, nilArgs, func() []interface{} {
-		consumerIDs = append(consumerIDs, "")
-		return []interface{}{&consumerIDs[len(consumerIDs)-1]}
+	scopes := make([]string, 0)
+	err := queryRows(repo.db, pauseScopesQuery, nilArgs, func() []interface{} {
+		scopes = append(scopes, "")
+		return []interface{}{&scopes[len(scopes)-1]}
 	})
-	return consumerIDs, err
+	if err != nil {
+		return nil, err
+	}
+	paused := make(map[string]bool, len(scopes))
+	for _, scope := range scopes {
+		if scope == data.GlobalDispatchPauseScope {
+			return []string{}, nil
+		}
+		paused[scope] = true
+	}
+	parkedConsumerIDs := make([]string, 0)
+	err = queryRows(repo.db, parkedConsumersQuery, nilArgs, func() []interface{} {
+		parkedConsumerIDs = append(parkedConsumerIDs, "")
+		return []interface{}{&parkedConsumerIDs[len(parkedConsumerIDs)-1]}
+	})
+	if err != nil {
+		return nil, err
+	}
+	consumerIDs := make([]string, 0, len(parkedConsumerIDs))
+	for _, consumerID := range parkedConsumerIDs {
+		if !paused[consumerID] {
+			consumerIDs = append(consumerIDs, consumerID)
+		}
+	}
+	return consumerIDs, nil
 }
 
 // DrainPage atomically moves up to pageSize of the consumer's parked jobs back into job as QUEUED,
@@ -162,7 +188,7 @@ func (repo *JobParkingDBRepository) DrainPage(consumerInternalID string, pageSiz
 	rows := make([]*parkedJobRow, 0, pageSize)
 	now := time.Now()
 	err := transactionalWrites(repo.db, func(tx *sql.Tx) error {
-		resultRows, queryErr := tx.Query(drainPageQuery, consumerInternalID, pageSize)
+		resultRows, queryErr := tx.Query(drainPageQuery, consumerInternalID, consumerInternalID, pageSize)
 		if queryErr != nil {
 			return queryErr
 		}

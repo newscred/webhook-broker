@@ -13,6 +13,7 @@ ADD go.sum .
 RUN make deps
 
 ADD main.go .
+ADD dispatchpause.go .
 
 RUN make build
 EXPOSE 61500-63000

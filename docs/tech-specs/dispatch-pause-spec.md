@@ -1018,5 +1018,32 @@ Resolved November 4, 2026:
 * **Drain rate limit** per consumer (token bucket in the drainer).
 * **Eager re-park** of a pull consumer's pre-existing `QUEUED` backlog, if operators want pull pauses fully reflected in job listings.
 
+## 23. Implementation Notes (deviations from this spec)
+
+Recorded during implementation; the code is authoritative where it differs from the sections above.
+
+| Section | Spec said | Implemented | Why |
+| -- | -- | -- | -- |
+| §7.4 | `GetCountsByConsumer() map[string]*StatusCount` | Returns `[]*data.ParkedJobCount` (channel id, internal consumer id, count, oldest/newest as strings); added `CountForConsumer` | Callers need the channel id; aggregate DATETIMEs are typed inconsistently across dialects; `CountForConsumer` keeps the pause API off a full `GROUP BY` |
+| §7.5 | `GetByID` fallback implemented "inside `DeliveryJobDBRepository`" | Shared helper `loadParkedJobByID` used by both repositories | Same behavior, no duplicated SQL |
+| §7.5 | Pause condition with a consumer id parameter | Correlated on the job row (`d.scope IN (job.consumerId, '__global__')`) | Does not depend on `job.Listener` being loaded |
+| §7.8 | Root providers for the new repositories in M2 | Added in M4/M5 with their first consumer | Wire rejects unused providers |
+| §12.1 | Auth via `getConsumerWithValidation` | `getChannelConsumerWithAuth` | The former only accepts pull consumers; the latter is what the DLQ purge/delete endpoints use |
+| §12.3 | `ConsumerController` gains the registry | Wire uses `NewConsumerControllerWithPauseRegistry`; `NewConsumerController` is unchanged (nil registry = not paused) | Avoids changing 32 existing test call sites |
+| §14 | `dispatch_paused` labels | `channel` = channel id, `consumer` = public consumer id (internal id if the consumer can not be loaded) | Readable dashboards |
+| §18.2 | `AssertParkingInvariants(t, ...)` | `CheckParkingInvariants(db, ...) error` (+ `CheckMessageJobCount`) | `storage/testutils.go` is non-test code; it must not import `testing` |
+| §18.5 | Dispatcher test creating a global pause | Global behavior tested with a fake registry and in the storage/controllers packages; dispatcher DB tests use consumer pauses only | Dispatchers started by earlier tests may still run against the shared DB and would park their jobs |
+| §18.8 | Shutdown order asserted via mocks in the container | `startBackgroundServices` / `stopBackgroundServices` extracted in `main.go` and tested with recording fakes | Testable seam |
+| §18.10 | Distribution asserted with `handoff_requests_total` on receivers | Distribution asserted by the number of distinct broker hosts delivering to the consumer; conservation by `drained_jobs_total` summed across nodes | `handoff_requests_total` is counted on the sending (draining) node |
+| §18.9 | HMAC node hands off to itself | Also configured with the admin token (shared across nodes) | Needed for HTTP hand-off and to exercise signed requests |
+| — | — | `normalizeDBError` now recognises `go-sqlite3`'s `sqlite3.Error` (unique/primary key only) | Duplicate keys were never mapped on SQLite (also affected `TryLock`) |
+| — | — | `github.com/prometheus/client_model` moved to a direct requirement | Tests read counter values |
+| — | — | Root `Dockerfile` adds the `parking` package | Images list package directories explicitly |
+| §6.2, §6.3 | Index `job_parking_message (messageId)` | Dropped; `UNIQUE (messageId, consumerId)` serves the prune `NOT EXISTS` and per-message listings | Redundant index (MySQL plan used the unique index) |
+| §7.4, §10.3 | Drain page pause check correlated on `p.consumerId` | Pause check takes the consumer id as a parameter: `d.scope IN (?, '__global__')` | MySQL turned the correlated form into an anti-join with "Using temporary; Using filesort", sorting the consumer's whole backlog per page. Uncorrelated, it is evaluated once and `job_parking_drain` serves `ORDER BY ... LIMIT` |
+| §7.4 | `GetDrainableConsumerIDs` as one correlated `NOT EXISTS` query | `SELECT DISTINCT consumerId FROM job_parking` (loose index scan on `job_parking_drain`) + `SELECT scope FROM dispatch_pause`, filtered in Go | Avoids a per-row anti-join in a query every node runs every drain interval |
+| §18.9 | Three nodes running everything | `ibroker2` runs with `recovery-workers-enabled=false`; MySQL `--max-connections=500` | Existing retry-count assertions keep their two-node recovery setup; three brokers (100 connections each) plus the pruner exceed MySQL's default 151 (which also caused the pre-existing `testDLQFlow` failure) |
+| §18.10 | Integration scenarios only in the full run | Also runnable alone with `ITEST_ONLY=dispatch-pause`; `testDLQObservability` accepts `dead_job_count` from any reachable node | Faster iteration; only the DLQ-updater lock holder exports that gauge |
+
 ---
 *Generated with assistance from Claude AI*

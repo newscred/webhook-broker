@@ -236,6 +236,32 @@ The DLQ (Dead Letter Queue) observability feature provides visibility into dead 
 - `RequeueDeadJobsForConsumer` and `RequeueDeadJob` return `(int64, error)` — rows affected for summary updates.
 - Prometheus gauge `dead_job_count` (labels: `channel`, `consumer`) is updated by the background updater and decremented by requeue/delete controllers.
 
+## Dispatch Pause and Job Parking
+
+Pause delivery per consumer or globally while broadcasts keep being accepted. Tech spec: `docs/tech-specs/dispatch-pause-spec.md`; runbook: `docs/runbooks/dispatch-pause.md`.
+
+### Components
+
+- **`dispatch_pause` table** (migration 000014): one row per paused scope; `scope` is `'__global__'` or the internal `consumer.id`. Deleting the row resumes. Repository: `DispatchPauseRepository` (`storage/dispatchpauserepo.go`).
+- **`job_parking` table** (migration 000014): jobs of paused consumers live here instead of `job`, so the retry worker never scans them. A job is in exactly one of `job` or `job_parking`; the job `id` is kept across park/drain. Repository: `JobParkingRepository` (`storage/jobparkingrepo.go`).
+- **Virtual `JobParked` status (1100)**: lives in its own const block in `storage/data/job.go` and is never persisted to `job.status`. Do not add it to (or reorder) the persisted `JobStatus` iota block.
+- **Hand-out is gated in SQL**: `MarkJobInflight` / `MarkDeadJobAsInflight` refuse when the job's consumer is effectively paused, so a pause takes effect immediately on every node.
+- **`dispatcher.PauseRegistry`**: per-node snapshot of pauses (refreshed every `registry-refresh-interval-seconds`). Optimisation only — used to park at dispatch, skip enqueue and re-park; never the authority.
+- **`parking.Drainer`**: every node polls for consumers with parked jobs that are no longer paused; the holder of the renewable `job-parking-drainer` lock moves pages (delete-first, one transaction per page) oldest first and hands them to the cluster via `POST /_internal/jobs/enqueue` on `[broker] retrigger-base-endpoint`.
+- **Config**: `[dispatch-pause]` (`config.DispatchPauseConfig`, `config/dispatch_pause_config.go`).
+
+### API Endpoints
+
+- **`PUT|GET|DELETE /channel/{channelId}/consumer/{consumerId}/dispatch-pause`**: consumer pause (channel + consumer tokens; push and pull consumers).
+- **`PUT|DELETE /dispatch-pause`**, **`GET /dispatch-pauses`**: global pause and listing (`X-Broker-Admin-Token`; global endpoints return 404 without a configured admin token).
+- **`POST /_internal/jobs/enqueue`**: internal hand-off target (admin token, HMAC-signed when gateway auth is on).
+- Pull consumers: `queued-jobs` returns an empty list with `X-Broker-Dispatch-Paused: true` and `QUEUED/DEAD → INFLIGHT` answers 409 while paused.
+
+### Rules
+
+- Prune candidates exclude messages with parked jobs, and `job_parking.messageId` is `ON DELETE RESTRICT`. Keep both if the prune query changes.
+- Do not pause anything until every broker node and the pruner run a version with this feature.
+
 ## Gateway Authentication (HMAC)
 
 Optional HMAC-SHA256 request authentication for public-facing deployments.

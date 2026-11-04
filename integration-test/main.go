@@ -471,6 +471,8 @@ func main() {
 		log.Fatalln("could not find port to start test consumer service")
 	}
 	portString := ":" + strconv.Itoa(port)
+	consumerPortString = portString
+	broker2BaseURL = getEnvOrDefault("BROKER2_BASE_URL", defaultBroker2BaseURL)
 	testConsumerRouter := httprouter.New()
 	testConsumerRouter.POST("/:consumerId", consumerController)
 	server = &http.Server{
@@ -489,6 +491,11 @@ func main() {
 	}()
 	testBasicObjectCreation(portString)
 	resetHandlers()
+	if os.Getenv("ITEST_ONLY") == "dispatch-pause" {
+		// Run only the dispatch pause scenarios (they need the producer created above)
+		testDispatchPause()
+		return
+	}
 	testConsumerTypeCreation(portString)
 	resetHandlers()
 	testMessageTransmission()
@@ -502,6 +509,8 @@ func main() {
 	testPruning()
 	resetHandlers()
 	testDLQDeletePurge()
+	resetHandlers()
+	testDispatchPause()
 	resetHandlers()
 	testHMACAuth()
 }
@@ -926,16 +935,28 @@ func testDLQObservability(channelID, consumerID string) {
 		log.Printf("DLQ status: channel=%s consumer=%s deadCount=%d\n", c.ChannelName, c.ConsumerName, c.DeadCount)
 	}
 
-	// Verify the Prometheus metrics endpoint has dead_job_count
-	req, _ := http.NewRequest(http.MethodGet, brokerBaseURL+"/metrics", nil)
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Println("error fetching metrics", err)
+	// Verify the Prometheus metrics endpoint has dead_job_count. Only the node holding the DLQ summary lock sets the
+	// gauge, so with several broker nodes sharing the database any reachable node may be the one exporting it.
+	found = false
+	reachable := 0
+	for _, nodeURL := range []string{brokerBaseURL, broker2BaseURL, hmacBrokerBaseURL} {
+		req, _ := http.NewRequest(http.MethodGet, nodeURL+"/metrics", nil)
+		resp, err := client.Do(req)
+		if err != nil {
+			continue
+		}
+		reachable++
+		metricsBody, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if strings.Contains(string(metricsBody), "dead_job_count") {
+			found = true
+		}
+	}
+	if reachable == 0 {
+		log.Println("error fetching metrics from any broker node")
 		os.Exit(84)
 	}
-	metricsBody, _ := io.ReadAll(resp.Body)
-	resp.Body.Close()
-	if !strings.Contains(string(metricsBody), "dead_job_count") {
+	if !found {
 		log.Println("metrics endpoint missing dead_job_count")
 		os.Exit(85)
 	}

@@ -2,6 +2,8 @@ services:
   mysql8:
     image: mysql:${MYSQL_VERSION:-8.0.37}
     container_name: mysql8
+    # Three broker nodes (up to 100 connections each) plus the pruner exceed MySQL's default of 151
+    command: ["--max-connections=500"]
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: webhook-broker
@@ -66,6 +68,43 @@ services:
         aliases:
           - "webhook-broker-hmac"
 
+  ibroker2:
+    build: .
+    container_name: ibroker2
+    volumes:
+      - ./webhook-broker-integration-test-node2.cfg:/webhook-broker.cfg
+    command: ["./webhook-broker", "-migrate", "./migration/sqls/"]
+    depends_on:
+      ibroker:
+        condition: service_healthy
+    ports:
+      - "31821:8083"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/_status"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 10s
+    networks:
+      brokeritest:
+        aliases:
+          - "webhook-broker-2"
+
+  ibroker-lb:
+    image: nginx:alpine
+    container_name: ibroker-lb
+    volumes:
+      - ./integration-test/config/lb/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      ibroker:
+        condition: service_healthy
+      ibroker2:
+        condition: service_healthy
+    networks:
+      brokeritest:
+        aliases:
+          - "ibroker-lb"
+
   ipruner:
     build:
       context: .
@@ -95,6 +134,10 @@ services:
         condition: service_healthy
       ibroker-hmac:
         condition: service_healthy
+      ibroker2:
+        condition: service_healthy
+      ibroker-lb:
+        condition: service_started
       ipruner:
         condition: service_started
     networks:

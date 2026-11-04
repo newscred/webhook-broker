@@ -3,8 +3,8 @@ package storage
 import (
 	"database/sql"
 	"errors"
-	"net/url"
 	"math/rand"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -666,17 +666,19 @@ func explainPlan(t *testing.T, query string, args ...interface{}) string {
 // "USE TEMP B-TREE FOR ORDER BY")
 func TestJobParkingQueryPlans(t *testing.T) {
 	t.Run("DrainPage", func(t *testing.T) {
-		plan := explainPlan(t, drainPageQuery, "consumer", 50)
+		plan := explainPlan(t, drainPageQuery, "consumer", "consumer", 50)
 		assert.Contains(t, plan, "job_parking_drain", "plan was:\n"+plan)
 		assert.NotContains(t, plan, "USE TEMP B-TREE FOR ORDER BY", "plan was:\n"+plan)
 	})
 	t.Run("DrainableConsumers", func(t *testing.T) {
-		plan := explainPlan(t, drainableConsumersFullQuery)
+		plan := explainPlan(t, parkedConsumersQuery)
 		assert.Contains(t, plan, "job_parking_drain", "plan was:\n"+plan)
 	})
 	t.Run("PruneNotExists", func(t *testing.T) {
 		plan := explainPlan(t, pruneMessageQuery, data.MsgStatusDispatched, time.Now(), data.JobDelivered)
-		assert.Contains(t, plan, "job_parking_message", "plan was:\n"+plan)
+		// served by the UNIQUE (messageId, consumerId) index; never a scan of job_parking
+		assert.Contains(t, plan, "USING COVERING INDEX sqlite_autoindex_job_parking", "plan was:\n"+plan)
+		assert.NotContains(t, plan, "SCAN p\n", "plan was:\n"+plan)
 	})
 }
 
@@ -832,7 +834,6 @@ func TestParkingInvariants_Randomized(t *testing.T) {
 		assert.NoError(t, CheckMessageJobCount(testDB, msg.ID.String(), len(fixture.Consumers)))
 	}
 }
-
 
 // Generated with assistance from Claude AI
 

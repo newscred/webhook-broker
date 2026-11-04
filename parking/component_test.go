@@ -33,7 +33,8 @@ var (
 func TestMain(m *testing.M) {
 	os.Remove("./webhook-broker.sqlite3")
 	var err error
-	configuration, err = config.GetAutoConfiguration()
+	// A dedicated listener port: package tests run in parallel and the root package binds :8080
+	configuration, err = config.GetConfiguration("./parking-test-config.cfg")
 	if err != nil {
 		panic(err)
 	}
