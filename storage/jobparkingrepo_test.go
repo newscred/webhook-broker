@@ -922,3 +922,34 @@ func TestPauseTestHelpers(t *testing.T) {
 	_, err = SetupPauseFixture(getPauseTestAccessor(), "helpers-invalid-"+xid.New().String()+"-", 1, 0, func(int) *url.URL { return relative })
 	assert.Error(t, err, "an invalid consumer callback fails the fixture")
 }
+
+func TestCountJobsForConsumer(t *testing.T) {
+	djRepo := getDeliverJobRepository()
+	fixture := newPauseFixture(t, "count-for-consumer", 2, 0)
+	consumer := fixture.Consumers[0]
+	var consumerJobs []*data.DeliveryJob
+	for i := 0; i < 3; i++ {
+		jobs, _ := dispatchSplit(t, newParkingMessage(t, fixture), fixture.Consumers, nil)
+		for _, job := range jobs {
+			if job.Listener.ID == consumer.ID {
+				consumerJobs = append(consumerJobs, job)
+			}
+		}
+	}
+	assert.NoError(t, djRepo.MarkJobInflight(consumerJobs[0]))
+	assert.NoError(t, djRepo.MarkJobInflight(consumerJobs[1]))
+	inflight, err := djRepo.CountJobsForConsumer(consumer.ID.String(), data.JobInflight)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(2), inflight)
+	queued, err := djRepo.CountJobsForConsumer(consumer.ID.String(), data.JobQueued)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), queued)
+	other, err := djRepo.CountJobsForConsumer(fixture.Consumers[1].ID.String(), data.JobInflight)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(0), other)
+
+	badDB := failingDB(t)
+	defer badDB.Close()
+	_, err = NewDeliveryJobRepository(badDB, getMessageRepository(), getConsumerRepo()).CountJobsForConsumer(consumer.ID.String(), data.JobInflight)
+	assert.Error(t, err)
+}

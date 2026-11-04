@@ -561,7 +561,7 @@ Auth: `X-Broker-Admin-Token`. If no `admin-token` is configured, these endpoints
 | -- | -- | -- |
 | `PUT /dispatch-pause` | Global pause. Optional `reason`. Idempotent. | `200` pause model |
 | `DELETE /dispatch-pause` | Global resume. | `204`; `404` |
-| `GET /dispatch-pauses` | All pauses from the DB, plus parked counts per consumer. Needs the admin token when one is configured, otherwise open (like `/dlq-status`). | `200` |
+| `GET /dispatch-pauses` | All pauses from the DB, plus parked counts per consumer. Admin token; `404` without a configured admin token, like the global endpoints (pause reasons are free text). | `200` |
 
 Pause model:
 
@@ -573,9 +573,13 @@ Pause model:
   "reason": "downstream migration CHG-1234",
   "pausedAt": "2026-11-03T15:04:05Z",
   "globallyPaused": false,
-  "parkedJobCount": 18234
+  "parkedJobCount": 18234,
+  "inflightJobCount": 3
 }
 ```
+
+`inflightJobCount` (deliveries to the consumer still `INFLIGHT`) is only returned by the consumer endpoint; operators
+wait for `0` before starting a downstream migration.
 
 `GET /dispatch-pauses` response:
 
@@ -882,7 +886,7 @@ Package-local fakes (the `mockDLQConfig` pattern): `fakeDispatchPauseConfig` (mi
 | -- | -- |
 | `ConsumerDispatchPauseController` | `GetPath` / `FormatAsRelativeLink`; PUT success (real repos) and idempotent repeat; `reason` > 1024 → 400; GET 200/404; DELETE 204/404; auth matrix (missing or wrong channel token, wrong consumer token, unknown consumer) using the same expected codes as the DLQ tests; registry `Apply`/`Remove` called (mock); repo error → 500 (mock) |
 | `GlobalDispatchPauseController` | no `admin-token` configured → 404 for PUT/DELETE; wrong token → 401; correct token → 200/204; repeat PUT is idempotent |
-| `DispatchPausesController` | open without a configured token; 401 without the header when a token is configured; includes `parked` entries for consumers that were resumed but are still draining |
+| `DispatchPausesController` | 404 without a configured token; 401 without the header when a token is configured; includes `parked` entries for consumers that were resumed but are still draining |
 | `InternalJobEnqueueController` | 404 without a configured token; 401 wrong token; 400 malformed JSON or more ids than `drain-page-size`; 503 with `Retry-After` when `QueueDepth` is above the high-water mark (mock dispatcher); 202 with `accepted` excluding non-QUEUED ids. HMAC variant: a router built with the real `NewHMACMiddleware` and `mode=hmac` → an unsigned request gets 401, proving `/_internal/` isn't exempt. |
 | Existing controllers | `ConsumerController` GET `DispatchPaused` true/false. `MessageController` GET lists a `PARKED` job. `JobController` GET on a parked job → `PARKED`; POST on a parked job → 409; QUEUED → INFLIGHT while paused → 409 vs. a non-pause race → 400; DEAD → INFLIGHT paused → 409; INFLIGHT → DELIVERED while paused → 202. `JobsController` queued-jobs while paused → empty plus `X-Broker-Dispatch-Paused`. `JobStatusController` → `PARKED` counts. `JobRequeueController` on a parked job → 400. `DeadJobDeleteController` on a parked job → 404. |
 | Router | `NewRouter` builds without httprouter path conflicts with the new routes (extend `router_test.go`) |

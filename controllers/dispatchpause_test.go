@@ -126,7 +126,7 @@ func serve(controller EndpointController, req *http.Request) *httptest.ResponseR
 }
 
 func TestConsumerDispatchPauseControllerPaths(t *testing.T) {
-	controller := NewConsumerDispatchPauseController(nil, nil, nil, nil, nil)
+	controller := NewConsumerDispatchPauseController(nil, nil, nil, nil, nil, nil)
 	assert.Equal(t, "/channel/:channelId/consumer/:consumerId/dispatch-pause", controller.GetPath())
 	assert.Equal(t, "/channel/ch1/consumer/c1/dispatch-pause", controller.FormatAsRelativeLink(
 		httprouter.Param{Key: channelIDPathParamKey, Value: "ch1"}, httprouter.Param{Key: consumerIDPathParamKey, Value: "c1"}))
@@ -141,15 +141,21 @@ func TestConsumerDispatchPauseController(t *testing.T) {
 		t.Parallel()
 		fixture := newPauseTestFixture(t, "cdp-lifecycle")
 		registry := newPermissiveRegistry()
-		controller := NewConsumerDispatchPauseController(channelRepo, consumerRepo, pauseRepoForTest(), parkingRepoForTest(), registry)
+		controller := NewConsumerDispatchPauseController(channelRepo, consumerRepo, pauseRepoForTest(), parkingRepoForTest(), deliveryJobRepo, registry)
 
 		rr := serve(controller, consumerPauseRequest(t, http.MethodGet, fixture, fixture.push, ""))
 		assert.Equal(t, http.StatusNotFound, rr.Code)
+
+		inflightJob := fixture.queueJobFor(t, fixture.push)
+		assert.NoError(t, deliveryJobRepo.MarkJobInflight(inflightJob))
 
 		rr = serve(controller, consumerPauseRequest(t, http.MethodPut, fixture, fixture.push, "reason=first"))
 		assert.Equal(t, http.StatusOK, rr.Code)
 		model := DispatchPauseModel{}
 		assert.NoError(t, json.Unmarshal(rr.Body.Bytes(), &model))
+		if assert.NotNil(t, model.InflightJobCount) {
+			assert.Equal(t, int64(1), *model.InflightJobCount, "a delivery started before the pause is still in flight")
+		}
 		assert.Equal(t, "consumer", model.Scope)
 		assert.Equal(t, fixture.channel.ChannelID, model.ChannelID)
 		assert.Equal(t, fixture.push.ConsumerID, model.ConsumerID)
@@ -167,6 +173,12 @@ func TestConsumerDispatchPauseController(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rr.Code)
 		assert.NoError(t, json.Unmarshal(rr.Body.Bytes(), &model))
 		assert.Equal(t, int64(1), model.ParkedJobCount)
+		assert.Equal(t, int64(1), *model.InflightJobCount)
+
+		assert.NoError(t, deliveryJobRepo.MarkJobDelivered(inflightJob))
+		rr = serve(controller, consumerPauseRequest(t, http.MethodGet, fixture, fixture.push, ""))
+		assert.NoError(t, json.Unmarshal(rr.Body.Bytes(), &model))
+		assert.Equal(t, int64(0), *model.InflightJobCount)
 
 		rr = serve(controller, consumerPauseRequest(t, http.MethodDelete, fixture, fixture.push, ""))
 		assert.Equal(t, http.StatusNoContent, rr.Code)
@@ -177,14 +189,14 @@ func TestConsumerDispatchPauseController(t *testing.T) {
 	t.Run("ReasonTooLong", func(t *testing.T) {
 		t.Parallel()
 		fixture := newPauseTestFixture(t, "cdp-reason")
-		controller := NewConsumerDispatchPauseController(channelRepo, consumerRepo, pauseRepoForTest(), parkingRepoForTest(), newPermissiveRegistry())
+		controller := NewConsumerDispatchPauseController(channelRepo, consumerRepo, pauseRepoForTest(), parkingRepoForTest(), deliveryJobRepo, newPermissiveRegistry())
 		rr := serve(controller, consumerPauseRequest(t, http.MethodPut, fixture, fixture.push, "reason="+strings.Repeat("r", data.MaxDispatchPauseReasonLength+1)))
 		assert.Equal(t, http.StatusBadRequest, rr.Code)
 	})
 	t.Run("AuthMatrix", func(t *testing.T) {
 		t.Parallel()
 		fixture := newPauseTestFixture(t, "cdp-auth")
-		controller := NewConsumerDispatchPauseController(channelRepo, consumerRepo, pauseRepoForTest(), parkingRepoForTest(), newPermissiveRegistry())
+		controller := NewConsumerDispatchPauseController(channelRepo, consumerRepo, pauseRepoForTest(), parkingRepoForTest(), deliveryJobRepo, newPermissiveRegistry())
 		for _, method := range []string{http.MethodPut, http.MethodGet, http.MethodDelete} {
 			req := consumerPauseRequest(t, method, fixture, fixture.push, "")
 			req.Header.Set(headerChannelToken, "wrong")
@@ -203,7 +215,7 @@ func TestConsumerDispatchPauseController(t *testing.T) {
 		failingRepo.On("Pause", mock.Anything).Return(nil, errors.New("db down"))
 		failingRepo.On("Get", mock.Anything).Return(nil, errors.New("db down"))
 		failingRepo.On("Resume", mock.Anything).Return(false, errors.New("db down"))
-		controller := NewConsumerDispatchPauseController(channelRepo, consumerRepo, failingRepo, parkingRepoForTest(), newPermissiveRegistry())
+		controller := NewConsumerDispatchPauseController(channelRepo, consumerRepo, failingRepo, parkingRepoForTest(), deliveryJobRepo, newPermissiveRegistry())
 		for _, method := range []string{http.MethodPut, http.MethodGet, http.MethodDelete} {
 			assert.Equal(t, http.StatusInternalServerError, serve(controller, consumerPauseRequest(t, method, fixture, fixture.push, "")).Code, method)
 		}
@@ -261,9 +273,14 @@ func TestDispatchPausesController(t *testing.T) {
 		}
 		return req
 	}
-	t.Run("OpenWithoutToken", func(t *testing.T) {
+	adminConfig := &config.Config{DispatchPauseAdminToken: testAdminToken}
+	t.Run("NotFoundWithoutConfiguredToken", func(t *testing.T) {
 		controller := NewDispatchPausesController(pauseRepoForTest(), parkingRepoForTest(), consumerRepo, &config.Config{})
-		rr := serve(controller, listRequest(""))
+		assert.Equal(t, http.StatusNotFound, serve(controller, listRequest("")).Code)
+	})
+	t.Run("ListsPausesAndParked", func(t *testing.T) {
+		controller := NewDispatchPausesController(pauseRepoForTest(), parkingRepoForTest(), consumerRepo, adminConfig)
+		rr := serve(controller, listRequest(testAdminToken))
 		assert.Equal(t, http.StatusOK, rr.Code)
 		model := DispatchPausesModel{}
 		assert.NoError(t, json.Unmarshal(rr.Body.Bytes(), &model))
@@ -293,10 +310,10 @@ func TestDispatchPausesController(t *testing.T) {
 	t.Run("RepositoryErrors", func(t *testing.T) {
 		failingPauses := new(storagemocks.DispatchPauseRepository)
 		failingPauses.On("GetAll").Return(nil, errors.New("db down"))
-		assert.Equal(t, http.StatusInternalServerError, serve(NewDispatchPausesController(failingPauses, parkingRepoForTest(), consumerRepo, &config.Config{}), listRequest("")).Code)
+		assert.Equal(t, http.StatusInternalServerError, serve(NewDispatchPausesController(failingPauses, parkingRepoForTest(), consumerRepo, adminConfig), listRequest(testAdminToken)).Code)
 		failingParking := new(storagemocks.JobParkingRepository)
 		failingParking.On("GetCountsByConsumer").Return(nil, errors.New("db down"))
-		assert.Equal(t, http.StatusInternalServerError, serve(NewDispatchPausesController(pauseRepoForTest(), failingParking, consumerRepo, &config.Config{}), listRequest("")).Code)
+		assert.Equal(t, http.StatusInternalServerError, serve(NewDispatchPausesController(pauseRepoForTest(), failingParking, consumerRepo, adminConfig), listRequest(testAdminToken)).Code)
 	})
 }
 
@@ -455,7 +472,14 @@ func TestDispatchPauseControllerFailurePaths(t *testing.T) {
 		fixture := newPauseTestFixture(t, "cdp-count-error")
 		failingParking := new(storagemocks.JobParkingRepository)
 		failingParking.On("CountForConsumer", mock.Anything).Return(int64(0), errors.New("db down"))
-		controller := NewConsumerDispatchPauseController(channelRepo, consumerRepo, pauseRepoForTest(), failingParking, newPermissiveRegistry())
+		controller := NewConsumerDispatchPauseController(channelRepo, consumerRepo, pauseRepoForTest(), failingParking, deliveryJobRepo, newPermissiveRegistry())
+		assert.Equal(t, http.StatusInternalServerError, serve(controller, consumerPauseRequest(t, http.MethodPut, fixture, fixture.push, "")).Code)
+	})
+	t.Run("ConsumerInflightCountError", func(t *testing.T) {
+		fixture := newPauseTestFixture(t, "cdp-inflight-error")
+		failingJobs := new(storagemocks.DeliveryJobRepository)
+		failingJobs.On("CountJobsForConsumer", mock.Anything, data.JobInflight).Return(int64(0), errors.New("db down"))
+		controller := NewConsumerDispatchPauseController(channelRepo, consumerRepo, pauseRepoForTest(), parkingRepoForTest(), failingJobs, newPermissiveRegistry())
 		assert.Equal(t, http.StatusInternalServerError, serve(controller, consumerPauseRequest(t, http.MethodPut, fixture, fixture.push, "")).Code)
 	})
 	adminConfig := &config.Config{DispatchPauseAdminToken: testAdminToken}
@@ -490,7 +514,8 @@ func TestDispatchPauseControllerFailurePaths(t *testing.T) {
 		consumers := new(storagemocks.ConsumerRepository)
 		consumers.On("GetByID", "gone").Return(nil, errors.New("not found"))
 		req, _ := http.NewRequest(http.MethodGet, dispatchPausesPath, nil)
-		rr := serve(NewDispatchPausesController(pauses, parked, consumers, &config.Config{}), req)
+		req.Header.Set(parking.AdminTokenHeader, testAdminToken)
+		rr := serve(NewDispatchPausesController(pauses, parked, consumers, &config.Config{DispatchPauseAdminToken: testAdminToken}), req)
 		assert.Equal(t, http.StatusOK, rr.Code)
 		model := DispatchPausesModel{}
 		assert.NoError(t, json.Unmarshal(rr.Body.Bytes(), &model))

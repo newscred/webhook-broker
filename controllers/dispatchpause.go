@@ -41,6 +41,9 @@ type DispatchPauseModel struct {
 	PausedAt       time.Time `json:"pausedAt"`
 	GloballyPaused bool      `json:"globallyPaused"`
 	ParkedJobCount int64     `json:"parkedJobCount"`
+	// InflightJobCount is the number of deliveries still in flight for the consumer; only set on the consumer endpoint.
+	// Wait for 0 before treating the consumer as quiet.
+	InflightJobCount *int64 `json:"inflightJobCount,omitempty"`
 }
 
 // ParkedJobsModel represents the parked jobs of one consumer
@@ -103,17 +106,19 @@ func checkAdminToken(w http.ResponseWriter, r *http.Request, pauseConfig config.
 
 // ConsumerDispatchPauseController handles PUT/GET/DELETE /channel/:channelId/consumer/:consumerId/dispatch-pause
 type ConsumerDispatchPauseController struct {
-	ChannelRepo    storage.ChannelRepository
-	ConsumerRepo   storage.ConsumerRepository
-	PauseRepo      storage.DispatchPauseRepository
-	JobParkingRepo storage.JobParkingRepository
-	PauseRegistry  dispatcher.PauseRegistry
+	ChannelRepo     storage.ChannelRepository
+	ConsumerRepo    storage.ConsumerRepository
+	PauseRepo       storage.DispatchPauseRepository
+	JobParkingRepo  storage.JobParkingRepository
+	DeliveryJobRepo storage.DeliveryJobRepository
+	PauseRegistry   dispatcher.PauseRegistry
 }
 
 // NewConsumerDispatchPauseController creates the consumer dispatch pause controller
 func NewConsumerDispatchPauseController(channelRepo storage.ChannelRepository, consumerRepo storage.ConsumerRepository, pauseRepo storage.DispatchPauseRepository,
-	jobParkingRepo storage.JobParkingRepository, pauseRegistry dispatcher.PauseRegistry) *ConsumerDispatchPauseController {
-	return &ConsumerDispatchPauseController{ChannelRepo: channelRepo, ConsumerRepo: consumerRepo, PauseRepo: pauseRepo, JobParkingRepo: jobParkingRepo, PauseRegistry: pauseRegistry}
+	jobParkingRepo storage.JobParkingRepository, deliveryJobRepo storage.DeliveryJobRepository, pauseRegistry dispatcher.PauseRegistry) *ConsumerDispatchPauseController {
+	return &ConsumerDispatchPauseController{ChannelRepo: channelRepo, ConsumerRepo: consumerRepo, PauseRepo: pauseRepo, JobParkingRepo: jobParkingRepo,
+		DeliveryJobRepo: deliveryJobRepo, PauseRegistry: pauseRegistry}
 }
 
 // GetPath returns the endpoint's path
@@ -132,7 +137,14 @@ func (controller *ConsumerDispatchPauseController) writeModel(w http.ResponseWri
 		writeErr(w, err)
 		return
 	}
-	writeJSON(w, newDispatchPauseModel(pause, consumer, isGloballyPausedInDB(controller.PauseRepo), parked))
+	inflight, err := controller.DeliveryJobRepo.CountJobsForConsumer(consumer.ID.String(), data.JobInflight)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	model := newDispatchPauseModel(pause, consumer, isGloballyPausedInDB(controller.PauseRepo), parked)
+	model.InflightJobCount = &inflight
+	writeJSON(w, model)
 }
 
 // Put pauses dispatching for the consumer; idempotent
@@ -293,8 +305,7 @@ func (controller *DispatchPausesController) FormatAsRelativeLink(params ...httpr
 
 // Get lists every pause (from the database) and the parked job counts per consumer
 func (controller *DispatchPausesController) Get(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
-	if controller.PauseConfig.IsAdminTokenConfigured() && !isAdminAuthorized(r, controller.PauseConfig) {
-		writeStatus(w, http.StatusUnauthorized, errAdminTokenMismatch)
+	if !checkAdminToken(w, r, controller.PauseConfig) {
 		return
 	}
 	pauses, err := controller.PauseRepo.GetAll()

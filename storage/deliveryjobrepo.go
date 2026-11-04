@@ -565,6 +565,12 @@ func (djRepo *DeliveryJobDBRepository) GetQueuedJobsByIDs(ids []string) ([]*data
 	return result, nil
 }
 
+// CountJobsForConsumer returns the number of jobs of one consumer (internal id) in the given status
+func (djRepo *DeliveryJobDBRepository) CountJobsForConsumer(consumerInternalID string, jobStatus data.JobStatus) (count int64, err error) {
+	err = djRepo.db.QueryRow("SELECT COUNT(*) FROM job WHERE consumerId = ? AND status = ?", consumerInternalID, jobStatus).Scan(&count)
+	return count, err
+}
+
 // NewDeliveryJobRepository creates a new instance of DeliveryJobRepository
 func NewDeliveryJobRepository(db *sql.DB, msgRepo MessageRepository, consumerRepo ConsumerRepository) DeliveryJobRepository {
 	return &DeliveryJobDBRepository{db: db, mesageRepository: msgRepo, consumerRepository: consumerRepo}

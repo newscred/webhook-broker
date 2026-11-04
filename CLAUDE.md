@@ -253,7 +253,7 @@ Pause delivery per consumer or globally while broadcasts keep being accepted. Te
 ### API Endpoints
 
 - **`PUT|GET|DELETE /channel/{channelId}/consumer/{consumerId}/dispatch-pause`**: consumer pause (channel + consumer tokens; push and pull consumers).
-- **`PUT|DELETE /dispatch-pause`**, **`GET /dispatch-pauses`**: global pause and listing (`X-Broker-Admin-Token`; global endpoints return 404 without a configured admin token).
+- **`PUT|DELETE /dispatch-pause`**, **`GET /dispatch-pauses`**: global pause and listing (`X-Broker-Admin-Token`; all three return 404 without a configured admin token).
 - **`POST /_internal/jobs/enqueue`**: internal hand-off target (admin token, HMAC-signed when gateway auth is on).
 - Pull consumers: `queued-jobs` returns an empty list with `X-Broker-Dispatch-Paused: true` and `QUEUED/DEAD → INFLIGHT` answers 409 while paused.
 

@@ -37,7 +37,8 @@ curl -X PUT "$BROKER/dispatch-pause" -H "X-Broker-Admin-Token: $ADMIN_TOKEN" --d
 Both are idempotent: pausing again returns the original pause (original `pausedAt` and `reason`).
 
 The pause takes effect immediately on every node: hand-outs are checked in the database. Deliveries already in flight
-finish normally. Pull consumers get an empty `queued-jobs` list with `X-Broker-Dispatch-Paused: true` and `409` when
+finish normally; the consumer pause response (`PUT` and `GET`) reports them as `inflightJobCount`. Before starting a
+downstream migration, poll `GET` until `inflightJobCount` is `0`. Pull consumers get an empty `queued-jobs` list with `X-Broker-Dispatch-Paused: true` and `409` when
 moving a job to `INFLIGHT`; they may still complete jobs they already hold.
 
 ## Verify

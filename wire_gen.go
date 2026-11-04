@@ -83,7 +83,7 @@ func GetHTTPServer(cliConfig *config.CLIConfig) (*HTTPServiceContainer, error) {
 	dlqPurgeController := controllers.NewDLQPurgeController(channelRepository, consumerRepository, deliveryJobRepository, dlqSummaryRepository, configConfig, metricsContainer)
 	deadJobDeleteController := controllers.NewDeadJobDeleteController(channelRepository, consumerRepository, deliveryJobRepository, dlqSummaryRepository, configConfig, metricsContainer)
 	internalJobEnqueueController := controllers.NewInternalJobEnqueueController(deliveryJobRepository, messageDispatcher, configConfig)
-	consumerDispatchPauseController := controllers.NewConsumerDispatchPauseController(channelRepository, consumerRepository, dispatchPauseRepository, jobParkingRepository, pauseRegistry)
+	consumerDispatchPauseController := controllers.NewConsumerDispatchPauseController(channelRepository, consumerRepository, dispatchPauseRepository, jobParkingRepository, deliveryJobRepository, pauseRegistry)
 	globalDispatchPauseController := controllers.NewGlobalDispatchPauseController(dispatchPauseRepository, jobParkingRepository, pauseRegistry, configConfig)
 	dispatchPausesController := controllers.NewDispatchPausesController(dispatchPauseRepository, jobParkingRepository, consumerRepository, configConfig)
 	handler := dispatcher.NewPrometheusHandler()
