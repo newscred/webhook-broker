@@ -137,6 +137,26 @@ curl -X POST http://localhost:8080/channel/my-channel/broadcast \
   --data "$BODY"
 ```
 
+## Section - Dispatch Pause: `[dispatch-pause]`
+
+This section configures pausing delivery per consumer or for the whole broker while broadcasts are still accepted. Jobs of paused consumers are parked; once a consumer is resumed a single drainer (one node at a time) moves its parked jobs back in pages and hands them to the cluster through `[broker] retrigger-base-endpoint`. See the [dispatch pause tech spec](./tech-specs/dispatch-pause-spec.md) and the [runbook](./runbooks/dispatch-pause.md).
+
+| Name | Default Value | Description |
+|---|---|---|
+| `admin-token` | _(empty)_ | Shared secret (`X-Broker-Admin-Token`) for the global pause endpoints and the internal hand-off endpoint. Empty disables both: global endpoints return 404 and drained jobs are enqueued on the draining node. Never logged. |
+| `registry-refresh-interval-seconds` | `5` | How often each node refreshes its in-memory pause snapshot (1–300). Hand-outs are always checked in the database, so a pause takes effect immediately; this only bounds wasted work on stale nodes. |
+| `drain-interval-seconds` | `1` | Interval between drainer runs (1–60). |
+| `drain-page-size` | `50` | Maximum parked jobs moved back per drain page, in one transaction (1–500). |
+| `handoff-mode` | `http` | `http` hands drained jobs to the cluster through the load-balanced `retrigger-base-endpoint`; `local` enqueues them on the draining node. `http` requires `admin-token`. |
+| `handoff-lease-seconds` | `60` | How long handed-off jobs are hidden from the retry worker; if a hand-off is lost the retry worker delivers them after this lease. Never less than 5 × `rational-delay-in-seconds`. |
+| `handoff-timeout-seconds` | `5` | Timeout of a hand-off request (1–60). |
+| `handoff-max-attempts` | `3` | Attempts per hand-off batch; each retry goes back through the load balancer (1–10). |
+| `handoff-concurrency` | `4` | Concurrent hand-off requests from the drainer (1–64). |
+| `handoff-high-water-mark` | `0` | Local queue depth above which a node answers hand-offs with 503 so the load balancer tries another node. `0` means `max-message-queue-size / 2`. |
+| `handoff-local-fallback` | `true` | Enqueue a batch on the draining node once every hand-off attempt failed. When `false` the retry worker delivers the batch after the lease. |
+
+Invalid values fall back to the default and a warning naming the key is logged.
+
 ## Sections  for Seed Dataset
 
 For seed data of the application there are 5 fixed sections and a dynamic section per consumer configured. When Webhook Broker is used for System to System communication or ESB, channels would be relatively be within fixed channels. The sections are:

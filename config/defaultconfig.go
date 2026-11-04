@@ -52,6 +52,18 @@ mode=none
 hmac-shared-secret=
 hmac-timestamp-tolerance-seconds=300
 auth-exempt-paths=/_status,/metrics,/debug/pprof/
+[dispatch-pause]
+admin-token=
+registry-refresh-interval-seconds=5
+drain-interval-seconds=1
+drain-page-size=50
+handoff-mode=http
+handoff-lease-seconds=60
+handoff-timeout-seconds=5
+handoff-max-attempts=3
+handoff-concurrency=4
+handoff-high-water-mark=0
+handoff-local-fallback=true
 [initial-channels]
 sample-channel=Sample Channel
 [initial-producers]

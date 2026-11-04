@@ -49,6 +49,28 @@ recovery-workers-enabled=true
 # max-workers. Override per consumer in [consumer-max-concurrency].
 default-consumer-max-concurrency=0
 
+# Dispatch pause: pause delivery per consumer or for the whole broker while still accepting messages
+[dispatch-pause]
+# Shared secret for the global pause endpoints and the internal hand-off endpoint (X-Broker-Admin-Token).
+# Empty disables the global pause endpoints and HTTP hand-off (drained jobs are then enqueued locally)
+admin-token=
+# How often each node refreshes its in-memory pause snapshot
+registry-refresh-interval-seconds=5
+# Interval between drainer runs and number of parked jobs moved back per page
+drain-interval-seconds=1
+drain-page-size=50
+# http: hand drained jobs to the cluster via [broker] retrigger-base-endpoint; local: enqueue on the draining node
+handoff-mode=http
+# How long handed-off jobs are hidden from the retry worker (never less than 5 x rational delay)
+handoff-lease-seconds=60
+handoff-timeout-seconds=5
+handoff-max-attempts=3
+handoff-concurrency=4
+# Local queue depth above which a node rejects hand-offs with 503; 0 means max-message-queue-size / 2
+handoff-high-water-mark=0
+# Enqueue a batch locally once every hand-off attempt failed
+handoff-local-fallback=true
+
 # Settings around pruning of messages already sent
 [prune]
 # Since there can be multiple webhook broker archiving to a single bucket, this is to distinguish which instance
