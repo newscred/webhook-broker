@@ -233,4 +233,29 @@ func TestLaneScheduler_PerConsumerMetrics(t *testing.T) {
 	assert.Equal(t, float64(0), gaugeValue(t, inflight))
 }
 
+func TestLaneScheduler_DiscardQueuedClearsQueuedJobsAndGauges(t *testing.T) {
+	consumer := newLaneTestConsumer(t, "lane-discard-channel", "lane-discard")
+	s := newLaneScheduler(fixedLimits(map[string]uint{"lane-discard": 1}), counter)
+	queued := counter.ConsumerQueuedJobCount.WithLabelValues("lane-discard-channel", "lane-discard")
+	inflight := counter.ConsumerInflightJobCount.WithLabelValues("lane-discard-channel", "lane-discard")
+	queuedBefore, inflightBefore := gaugeValue(t, queued), gaugeValue(t, inflight)
+	waiting := newLaneTestJob(consumer, 0)
+	s.enqueue(newLaneTestJob(consumer, 0))
+	s.enqueue(waiting)
+	running := s.tryNext()
+	require.NotNil(t, running)
+
+	s.discardQueued()
+	assert.Equal(t, float64(0), gaugeValue(t, queued)-queuedBefore)
+	assert.Equal(t, float64(1), gaugeValue(t, inflight)-inflightBefore)
+	assert.Nil(t, s.tryNext())
+	assert.True(t, s.enqueue(waiting), "a discarded job is no longer held")
+	s.discardQueued()
+
+	s.done(running)
+	assert.Equal(t, float64(0), gaugeValue(t, inflight)-inflightBefore)
+	assert.Empty(t, s.lanes)
+	assert.Empty(t, s.tracked)
+}
+
 // Generated with assistance from Claude AI
