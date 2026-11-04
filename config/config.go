@@ -17,6 +17,7 @@ import (
 
 	"github.com/go-ini/ini"
 	"github.com/google/wire"
+	"github.com/rs/zerolog/log"
 
 	// MySQL DB Driver
 	_ "github.com/go-sql-driver/mysql"
@@ -699,6 +700,7 @@ func parseConsumerMaxConcurrencyOverrides(cfg *ini.File) map[string]uint {
 	for _, key := range section.Keys() {
 		limit, parseErr := key.Uint()
 		if parseErr != nil {
+			log.Warn().Str("key", key.Name()).Str("value", key.Value()).Msg("ignoring [consumer-max-concurrency] entry: value is not a non-negative integer")
 			continue
 		}
 		overrides[key.Name()] = limit
