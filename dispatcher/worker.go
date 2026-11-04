@@ -46,13 +46,15 @@ type Worker struct {
 	brokerConfig             config.BrokerConfig
 	working                  int32 // read and written atomically; Stop polls it from another goroutine
 	djRepo                   storage.DeliveryJobRepository
+	jobParkingRepo           storage.JobParkingRepository
+	metrics                  *MetricsContainer
 	httpClient               *http.Client
 	// onDone tells the dispatcher the delivery attempt is over, freeing the consumer's slot
 	onDone func(*Job)
 }
 
 // NewWorker creates a Worker
-func NewWorker(workerPool chan chan *Job, consumerConfig config.ConsumerConnectionConfig, brokerConfig config.BrokerConfig, deliveryJobRepo storage.DeliveryJobRepository) Worker {
+func NewWorker(workerPool chan chan *Job, consumerConfig config.ConsumerConnectionConfig, brokerConfig config.BrokerConfig, deliveryJobRepo storage.DeliveryJobRepository, jobParkingRepo storage.JobParkingRepository, metrics *MetricsContainer) Worker {
 	return Worker{
 		workerPool:               workerPool,
 		jobChannel:               make(chan *Job, 1),
@@ -60,6 +62,8 @@ func NewWorker(workerPool chan chan *Job, consumerConfig config.ConsumerConnecti
 		consumerConnectionConfig: consumerConfig,
 		brokerConfig:             brokerConfig,
 		djRepo:                   deliveryJobRepo,
+		jobParkingRepo:           jobParkingRepo,
+		metrics:                  metrics,
 		httpClient:               createHTTPClient(consumerConfig)}
 }
 
@@ -75,6 +79,12 @@ var deliverJob = func(w *Worker, job *Job) {
 	// Put to Inflight
 	err := w.djRepo.MarkJobInflight(job.Data)
 	if err != nil {
+		// The hand-out is refused in the database when the consumer is paused (even if this node's pause snapshot is
+		// stale); in that case park the job instead of leaving it for the retry worker to rescan
+		if reparkJob(w.jobParkingRepo, w.metrics, job.Data, ParkReasonWorker) {
+			logger.Debug().Msg("consumer paused; job parked instead of delivered")
+			return
+		}
 		logger.Error().Err(err).Msg("err - could not put job in flight")
 		return
 	}

@@ -53,6 +53,9 @@ func GetHTTPServer(cliConfig *config.CLIConfig) (*HTTPServiceContainer, error) {
 	scheduledMessageRepository := newScheduledMessageRepository(dataAccessor)
 	lockRepository := newLockRepository(dataAccessor)
 	metricsContainer := dispatcher.NewMetricsContainer()
+	dispatchPauseRepository := newDispatchPauseRepository(dataAccessor)
+	pauseRegistry := dispatcher.NewPauseRegistry(dispatchPauseRepository, consumerRepository, configConfig, metricsContainer)
+	jobParkingRepository := newJobParkingRepository(dataAccessor)
 	configuration := &dispatcher.Configuration{
 		DeliveryJobRepo:          deliveryJobRepository,
 		ConsumerRepo:             consumerRepository,
@@ -61,6 +64,8 @@ func GetHTTPServer(cliConfig *config.CLIConfig) (*HTTPServiceContainer, error) {
 		ConsumerConnectionConfig: configConfig,
 		MsgRepo:                  messageRepository,
 		MetricsCollector:         metricsContainer,
+		PauseRegistry:            pauseRegistry,
+		JobParkingRepo:           jobParkingRepository,
 	}
 	messageDispatcher := dispatcher.NewMessageDispatcher(configuration)
 	broadcastController := controllers.NewBroadcastController(channelRepository, messageRepository, producerRepository, scheduledMessageRepository, messageDispatcher)
@@ -115,6 +120,7 @@ func GetHTTPServer(cliConfig *config.CLIConfig) (*HTTPServiceContainer, error) {
 		Dispatcher:    messageDispatcher,
 		Scheduler:     messageScheduler,
 		DLQUpdater:    dlqSummaryUpdater,
+		PauseRegistry: pauseRegistry,
 	}
 	return httpServiceContainer, nil
 }

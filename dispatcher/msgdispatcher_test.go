@@ -193,7 +193,13 @@ func getCompleteDispatcherConfiguration(msgRepo storage.MessageRepository, djRep
 		LockRepo:                 lockRepo,
 		MsgRepo:                  msgRepo,
 		MetricsCollector:         counter,
+		PauseRegistry:            getTestPauseRegistry(),
+		JobParkingRepo:           dataAccessor.GetJobParkingRepository(),
 	}
+}
+
+func getTestPauseRegistry() PauseRegistry {
+	return NewPauseRegistry(dataAccessor.GetDispatchPauseRepository(), dataAccessor.GetConsumerRepository(), configuration, counter)
 }
 
 func getDispatcherConfiguration(djRepo storage.DeliveryJobRepository, consumerRepo storage.ConsumerRepository, brokerConfig config.BrokerConfig, consumerConfig config.ConsumerConnectionConfig, lockRepo storage.LockRepository) *Configuration {
@@ -945,7 +951,8 @@ func TestRetryQueuedJobsSkipsHeldJobs(t *testing.T) {
 	brokerConf := getMockedBrokerConfig()
 	brokerConf.On("GetConsumerMaxConcurrency", mock.Anything, mock.Anything).Return(uint(0))
 	impl := &MessageDispatcherImpl{djRepo: dataAccessor.GetDeliveryJobRepository(), lockRepo: dataAccessor.GetLockRepository(), brokerConfig: brokerConf,
-		rationalDelay: 100 * time.Millisecond, jobQueue: make(chan *Job, 1000), scheduler: newLaneScheduler(brokerConf.GetConsumerMaxConcurrency, counter)}
+		rationalDelay: 100 * time.Millisecond, jobQueue: make(chan *Job, 1000), scheduler: newLaneScheduler(brokerConf.GetConsumerMaxConcurrency, counter),
+		pauseRegistry: newFakePauseRegistry(), jobParkingRepo: dataAccessor.GetJobParkingRepository(), metrics: counter}
 	held, err := setupTestJob(consumers[0])
 	require.NoError(t, err)
 	free, err := setupTestJob(consumers[1])
