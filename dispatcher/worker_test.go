@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/newscred/webhook-broker/storage"
 	"github.com/newscred/webhook-broker/storage/data"
 	storagemocks "github.com/newscred/webhook-broker/storage/mocks"
 	"github.com/rs/zerolog"
@@ -35,7 +36,7 @@ func TestDeliverJob_MarkDead(t *testing.T) {
 	jobs, _, err = dataAccessor.GetDeliveryJobRepository().GetJobsForMessage(msg, data.NewPagination(nil, nil))
 	assert.Nil(t, err)
 	inflightJob := jobs[0]
-	inflightJob.RetryAttemptCount = 5
+	setRetryAttemptCount(t, inflightJob, 5)
 	worker := msgDispatcher.workers[0]
 	oldCallConsumer := callConsumer
 	defer func() {
@@ -46,6 +47,20 @@ func TestDeliverJob_MarkDead(t *testing.T) {
 		return expectedErr
 	}
 	deliverJob(worker, NewJob(inflightJob))
+	reloaded, err := dataAccessor.GetDeliveryJobRepository().GetByID(inflightJob.ID.String())
+	assert.Nil(t, err)
+	assert.Equal(t, data.JobDead, reloaded.Status, "a failed attempt with retries exhausted marks the job dead")
+}
+
+// setRetryAttemptCount sets the retry attempt count of the job in memory and in the database; MarkJobInflight refuses a
+// copy whose count differs from the database
+func setRetryAttemptCount(t *testing.T, job *data.DeliveryJob, count uint) {
+	t.Helper()
+	db, err := storage.GetConnectionPool(configuration, nil, configuration)
+	assert.Nil(t, err)
+	_, err = db.Exec("UPDATE job SET retryAttemptCount = ? WHERE id = ?", count, job.ID.String())
+	assert.Nil(t, err)
+	job.RetryAttemptCount = count
 }
 
 func TestDeliverJob_MarkOpFailed(t *testing.T) {
@@ -108,7 +123,7 @@ func TestCallConsumerPanic(t *testing.T) {
 	jobs, _, err = dataAccessor.GetDeliveryJobRepository().GetJobsForMessage(msg, data.NewPagination(nil, nil))
 	assert.Nil(t, err)
 	inflightJob := jobs[0]
-	inflightJob.RetryAttemptCount = 5
+	setRetryAttemptCount(t, inflightJob, 5)
 	worker := msgDispatcher.workers[0]
 	oldCallConsumer := callConsumer
 	defer func() {
@@ -148,4 +163,44 @@ func TestCallConsumer(t *testing.T) {
 		err := callConsumer(&worker, "test-request", log.Logger, NewJob(job))
 		assert.Nil(t, err)
 	})
+}
+
+// A copy of a job read before a later attempt failed is refused by MarkJobInflight, so the worker does not call the
+// consumer early with an out-of-date retry count.
+func TestDeliverJob_RefusesStaleCopy(t *testing.T) {
+	var buf bytes.Buffer
+	oldLogger := log.Logger
+	log.Logger = log.Output(&buf)
+	defer func() {
+		log.Logger = oldLogger
+	}()
+	brokerConf := getMockedBrokerConfig()
+	outerDispatcher := NewMessageDispatcher(getCompleteDispatcherConfiguration(dataAccessor.GetMessageRepository(), dataAccessor.GetDeliveryJobRepository(), dataAccessor.GetConsumerRepository(), brokerConf, configuration, dataAccessor.GetLockRepository()))
+	defer outerDispatcher.Stop()
+	msgDispatcher := outerDispatcher.(*MessageDispatcherImpl)
+	msg, _ := data.NewMessage(channel, producer, `{"key": "stale"}`, "application/json", data.HeadersMap{})
+	assert.Nil(t, dataAccessor.GetMessageRepository().Create(msg))
+	job, err := data.NewDeliveryJob(msg, consumers[0])
+	assert.Nil(t, err)
+	djRepo := dataAccessor.GetDeliveryJobRepository()
+	assert.Nil(t, djRepo.DispatchMessage(msg, job))
+	staleCopy := *job
+	// another instance delivered the job and the attempt failed
+	assert.Nil(t, djRepo.MarkJobInflight(job))
+	assert.Nil(t, djRepo.MarkJobRetry(job, time.Minute))
+
+	oldCallConsumer := callConsumer
+	defer func() {
+		callConsumer = oldCallConsumer
+	}()
+	callConsumer = func(worker *Worker, requestID string, logger zerolog.Logger, job *Job) error {
+		t.Error("the consumer must not be called with an out-of-date copy")
+		return nil
+	}
+	deliverJob(msgDispatcher.workers[0], NewJob(&staleCopy))
+	assert.Contains(t, buf.String(), "could not put job in flight")
+	reloaded, err := djRepo.GetByID(job.ID.String())
+	assert.Nil(t, err)
+	assert.Equal(t, data.JobQueued, reloaded.Status)
+	assert.Equal(t, uint(1), reloaded.RetryAttemptCount)
 }

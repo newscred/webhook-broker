@@ -13,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -712,6 +711,8 @@ func TestJobWorkers(t *testing.T) {
 		assert.Nil(t, err)
 		_, err = db.Exec("UPDATE job SET status = ?, earliestNextAttemptAt = ?, retryAttemptCount = ? WHERE id = ?", data.JobQueued, current_time.Add(-110*time.Millisecond), msgDispatcher.brokerConfig.GetMaxRetry()+1, pullJob.ID)
 		assert.Nil(t, err)
+		// the recovery pass skips a job this instance still holds from the first pass
+		assert.Eventually(t, func() bool { return !impl.scheduler.isHeld(pushJob.ID.String()) }, 5*time.Second, 10*time.Millisecond)
 
 		retryQueuedJobs(impl)
 
@@ -727,77 +728,84 @@ func TestSlowConsumerDoesNotStarveOtherConsumers(t *testing.T) {
 	slowConsumer := consumers[0]
 	fastConsumer := consumers[1]
 	slowHandlerKey := strings.TrimPrefix(slowConsumer.CallbackURL, consumerBaseURL(slowConsumer))
+	fastHandlerKey := strings.TrimPrefix(fastConsumer.CallbackURL, consumerBaseURL(fastConsumer))
 	release := make(chan struct{})
-	var slowCalls atomic.Int32
-	// Earlier tests leave jobs for the same consumer behind, so count only this test's messages.
+	// Earlier tests leave jobs for the same consumers behind, so count only this test's messages. Deliveries are counted
+	// at the consumers rather than by polling job status: polling SQLite while workers write makes those writes fail
+	// with "database is locked" on slow disks.
 	var ownMessageIDs sync.Map
+	var slowDelivered, fastDelivered sync.Map
+	var slowMu sync.Mutex
+	slowInflight, slowMaxInflight := 0, 0
 	consumerHandler[slowHandlerKey] = func(_ string, w http.ResponseWriter, r *http.Request) {
-		if _, own := ownMessageIDs.Load(r.Header.Get(headerMessageID)); own {
-			slowCalls.Add(1)
+		messageID := r.Header.Get(headerMessageID)
+		if _, own := ownMessageIDs.Load(messageID); own {
+			slowMu.Lock()
+			slowInflight++
+			if slowInflight > slowMaxInflight {
+				slowMaxInflight = slowInflight
+			}
+			slowMu.Unlock()
 			<-release
+			slowMu.Lock()
+			slowInflight--
+			slowMu.Unlock()
+			slowDelivered.Store(messageID, struct{}{})
 		}
 		w.WriteHeader(http.StatusNoContent)
+	}
+	consumerHandler[fastHandlerKey] = func(_ string, w http.ResponseWriter, r *http.Request) {
+		if messageID := r.Header.Get(headerMessageID); messageID != "" {
+			if _, own := ownMessageIDs.Load(messageID); own {
+				fastDelivered.Store(messageID, struct{}{})
+			}
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+	count := func(m *sync.Map) int {
+		n := 0
+		m.Range(func(_, _ any) bool { n++; return true })
+		return n
+	}
+	maxInflight := func() int {
+		slowMu.Lock()
+		defer slowMu.Unlock()
+		return slowMaxInflight
 	}
 	var releaseOnce sync.Once
 	releaseSlow := func() { releaseOnce.Do(func() { close(release) }) }
 	defer releaseSlow()
 
 	brokerConf := new(configmocks.BrokerConfig)
-	brokerConf.On("GetMaxMessageQueueSize").Return(uint(100))
+	// Room for every job earlier tests leave queued: a recovery pass blocked on a full job queue would deadlock Stop
+	brokerConf.On("GetMaxMessageQueueSize").Return(uint(100000))
 	brokerConf.On("GetMaxWorkers").Return(uint(3))
-	brokerConf.On("IsRecoveryWorkersEnabled").Return(false)
+	// Recovery workers retry a job whose status update failed on a locked SQLite database
+	brokerConf.On("IsRecoveryWorkersEnabled").Return(true)
 	brokerConf.On("GetRationalDelay").Return(100 * time.Millisecond)
 	brokerConf.On("GetMaxRetry").Return(uint8(5))
-	brokerConf.On("GetRetryBackoffDelays").Return([]time.Duration{5 * time.Second})
+	brokerConf.On("GetRetryBackoffDelays").Return([]time.Duration{100 * time.Millisecond})
 	brokerConf.On("GetConsumerMaxConcurrency", channel.ChannelID, slowConsumer.ConsumerID).Return(uint(1))
 	brokerConf.On("GetConsumerMaxConcurrency", mock.Anything, mock.Anything).Return(uint(0))
 	dispatcher := NewMessageDispatcher(getCompleteDispatcherConfiguration(dataAccessor.GetMessageRepository(), dataAccessor.GetDeliveryJobRepository(), dataAccessor.GetConsumerRepository(), brokerConf, configuration, dataAccessor.GetLockRepository()))
 	defer dispatcher.Stop()
 
 	// With 3 workers and no per-consumer limit, the slow consumer's jobs alone would fill every worker.
-	messages := make([]*data.Message, 0, 4)
 	for i := 0; i < 4; i++ {
 		msg, _ := data.NewMessage(channel, producer, `{"key": "isolation"}`, "application/json", data.HeadersMap{})
 		require.NoError(t, dataAccessor.GetMessageRepository().Create(msg))
 		ownMessageIDs.Store(msg.MessageID, struct{}{})
 		dispatcher.Dispatch(msg)
-		messages = append(messages, msg)
 	}
 
-	fastDelivered := func() bool {
-		for _, msg := range messages {
-			jobs, _, err := dataAccessor.GetDeliveryJobRepository().GetJobsForMessage(msg, data.NewPagination(nil, nil))
-			if err != nil {
-				return false
-			}
-			for _, job := range jobs {
-				if job.Listener.ID == fastConsumer.ID && job.Status != data.JobDelivered {
-					return false
-				}
-			}
-		}
-		return true
-	}
-	assert.Eventually(t, fastDelivered, 10*time.Second, 50*time.Millisecond, "other consumers must be served while the slow one blocks")
-	assert.Equal(t, int32(1), slowCalls.Load(), "slow consumer must hold no more than its limit of workers")
+	assert.Eventually(t, func() bool { return count(&fastDelivered) == 4 }, 10*time.Second, 20*time.Millisecond,
+		"other consumers must be served while the slow one blocks")
+	assert.Equal(t, 0, count(&slowDelivered), "the slow consumer is still blocked")
+	assert.Equal(t, 1, maxInflight(), "slow consumer must hold no more than its limit of workers")
 
 	releaseSlow()
-	slowDelivered := func() bool {
-		for _, msg := range messages {
-			jobs, _, err := dataAccessor.GetDeliveryJobRepository().GetJobsForMessage(msg, data.NewPagination(nil, nil))
-			if err != nil {
-				return false
-			}
-			for _, job := range jobs {
-				if job.Listener.Type == data.PushConsumer && job.Status != data.JobDelivered {
-					return false
-				}
-			}
-		}
-		return true
-	}
-	assert.Eventually(t, slowDelivered, 10*time.Second, 50*time.Millisecond)
-	assert.Equal(t, int32(4), slowCalls.Load())
+	assert.Eventually(t, func() bool { return count(&slowDelivered) == 4 }, 10*time.Second, 20*time.Millisecond)
+	assert.Equal(t, 1, maxInflight(), "slow consumer never exceeded its limit")
 }
 
 func TestDispatcherStopClearsQueuedConsumerGauge(t *testing.T) {
@@ -915,4 +923,43 @@ func TestDispatcherStopReleasesJobsWhenDeliveryOutlastsStopTimeout(t *testing.T)
 		}
 	}
 	assert.Eventually(t, func() bool { return gaugeValue(t, inflight) == start }, time.Second, 10*time.Millisecond)
+}
+
+// The recovery pass skips a push job that this instance already holds, before taking its lock: the scheduler would drop
+// the copy anyway, and a consumer at its max concurrency can hold a large backlog that every pass would otherwise lock.
+func TestRetryQueuedJobsSkipsHeldJobs(t *testing.T) {
+	brokerConf := getMockedBrokerConfig()
+	brokerConf.On("GetConsumerMaxConcurrency", mock.Anything, mock.Anything).Return(uint(0))
+	impl := &MessageDispatcherImpl{djRepo: dataAccessor.GetDeliveryJobRepository(), lockRepo: dataAccessor.GetLockRepository(), brokerConfig: brokerConf,
+		rationalDelay: 100 * time.Millisecond, jobQueue: make(chan *Job, 1000), scheduler: newLaneScheduler(brokerConf.GetConsumerMaxConcurrency, counter)}
+	held, err := setupTestJob(consumers[0])
+	require.NoError(t, err)
+	free, err := setupTestJob(consumers[1])
+	require.NoError(t, err)
+	db, err := storage.GetConnectionPool(configuration, nil, configuration)
+	require.NoError(t, err)
+	for _, job := range []*data.DeliveryJob{held, free} {
+		_, err = db.Exec("UPDATE job SET earliestNextAttemptAt = ? WHERE id = ?", time.Now().Add(-time.Hour), job.ID.String())
+		require.NoError(t, err)
+	}
+	heldJob, _ := dataAccessor.GetDeliveryJobRepository().GetByID(held.ID.String())
+	require.True(t, impl.scheduler.enqueue(NewJob(heldJob)))
+
+	locked := map[string]bool{}
+	oldInLockRun := inLockRun
+	inLockRun = func(lockRepo storage.LockRepository, lockable data.Lockable, run func() error) error {
+		locked[lockable.GetLockID()] = true
+		return oldInLockRun(lockRepo, lockable, run)
+	}
+	defer func() { inLockRun = oldInLockRun }()
+	retryQueuedJobs(impl)
+
+	assert.False(t, locked[held.GetLockID()], "a held job must be skipped before taking its lock")
+	assert.True(t, locked[free.GetLockID()], "a job not held here is locked and queued as before")
+	queued := map[string]bool{}
+	for len(impl.jobQueue) > 0 {
+		queued[(<-impl.jobQueue).Data.ID.String()] = true
+	}
+	assert.True(t, queued[free.ID.String()])
+	assert.False(t, queued[held.ID.String()])
 }

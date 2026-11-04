@@ -69,9 +69,20 @@ func (djRepo *DeliveryJobDBRepository) updateJobStatus(deliveryJob *data.Deliver
 	return err
 }
 
-// MarkJobInflight sets the status of the job to Inflight if job's current state in the object and DB is Queued; else returns error
-func (djRepo *DeliveryJobDBRepository) MarkJobInflight(deliveryJob *data.DeliveryJob) error {
-	return djRepo.updateJobStatus(deliveryJob, data.JobQueued, data.JobInflight)
+// MarkJobInflight sets the status of the job to Inflight if the job is Queued in the DB and its retry attempt count still
+// matches the object's; else returns error. The retry count check refuses an out-of-date in-memory copy, for example one
+// read by another instance's recovery pass before a later attempt failed and put the job back to Queued with a higher
+// count. Delivering such a copy would skip the retry backoff and write a retry count that is too low.
+func (djRepo *DeliveryJobDBRepository) MarkJobInflight(deliveryJob *data.DeliveryJob) (err error) {
+	currentTime := time.Now()
+	err = transactionalSingleRowWriteExec(djRepo.db, emptyOps, "UPDATE job SET status = ?, incrementalTimeout = ?, statusChangedAt = ?, updatedAt = ? WHERE id like ? and status = ? and retryAttemptCount = ?",
+		args2SliceFnWrapper(data.JobInflight, deliveryJob.IncrementalTimeout, currentTime, currentTime, deliveryJob.ID, data.JobQueued, deliveryJob.RetryAttemptCount))
+	if err == nil {
+		deliveryJob.Status = data.JobInflight
+		deliveryJob.StatusChangedAt = currentTime
+		deliveryJob.UpdatedAt = currentTime
+	}
+	return err
 }
 
 // MarkJobDelivered sets the status of the job to Delivered if the job's current status is Inflight in the object and DB; else returns error
