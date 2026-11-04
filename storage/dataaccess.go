@@ -20,6 +20,8 @@ type DataAccessor interface {
 	GetLockRepository() LockRepository
 	GetScheduledMessageRepository() ScheduledMessageRepository
 	GetDLQSummaryRepository() DLQSummaryRepository
+	GetDispatchPauseRepository() DispatchPauseRepository
+	GetJobParkingRepository() JobParkingRepository
 	Close()
 }
 
@@ -71,8 +73,10 @@ type MessageRepository interface {
 // DeliveryJobRepository allows storage operations over DeliveryJob
 type DeliveryJobRepository interface {
 	DispatchMessage(message *data.Message, deliveryJobs ...*data.DeliveryJob) error
-	// MarkJobInflight moves the job from QUEUED to INFLIGHT only if its retry attempt count in the DB matches the object's,
-	// so an out-of-date in-memory copy is refused (ErrNoRowsUpdated)
+	// DispatchMessageWithParking inserts jobs into job and parked jobs into job_parking and marks the message dispatched, all in one transaction
+	DispatchMessageWithParking(message *data.Message, deliveryJobs []*data.DeliveryJob, parkedJobs []*data.DeliveryJob) error
+	// MarkJobInflight moves the job from QUEUED to INFLIGHT only if its retry attempt count in the DB matches the object's, so an
+	// out-of-date in-memory copy is refused, and only if its consumer is not effectively paused; else ErrNoRowsUpdated
 	MarkJobInflight(deliveryJob *data.DeliveryJob) error
 	MarkJobDelivered(deliveryJob *data.DeliveryJob) error
 	MarkJobDead(deliveryJob *data.DeliveryJob) error
@@ -93,6 +97,34 @@ type DeliveryJobRepository interface {
 	DeleteDeadJobsForConsumer(consumer *data.Consumer, maxRetryCount uint) (int64, error)
 	DeleteDeadJob(job *data.DeliveryJob, maxRetryCount uint) (int64, error)
 	GetDeadJobCountsSinceCheckpoint(since time.Time) (map[string]int64, error)
+	// GetQueuedJobsByIDs loads the jobs with the given ids that are currently QUEUED; unknown or non-QUEUED ids are skipped
+	GetQueuedJobsByIDs(ids []string) ([]*data.DeliveryJob, error)
+}
+
+// DispatchPauseRepository allows storage operations over DispatchPause
+type DispatchPauseRepository interface {
+	// Pause stores the pause; it is idempotent and returns the existing pause if the scope is already paused
+	Pause(pause *data.DispatchPause) (*data.DispatchPause, error)
+	// Resume deletes the pause for the scope; returns true if a pause was deleted
+	Resume(scope string) (bool, error)
+	Get(scope string) (*data.DispatchPause, error)
+	GetAll() ([]*data.DispatchPause, error)
+	// IsEffectivelyPaused returns true if the consumer (internal id) or the whole broker is paused
+	IsEffectivelyPaused(consumerInternalID string) (bool, error)
+}
+
+// JobParkingRepository allows storage operations over parked jobs (jobs of paused consumers)
+type JobParkingRepository interface {
+	// ReparkQueuedJob atomically moves a QUEUED job from job to job_parking only if its consumer is effectively paused; returns true if moved
+	ReparkQueuedJob(job *data.DeliveryJob) (bool, error)
+	// GetDrainableConsumerIDs returns internal ids of consumers that have parked jobs and are not effectively paused
+	GetDrainableConsumerIDs() ([]string, error)
+	// DrainPage atomically moves up to pageSize parked jobs of the consumer back into job as QUEUED, oldest first
+	DrainPage(consumerInternalID string, pageSize int, earliestNextAttemptAt time.Time) ([]*data.DeliveryJob, error)
+	// GetByID loads a parked job; its Status is data.JobParked
+	GetByID(id string) (*data.DeliveryJob, error)
+	GetForMessage(message *data.Message) ([]*data.DeliveryJob, error)
+	GetCountsByConsumer() ([]*data.ParkedJobCount, error)
 }
 
 // DLQSummaryRepository allows storage operations over DLQSummary
@@ -109,6 +141,8 @@ type LockRepository interface {
 	TryLock(lock *data.Lock) error
 	ReleaseLock(lock *data.Lock) error
 	TimeoutLocks(threshold time.Duration) error
+	// RenewLock refreshes attainedAt of a held lock; returns ErrNoRowsUpdated if the lock is no longer held
+	RenewLock(lock *data.Lock) error
 }
 
 // ScheduledMessageRepository allows storage operations over ScheduledMessage

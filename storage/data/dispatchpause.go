@@ -71,6 +71,16 @@ func NewConsumerDispatchPause(consumer *Consumer, reason string) (*DispatchPause
 	return pause, nil
 }
 
+// ParkedJobCount is the number of parked jobs of a consumer. Timestamps are strings because
+// aggregate DATETIME results are not typed consistently across the supported dialects.
+type ParkedJobCount struct {
+	ChannelID      string
+	ConsumerID     string
+	Count          int64
+	OldestParkedAt string
+	NewestParkedAt string
+}
+
 // DrainLock implements Lockable for the job parking drainer
 type DrainLock struct{}
 

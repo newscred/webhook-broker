@@ -46,6 +46,10 @@ const (
 			FROM job j
 			WHERE j.messageId = m.id AND j.status <> ?
 			LIMIT 1
+		) AND NOT EXISTS (
+			SELECT 1
+			FROM job_parking p
+			WHERE p.messageId = m.id
 		)`
 )
 

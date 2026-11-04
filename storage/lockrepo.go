@@ -54,6 +54,21 @@ func (lockRepo *LockDBRepository) TimeoutLocks(threshold time.Duration) (err err
 	return err
 }
 
+// RenewLock refreshes attainedAt of a held lock so TimeoutLocks does not release it; returns ErrNoRowsUpdated if the
+// lock is no longer held (for example it was timed out and possibly attained by someone else)
+func (lockRepo *LockDBRepository) RenewLock(lock *data.Lock) (err error) {
+	if lock == nil {
+		return ErrNoLock
+	}
+	renewedAt := time.Now()
+	err = transactionalSingleRowWriteExec(lockRepo.db, emptyOps, "UPDATE `lock` SET attainedAt = ? WHERE lockId like ?",
+		args2SliceFnWrapper(renewedAt, lock.LockID))
+	if err == nil {
+		lock.AttainedAt = renewedAt
+	}
+	return err
+}
+
 // NewLockRepository creates a new instance of LockRepository
 func NewLockRepository(db *sql.DB) LockRepository {
 	return &LockDBRepository{db: db}

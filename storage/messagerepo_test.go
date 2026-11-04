@@ -402,6 +402,16 @@ func (m *MockedDataAccessor) GetDLQSummaryRepository() DLQSummaryRepository {
 	return args.Get(0).(DLQSummaryRepository)
 }
 
+func (m *MockedDataAccessor) GetDispatchPauseRepository() DispatchPauseRepository {
+	args := m.Called()
+	return args.Get(0).(DispatchPauseRepository)
+}
+
+func (m *MockedDataAccessor) GetJobParkingRepository() JobParkingRepository {
+	args := m.Called()
+	return args.Get(0).(JobParkingRepository)
+}
+
 func TestGetMessagesFromBeforeDurationThatAreCompletelyDelivered(t *testing.T) {
 	msgRepo := getMessageRepository()
 
@@ -640,4 +650,69 @@ func TestMessageDBRepository_DeleteMessagesAndJobs(t *testing.T) {
 		assert.NoError(t, mock.ExpectationsWereMet())
 
 	})
+}
+
+// newOldParkingMessage creates a message that is old enough to be a prune candidate (40s threshold below)
+func newOldParkingMessage(t *testing.T, fixture *PauseFixture) *data.Message {
+	t.Helper()
+	msg, _ := data.NewMessage(fixture.Channel, fixture.Producer, samplePayload, sampleContentType, data.HeadersMap{})
+	msg.ReceivedAt = msg.ReceivedAt.Add(-50 * time.Second)
+	msg.QuickFix()
+	if err := getMessageRepository().Create(msg); err != nil {
+		t.Fatal(err)
+	}
+	return msg
+}
+
+func containsMessage(messages []*data.Message, msg *data.Message) bool {
+	for _, candidate := range messages {
+		if candidate.ID == msg.ID {
+			return true
+		}
+	}
+	return false
+}
+
+// A message whose only undelivered job is parked must never be a prune candidate: pruning it would lose the
+// message for the paused consumer
+func TestGetMessagesFromBeforeDurationThatAreCompletelyDelivered_ExcludesParked(t *testing.T) {
+	msgRepo := getMessageRepository()
+	djRepo := getDeliverJobRepository()
+	fixture := newPauseFixture(t, "prune-parked", 2, 0)
+	delivered, paused := fixture.Push[0], fixture.Push[1]
+	pauseConsumerForTest(t, paused)
+	msg := newOldParkingMessage(t, fixture)
+	jobs, _ := dispatchSplit(t, msg, fixture.Consumers, map[string]bool{paused.ID.String(): true})
+	assert.NoError(t, markJobDelivered(djRepo, jobs[0]))
+	assert.Equal(t, delivered.ID, jobs[0].Listener.ID)
+	assert.False(t, containsMessage(msgRepo.GetMessagesFromBeforeDurationThatAreCompletelyDelivered(40*time.Second, 100000), msg),
+		"a message with a parked job must not be pruned")
+
+	resumeConsumerForTest(t, paused)
+	drained, err := getJobParkingRepository().DrainPage(paused.ID.String(), 10, time.Now())
+	assert.NoError(t, err)
+	if assert.Equal(t, 1, len(drained)) {
+		assert.NoError(t, markJobDelivered(djRepo, drained[0]))
+	}
+	assert.True(t, containsMessage(msgRepo.GetMessagesFromBeforeDurationThatAreCompletelyDelivered(40*time.Second, 100000), msg),
+		"once drained and delivered the message becomes a prune candidate")
+	// Remove the now prunable message so it can not affect tests that count prune candidates
+	assert.NoError(t, msgRepo.DeleteMessagesAndJobs(context.Background(), []string{msg.ID.String()}))
+}
+
+// The job_parking.messageId foreign key is ON DELETE RESTRICT so that even a prune binary that does not know about
+// parking can never delete a message that is owed to a paused consumer
+func TestDeleteMessagesAndJobs_ParkedRowRestricts(t *testing.T) {
+	msgRepo := getMessageRepository()
+	fixture := newPauseFixture(t, "prune-restrict", 2, 0)
+	paused := fixture.Push[1]
+	pauseConsumerForTest(t, paused)
+	msg := newOldParkingMessage(t, fixture)
+	dispatchSplit(t, msg, fixture.Consumers, map[string]bool{paused.ID.String(): true})
+	err := msgRepo.DeleteMessagesAndJobs(context.Background(), []string{msg.ID.String()})
+	assert.Error(t, err)
+	_, err = msgRepo.GetByID(msg.ID.String())
+	assert.NoError(t, err, "the message must survive the failed delete")
+	assertPlacement(t, msg, fixture.Push[0], 1, 0)
+	assertPlacement(t, msg, paused, 0, 1)
 }
