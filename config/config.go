@@ -74,7 +74,7 @@ var (
 	loadConfiguration = defaultLoadFunc
 	errDBDialect      = errors.New("DB Dialect not supported")
 	// ConfigInjector sets up configuration related bindings
-	ConfigInjector = wire.NewSet(GetConfigurationFromCLIConfig, wire.Bind(new(SeedDataConfig), new(*Config)), wire.Bind(new(HTTPConfig), new(*Config)), wire.Bind(new(RelationalDatabaseConfig), new(*Config)), wire.Bind(new(LogConfig), new(*Config)), wire.Bind(new(BrokerConfig), new(*Config)), wire.Bind(new(ConsumerConnectionConfig), new(*Config)), wire.Bind(new(SchedulerConfig), new(*Config)), wire.Bind(new(DLQConfig), new(*Config)), wire.Bind(new(GatewayAuthConfig), new(*Config)))
+	ConfigInjector = wire.NewSet(GetConfigurationFromCLIConfig, wire.Bind(new(SeedDataConfig), new(*Config)), wire.Bind(new(HTTPConfig), new(*Config)), wire.Bind(new(RelationalDatabaseConfig), new(*Config)), wire.Bind(new(LogConfig), new(*Config)), wire.Bind(new(BrokerConfig), new(*Config)), wire.Bind(new(ConsumerConnectionConfig), new(*Config)), wire.Bind(new(SchedulerConfig), new(*Config)), wire.Bind(new(DLQConfig), new(*Config)), wire.Bind(new(GatewayAuthConfig), new(*Config)), wire.Bind(new(DispatchPauseConfig), new(*Config)))
 )
 
 var currentUser = user.Current
@@ -139,6 +139,18 @@ type Config struct {
 	HMACSharedSecret              string
 	HMACTimestampToleranceSeconds uint
 	AuthExemptPaths               string
+	// Dispatch pause configuration; the admin token is a secret and is never serialized (the config is logged at startup)
+	DispatchPauseAdminToken        string `json:"-"`
+	RegistryRefreshIntervalSeconds uint
+	DrainIntervalSeconds           uint
+	DrainPageSize                  uint
+	HandoffMode                    string
+	HandoffLeaseSeconds            uint
+	HandoffTimeoutSeconds          uint
+	HandoffMaxAttempts             uint
+	HandoffConcurrency             uint
+	HandoffHighWaterMark           uint
+	HandoffLocalFallbackDisabled   bool
 }
 
 // GetLogLevel returns the log level as per the configuration
@@ -370,6 +382,7 @@ func GetConfigurationFromParseConfig(cfg *ini.File) (*Config, error) {
 	setupSchedulerConfiguration(cfg, configuration)
 	setupDLQConfiguration(cfg, configuration)
 	setupGatewayAuthConfiguration(cfg, configuration)
+	setupDispatchPauseConfiguration(cfg, configuration)
 	if validationErr := validateConfigurationState(configuration); validationErr != nil {
 		return EmptyConfigurationForError, validationErr
 	}

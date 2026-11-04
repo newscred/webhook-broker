@@ -626,4 +626,8 @@ func TestConfigInterfaces(t *testing.T) {
 	var _ SeedDataConfig = (*Config)(nil)
 	var _ ConsumerConnectionConfig = (*Config)(nil)
 	var _ MessagePruningConfig = (*Config)(nil)
+	var _ BrokerConfig = (*Config)(nil)
+	var _ DLQConfig = (*Config)(nil)
+	var _ GatewayAuthConfig = (*Config)(nil)
+	var _ DispatchPauseConfig = (*Config)(nil)
 }
