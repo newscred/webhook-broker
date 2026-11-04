@@ -149,10 +149,22 @@ func TestPruneMessages(t *testing.T) {
 		}
 		mockedMsgRepo := new(storagemocks.MessageRepository)
 		mockedMsgRepo.On("DeleteMessagesAndJobs", mock.MatchedBy(anyMatcher), mock.MatchedBy(messageIDMatcher(msgs))).Return(assert.AnError)
-		mockedMsgRepo.On("GetMessagesFromBeforeDurationThatAreCompletelyDelivered", time.Duration(retentionInDays*24*60*60)*time.Second, 1000).Return(msgs).Times(1)
+		mockedMsgRepo.On("GetMessagesFromBeforeDurationThatAreCompletelyDelivered", time.Duration(retentionInDays*24*60*60)*time.Second, 1000, mock.Anything).Return(msgs, (*data.Pagination)(nil)).Times(1)
 		mockDataAccessor := createMockDataAccessorWrapper(dataAccessor, mockedMsgRepo, nil)
 		err = PruneMessages(mockDataAccessor, getMockedPruneConfig(t))
 		assert.Equal(t, assert.AnError, err)
+	})
+	t.Run("CursorCarriedAcrossBatches", func(t *testing.T) {
+		retention := time.Duration(retentionInDays*24*60*60) * time.Second
+		firstPage := data.NewPagination(msgs[len(msgs)-1], nil)
+		mockedMsgRepo := new(storagemocks.MessageRepository)
+		mockedMsgRepo.On("DeleteMessagesAndJobs", mock.Anything, mock.Anything).Return(nil).Once()
+		mockedMsgRepo.On("GetMessagesFromBeforeDurationThatAreCompletelyDelivered", retention, 1000, (*data.Pagination)(nil)).Return(msgs, firstPage).Once()
+		mockedMsgRepo.On("GetMessagesFromBeforeDurationThatAreCompletelyDelivered", retention, 1000, firstPage).Return([]*data.Message{}, firstPage).Once()
+		mockDataAccessor := createMockDataAccessorWrapper(dataAccessor, mockedMsgRepo, nil)
+		err := PruneMessages(mockDataAccessor, getMockedPruneConfig(t))
+		assert.Nil(t, err)
+		mockedMsgRepo.AssertExpectations(t)
 	})
 	t.Run("ArchiveError", func(t *testing.T) {
 		originalArchiveMsg := archiveMessage

@@ -236,24 +236,36 @@ func (_m *MessageRepository) GetMessagesForChannel(channelID string, page *data.
 	return r0, r1, r2
 }
 
-// GetMessagesFromBeforeDurationThatAreCompletelyDelivered provides a mock function with given fields: delta, absoluteMaxMessages
-func (_m *MessageRepository) GetMessagesFromBeforeDurationThatAreCompletelyDelivered(delta time.Duration, absoluteMaxMessages int) []*data.Message {
-	ret := _m.Called(delta, absoluteMaxMessages)
+// GetMessagesFromBeforeDurationThatAreCompletelyDelivered provides a mock function with given fields: delta, absoluteMaxMessages, page
+func (_m *MessageRepository) GetMessagesFromBeforeDurationThatAreCompletelyDelivered(delta time.Duration, absoluteMaxMessages int, page *data.Pagination) ([]*data.Message, *data.Pagination) {
+	ret := _m.Called(delta, absoluteMaxMessages, page)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetMessagesFromBeforeDurationThatAreCompletelyDelivered")
 	}
 
 	var r0 []*data.Message
-	if rf, ok := ret.Get(0).(func(time.Duration, int) []*data.Message); ok {
-		r0 = rf(delta, absoluteMaxMessages)
+	var r1 *data.Pagination
+	if rf, ok := ret.Get(0).(func(time.Duration, int, *data.Pagination) ([]*data.Message, *data.Pagination)); ok {
+		return rf(delta, absoluteMaxMessages, page)
+	}
+	if rf, ok := ret.Get(0).(func(time.Duration, int, *data.Pagination) []*data.Message); ok {
+		r0 = rf(delta, absoluteMaxMessages, page)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]*data.Message)
 		}
 	}
 
-	return r0
+	if rf, ok := ret.Get(1).(func(time.Duration, int, *data.Pagination) *data.Pagination); ok {
+		r1 = rf(delta, absoluteMaxMessages, page)
+	} else {
+		if ret.Get(1) != nil {
+			r1 = ret.Get(1).(*data.Pagination)
+		}
+	}
+
+	return r0, r1
 }
 
 // GetMessagesNotDispatchedForCertainPeriod provides a mock function with given fields: delta

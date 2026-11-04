@@ -38,11 +38,14 @@ type ContextKey string
 const (
 	messageSelectRowCommonQuery            = "SELECT id, messageId, producerId, channelId, payload, contentType, priority, status, receivedAt, outboxedAt, headers, createdAt, updatedAt FROM message WHERE"
 	txContextKey                ContextKey = "tx"
-	pruneMessageQuery           string     = `SELECT
+	// NO_SEMIJOIN keeps MySQL from running the NOT EXISTS as an antijoin that materializes every
+	// non-delivered job from a full scan of `job`; with it, each candidate's jobs are checked
+	// through jobs_by_message. sqlite ignores the hint as a comment.
+	pruneMessageQuery string = `SELECT
 		m.id, m.messageId, m.producerId, m.channelId, m.payload, m.contentType, m.priority, m.status, m.receivedAt, m.outboxedAt, m.headers, m.createdAt, m.updatedAt
 		FROM message m
 		WHERE m.status = ? AND m.createdAt <= ? AND NOT EXISTS (
-			SELECT 1
+			SELECT /*+ NO_SEMIJOIN() */ 1
 			FROM job j
 			WHERE j.messageId = m.id AND j.status <> ?
 			LIMIT 1
@@ -232,13 +235,21 @@ func (msgRepo *MessageDBRepository) GetMessagesForChannel(channelID string, page
 
 // GetMessagesFromBeforeDurationThatAreCompletelyDelivered retrieves messages for which every job is in delivered status and the message was created before the `delta` period.
 // Maximum messages returned would be less than as specified by `absoluteMaxMessages` + 100
-func (msgRepo *MessageDBRepository) GetMessagesFromBeforeDurationThatAreCompletelyDelivered(delta time.Duration, absoluteMaxMessages int) []*data.Message {
+//
+// `page` resumes the scan where a previous call stopped; pass nil to start from the newest
+// eligible message. Callers that prune in successive batches MUST feed the returned pagination
+// back in. Messages whose jobs are not all delivered never become eligible, so restarting the
+// scan from the top on every batch re-reads that whole set each time - with a large dead-job
+// backlog that is quadratic and the scan never reaches the end.
+func (msgRepo *MessageDBRepository) GetMessagesFromBeforeDurationThatAreCompletelyDelivered(delta time.Duration, absoluteMaxMessages int, page *data.Pagination) ([]*data.Message, *data.Pagination) {
 	messages := make([]*data.Message, 0)
 	if delta > 0 {
 		delta = -1 * delta
 	}
 	earliestReceivedAt := time.Now().Add(delta)
-	page := data.NewPagination(nil, nil)
+	if page == nil {
+		page = data.NewPagination(nil, nil)
+	}
 	more := true
 	baseQuery := pruneMessageQuery
 
@@ -272,7 +283,7 @@ func (msgRepo *MessageDBRepository) GetMessagesFromBeforeDurationThatAreComplete
 			more = false
 		}
 	}
-	return messages
+	return messages, page
 }
 
 func (msgRepo *MessageDBRepository) DeleteMessage(message *data.Message) error {
