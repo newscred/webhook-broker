@@ -425,8 +425,21 @@ func TestStatusBasedJobsListing(t *testing.T) {
 		}
 		assert.True(t, found)
 	})
+	t.Run("RetryListSkipsPullConsumerJobs", func(t *testing.T) {
+		pullMessage := getMessageForJob()
+		assert.Nil(t, msgRepo.Create(pullMessage))
+		pullJob, err := data.NewDeliveryJob(pullMessage, pullConsumer)
+		assert.Nil(t, err)
+		assert.Nil(t, djRepo.DispatchMessage(pullMessage, pullJob))
+		defer func() { assert.Nil(t, djRepo.DeleteJobsForMessage(pullMessage)) }()
+		_, err = testDB.Exec("UPDATE job SET retryAttemptCount = ?, earliestNextAttemptAt = ? WHERE id like ?", 100, time.Now().Add(-1*time.Hour), pullJob.ID)
+		assert.Nil(t, err)
+		for _, job := range djRepo.GetJobsReadyForInflightSince(configuration.RationalDelay) {
+			assert.NotEqual(t, pullJob.ID, job.ID)
+		}
+	})
 	t.Run("SuccessRetryList", func(t *testing.T) {
-		thisJobs := djRepo.GetJobsReadyForInflightSince(configuration.RationalDelay, 4)
+		thisJobs := djRepo.GetJobsReadyForInflightSince(configuration.RationalDelay)
 		assert.LessOrEqual(t, len(jobs)-1, len(thisJobs))
 		found := false
 		for _, thisJob := range thisJobs {

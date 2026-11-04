@@ -352,10 +352,11 @@ func (djRepo *DeliveryJobDBRepository) GetJobsInflightSince(delta time.Duration)
 	return djRepo.getJobsForStatusAndDelta(data.JobInflight, delta, true)
 }
 
-// GetJobsReadyForInflightSince retrieves jobs in queued status and earliestNextAttemptAt < `now`-delta
-func (djRepo *DeliveryJobDBRepository) GetJobsReadyForInflightSince(delta time.Duration, retryThreshold int) []*data.DeliveryJob {
-	query := fmt.Sprintf(`%s (retryAttemptCount >= %d OR consumerId NOT IN (SELECT id FROM consumer WHERE type = %d)) AND`,
-		jobCommonSelectQuery, retryThreshold, data.PullConsumer)
+// GetJobsReadyForInflightSince retrieves push consumers' jobs in queued status and earliestNextAttemptAt < `now`-delta.
+// Pull consumers' queued jobs wait for the consumer to pull them, so they are left out; matching them here would make
+// every sweep read the whole pull backlog.
+func (djRepo *DeliveryJobDBRepository) GetJobsReadyForInflightSince(delta time.Duration) []*data.DeliveryJob {
+	query := fmt.Sprintf(`%s consumerId IN (SELECT id FROM consumer WHERE type = %d) AND`, jobCommonSelectQuery, data.PushConsumer)
 	return djRepo.getJobsForStatusAndDeltaWithCustomQuery(data.JobQueued, delta, false, query, "")
 }
 
