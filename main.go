@@ -56,6 +56,7 @@ type HTTPServiceContainer struct {
 	Dispatcher    dispatcher.MessageDispatcher
 	Scheduler     scheduler.MessageScheduler
 	DLQUpdater    dlq.DLQSummaryUpdater
+	PauseRegistry dispatcher.PauseRegistry
 }
 
 var (
@@ -278,7 +279,9 @@ func startWebhookBroker(inConfig *config.CLIConfig) {
 		// Setup Log Output
 		setupLogger(httpServiceContainer.Configuration)
 
-		// Start the scheduler and DLQ updater
+		// Start the pause snapshot refresh, the scheduler and the DLQ updater. The pause registry has already loaded its
+		// snapshot during construction (before the dispatcher was built), this only starts periodic refreshes.
+		httpServiceContainer.PauseRegistry.Start()
 		httpServiceContainer.Scheduler.Start()
 		httpServiceContainer.DLQUpdater.Start()
 
@@ -287,6 +290,7 @@ func startWebhookBroker(inConfig *config.CLIConfig) {
 		httpServiceContainer.DLQUpdater.Stop()
 		httpServiceContainer.Scheduler.Stop()
 		httpServiceContainer.Dispatcher.Stop()
+		httpServiceContainer.PauseRegistry.Stop()
 	}
 	inConfig.StopWatcher()
 }
@@ -361,8 +365,16 @@ func newDLQSummaryRepository(dataAccessor storage.DataAccessor) storage.DLQSumma
 	return dataAccessor.GetDLQSummaryRepository()
 }
 
+func newDispatchPauseRepository(dataAccessor storage.DataAccessor) storage.DispatchPauseRepository {
+	return dataAccessor.GetDispatchPauseRepository()
+}
+
+func newJobParkingRepository(dataAccessor storage.DataAccessor) storage.JobParkingRepository {
+	return dataAccessor.GetJobParkingRepository()
+}
+
 var (
-	httpServiceContainerInjectorSet = wire.NewSet(wire.Struct(new(HTTPServiceContainer), "Configuration", "Server", "DataAccessor", "Listener", "Dispatcher", "Scheduler", "DLQUpdater"))
+	httpServiceContainerInjectorSet = wire.NewSet(wire.Struct(new(HTTPServiceContainer), "Configuration", "Server", "DataAccessor", "Listener", "Dispatcher", "Scheduler", "DLQUpdater", "PauseRegistry"))
 	configInjectorSet               = wire.NewSet(httpServiceContainerInjectorSet, NewServerListener, GetMigrationConfig, wire.Bind(new(controllers.ServerLifecycleListener), new(*ServerLifecycleListenerImpl)), config.ConfigInjector)
-	relationalDBWithControllerSet   = wire.NewSet(controllers.ControllerInjector, storage.GetNewDataAccessor, newLockRepository, newDeliveryJobRepository, newAppRepository, newChannelRepository, newProducerRepository, newConsumerRepository, newMessageRepository, newScheduledMessageRepository, newDLQSummaryRepository, dispatcher.MetricsInjector, dispatcher.DispatcherInjector, scheduler.SchedulerInjector, dlq.DLQInjector)
+	relationalDBWithControllerSet   = wire.NewSet(controllers.ControllerInjector, storage.GetNewDataAccessor, newLockRepository, newDeliveryJobRepository, newAppRepository, newChannelRepository, newProducerRepository, newConsumerRepository, newMessageRepository, newScheduledMessageRepository, newDLQSummaryRepository, newDispatchPauseRepository, newJobParkingRepository, dispatcher.MetricsInjector, dispatcher.DispatcherInjector, scheduler.SchedulerInjector, dlq.DLQInjector)
 )

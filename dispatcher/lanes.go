@@ -111,6 +111,17 @@ func (s *laneScheduler) isHeld(job *data.DeliveryJob) bool {
 	return exists && (held.running || held.job.Data.RetryAttemptCount >= job.RetryAttemptCount)
 }
 
+// queuedLen returns the number of jobs waiting in all lanes, including lanes at their max concurrency.
+func (s *laneScheduler) queuedLen() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	queued := 0
+	for _, lane := range s.lanes {
+		queued += lane.queue.Len()
+	}
+	return queued
+}
+
 func (s *laneScheduler) markReadyLocked(lane *consumerLane) {
 	if !lane.ready && lane.canRun() {
 		lane.ready = true
