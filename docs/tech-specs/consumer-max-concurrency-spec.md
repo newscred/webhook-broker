@@ -129,7 +129,7 @@ The rules:
 2. **Next job.** The dispatch loop first waits for a free worker. Then it looks at the next job of each lane in the ready list and takes the lane whose next job has the highest priority. When several lanes have the same priority, it takes the one nearest the front of the list. It takes that lane's next job and increases the lane's in-flight count by one. If the lane can still run, it goes to the end of the ready list, so lanes with equal priority take turns. If no lane can run, the loop waits until a job is queued or a delivery ends.
 3. **Done.** When the delivery attempt ends (success, failure or timeout), remove the job ID from the held set and decrease the in-flight count by one. If the lane now has room and waiting jobs, add it to the ready list again. If it has no waiting and no running jobs, delete it.
 4. **Order.** A job with a higher priority goes first, across all lanes that can run, as it did with the shared queue. In a lane, the older of two jobs with the same priority goes first. A lane at its limit is skipped even when its next job has the highest priority.
-5. **Stop.** When the dispatcher stops, it drops the jobs that are still waiting in lanes. They stay queued in the database, and the next dispatcher queues them again.
+5. **Stop.** When the dispatcher stops, it drops the jobs that are still waiting in lanes. It also releases the slot of a job that a worker did not read before it stopped. These jobs stay queued in the database, and the next dispatcher queues them again.
 
 A job is taken from a lane only when a worker is ready for it. So a job never holds a slot while it waits for a worker.
 
@@ -197,7 +197,7 @@ Between lanes with equal priority, round-robin gives each lane one job per turn.
 
 ### Duplicate jobs
 
-The recovery workers run every `rational-delay-in-seconds` and queue all jobs that the database shows as queued. Before this change, a job that was already in the in-memory queue went in again on each pass. Each copy later failed when it tried to mark the job in flight. The scheduler now drops a job whose ID it already holds. Another instance can still pick up the same job; the database claim (`MarkJobInflight`) stops the second delivery, as before.
+The recovery workers run every `rational-delay-in-seconds` and queue all jobs that the database shows as queued. Before this change, a job that was already in the in-memory queue went in again on each pass. Each copy later failed when it tried to mark the job in flight. The scheduler now drops a job whose ID it already holds. This check is per instance, and it holds a job only until its attempt ends. `MarkJobInflight` accepts a job that the database shows as queued. So when a failed attempt puts a job back to queued, an old copy on another instance, or a copy that a recovery pass read before the attempt ended, can deliver it again before its retry time. This is not new, and it happens less often than before this change.
 
 ### Per-instance limit
 
@@ -222,10 +222,12 @@ step-events/slow-consumer=5
 | -- | -- |
 | `0` (default) | No limit. Jobs go out highest priority first, as before. For equal priority, consumers take turns, where before the order was not fixed. |
 | `N > 0` | Each consumer can have up to `N` deliveries running on each instance. |
+| Not a non-negative integer | The broker logs a warning and uses `0` (no limit). |
 
 **`[consumer-max-concurrency]`** holds overrides for single consumers. The value can be higher or lower than the default.
 
 - The key is `channelID/consumerID` (one consumer on one channel) or `consumerID` (that consumer ID on every channel).
+- A `consumerID` key sets the limit for each channel separately. For example, `slow=2` with consumer `slow` on 3 channels allows 6 deliveries at once to that consumer. To limit the total, set a lower value.
 - When both keys match, `channelID/consumerID` wins.
 - `0` removes the limit for that consumer.
 - IDs are case-sensitive.
