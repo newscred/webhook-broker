@@ -53,7 +53,7 @@ Only the dispatcher changes: how the broker queues jobs in memory and gives them
 | 1. Producer publishes a message | | No change |
 | 2. Broker stores it and makes one delivery job per consumer | | No change |
 | 3. Job is queued in memory | One shared priority queue | The lane of the job's consumer |
-| 4. A free worker gets a job | The front of the shared queue | The next lane, in round-robin order, that is below its max concurrency |
+| 4. A free worker gets a job | The front of the shared queue | The highest-priority job among the lanes below their max concurrency; round-robin between lanes for equal priority |
 | 5. Worker sends the HTTP request and waits | | No change |
 | 6. Delivery attempt ends | Worker is free again | Worker is free again, and the lane's in-flight count goes down by one |
 
@@ -82,8 +82,7 @@ Each lane holds:
 
 | Field | Purpose |
 | -- | -- |
-| Consumer record ID | The lane key. A consumer record belongs to one channel, so the same consumer ID on two channels has two lanes. |
-| Channel ID, consumer ID | Used to find the limit in the configuration and to label the metrics. |
+| Channel ID, consumer ID | The lane key. They are also used to find the limit in the configuration and to label the metrics. The same consumer ID on two channels has two lanes. A consumer that is deleted and created again while its old jobs run keeps one lane and one limit. |
 | Queue | A priority heap of the consumer's waiting jobs. |
 | In-flight count | The number of the consumer's deliveries running now. |
 | Limit | The consumer's max concurrency. |
@@ -113,7 +112,7 @@ sequenceDiagram
         S->>S: add lane to the ready list if it can run
     end
     W->>S: free, ask for next job
-    S->>L: take the first lane in the ready list
+    S->>L: take the ready lane whose next job has the highest priority
     L-->>S: highest-priority job, in-flight +1
     S->>S: put the lane at the end of the list if it can still run
     S-->>W: job
@@ -127,9 +126,10 @@ sequenceDiagram
 The rules:
 
 1. **Enqueue.** If the job ID is already held on this instance, drop the job. If not, record the ID, put the job in its consumer's lane (make the lane if it does not exist), and add the lane to the end of the ready list if it can run.
-2. **Next job.** The dispatch loop first waits for a free worker. Then it takes the first lane from the ready list, takes the lane's top job, and increases the lane's in-flight count by one. If the lane can still run, it goes to the end of the ready list. If no lane can run, the loop waits until a job is queued or a delivery ends.
+2. **Next job.** The dispatch loop first waits for a free worker. Then it looks at the next job of each lane in the ready list and takes the lane whose next job has the highest priority. When several lanes have the same priority, it takes the one nearest the front of the list. It takes that lane's next job and increases the lane's in-flight count by one. If the lane can still run, it goes to the end of the ready list, so lanes with equal priority take turns. If no lane can run, the loop waits until a job is queued or a delivery ends.
 3. **Done.** When the delivery attempt ends (success, failure or timeout), remove the job ID from the held set and decrease the in-flight count by one. If the lane now has room and waiting jobs, add it to the ready list again. If it has no waiting and no running jobs, delete it.
-4. **Order in a lane.** A job with a higher priority goes first. For jobs with the same priority, the older job goes first.
+4. **Order.** A job with a higher priority goes first, across all lanes that can run, as it did with the shared queue. In a lane, the older of two jobs with the same priority goes first. A lane at its limit is skipped even when its next job has the highest priority.
+5. **Stop.** When the dispatcher stops, it drops the jobs that are still waiting in lanes. They stay queued in the database, and the next dispatcher queues them again.
 
 A job is taken from a lane only when a worker is ready for it. So a job never holds a slot while it waits for a worker.
 
@@ -193,7 +193,7 @@ gantt
 
 ### Why a limit, and not only round-robin
 
-Round-robin gives each lane one job per turn. It counts jobs, not time. An S job holds its worker 10 times longer than an F job, so with round-robin alone, S soon holds most of the workers again: each free worker goes to S half of the time, and S workers stay busy 10 times longer. The limit is the part that keeps workers free for other consumers. The round-robin makes sure that each lane with room gets a turn.
+Between lanes with equal priority, round-robin gives each lane one job per turn. It counts jobs, not time. An S job holds its worker 10 times longer than an F job, so with round-robin alone, S soon holds most of the workers again: each free worker goes to S half of the time, and S workers stay busy 10 times longer. The limit is the part that keeps workers free for other consumers. The round-robin makes sure that each lane with room gets a turn.
 
 ### Duplicate jobs
 
@@ -220,7 +220,7 @@ step-events/slow-consumer=5
 
 | Value | Result |
 | -- | -- |
-| `0` (default) | No limit. Delivery works as before this change. |
+| `0` (default) | No limit. Jobs go out highest priority first, as before. For equal priority, consumers take turns, where before the order was not fixed. |
 | `N > 0` | Each consumer can have up to `N` deliveries running on each instance. |
 
 **`[consumer-max-concurrency]`** holds overrides for single consumers. The value can be higher or lower than the default.
@@ -229,7 +229,8 @@ step-events/slow-consumer=5
 - When both keys match, `channelID/consumerID` wins.
 - `0` removes the limit for that consumer.
 - IDs are case-sensitive.
-- The broker ignores a value that is not a non-negative integer, and the default applies.
+- The broker ignores a value that is not a non-negative integer, logs a warning, and uses the default.
+- Wrap a key that contains `:` or `=` in backticks (`` `ns:consumer`=2 ``). Without them, the INI parser splits the key.
 
 ```mermaid
 flowchart TD
