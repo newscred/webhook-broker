@@ -21,6 +21,7 @@ import (
 	"github.com/newscred/webhook-broker/controllers"
 	"github.com/newscred/webhook-broker/dispatcher"
 	"github.com/newscred/webhook-broker/dlq"
+	"github.com/newscred/webhook-broker/parking"
 	"github.com/newscred/webhook-broker/prune"
 	"github.com/newscred/webhook-broker/scheduler"
 	"github.com/newscred/webhook-broker/storage"
@@ -57,6 +58,7 @@ type HTTPServiceContainer struct {
 	Scheduler     scheduler.MessageScheduler
 	DLQUpdater    dlq.DLQSummaryUpdater
 	PauseRegistry dispatcher.PauseRegistry
+	Drainer       parking.Drainer
 }
 
 var (
@@ -279,20 +281,33 @@ func startWebhookBroker(inConfig *config.CLIConfig) {
 		// Setup Log Output
 		setupLogger(httpServiceContainer.Configuration)
 
-		// Start the pause snapshot refresh, the scheduler and the DLQ updater. The pause registry has already loaded its
-		// snapshot during construction (before the dispatcher was built), this only starts periodic refreshes.
-		httpServiceContainer.PauseRegistry.Start()
-		httpServiceContainer.Scheduler.Start()
-		httpServiceContainer.DLQUpdater.Start()
+		startBackgroundServices(httpServiceContainer)
 
 		<-httpServiceContainer.Listener.shutdownListener
 
-		httpServiceContainer.DLQUpdater.Stop()
-		httpServiceContainer.Scheduler.Stop()
-		httpServiceContainer.Dispatcher.Stop()
-		httpServiceContainer.PauseRegistry.Stop()
+		stopBackgroundServices(httpServiceContainer)
 	}
 	inConfig.StopWatcher()
+}
+
+// startBackgroundServices starts the pause snapshot refresh, the scheduler, the DLQ updater and the parked job drainer.
+// The pause registry has already loaded its snapshot during construction (before the dispatcher was built); this only
+// starts its periodic refresh.
+func startBackgroundServices(httpServiceContainer *HTTPServiceContainer) {
+	httpServiceContainer.PauseRegistry.Start()
+	httpServiceContainer.Scheduler.Start()
+	httpServiceContainer.DLQUpdater.Start()
+	httpServiceContainer.Drainer.Start()
+}
+
+// stopBackgroundServices stops the background services; the drainer stops before the dispatcher so no hand-off is
+// enqueued into a stopped dispatcher, and the pause registry stops last
+func stopBackgroundServices(httpServiceContainer *HTTPServiceContainer) {
+	httpServiceContainer.Drainer.Stop()
+	httpServiceContainer.DLQUpdater.Stop()
+	httpServiceContainer.Scheduler.Stop()
+	httpServiceContainer.Dispatcher.Stop()
+	httpServiceContainer.PauseRegistry.Stop()
 }
 
 func setupLogger(logConfig config.LogConfig) {
@@ -374,7 +389,7 @@ func newJobParkingRepository(dataAccessor storage.DataAccessor) storage.JobParki
 }
 
 var (
-	httpServiceContainerInjectorSet = wire.NewSet(wire.Struct(new(HTTPServiceContainer), "Configuration", "Server", "DataAccessor", "Listener", "Dispatcher", "Scheduler", "DLQUpdater", "PauseRegistry"))
+	httpServiceContainerInjectorSet = wire.NewSet(wire.Struct(new(HTTPServiceContainer), "Configuration", "Server", "DataAccessor", "Listener", "Dispatcher", "Scheduler", "DLQUpdater", "PauseRegistry", "Drainer"))
 	configInjectorSet               = wire.NewSet(httpServiceContainerInjectorSet, NewServerListener, GetMigrationConfig, wire.Bind(new(controllers.ServerLifecycleListener), new(*ServerLifecycleListenerImpl)), config.ConfigInjector)
-	relationalDBWithControllerSet   = wire.NewSet(controllers.ControllerInjector, storage.GetNewDataAccessor, newLockRepository, newDeliveryJobRepository, newAppRepository, newChannelRepository, newProducerRepository, newConsumerRepository, newMessageRepository, newScheduledMessageRepository, newDLQSummaryRepository, newDispatchPauseRepository, newJobParkingRepository, dispatcher.MetricsInjector, dispatcher.DispatcherInjector, scheduler.SchedulerInjector, dlq.DLQInjector)
+	relationalDBWithControllerSet   = wire.NewSet(controllers.ControllerInjector, storage.GetNewDataAccessor, newLockRepository, newDeliveryJobRepository, newAppRepository, newChannelRepository, newProducerRepository, newConsumerRepository, newMessageRepository, newScheduledMessageRepository, newDLQSummaryRepository, newDispatchPauseRepository, newJobParkingRepository, dispatcher.MetricsInjector, dispatcher.DispatcherInjector, scheduler.SchedulerInjector, dlq.DLQInjector, parking.DrainerInjector)
 )

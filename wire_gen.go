@@ -11,6 +11,7 @@ import (
 	"github.com/newscred/webhook-broker/controllers"
 	"github.com/newscred/webhook-broker/dispatcher"
 	"github.com/newscred/webhook-broker/dlq"
+	"github.com/newscred/webhook-broker/parking"
 	"github.com/newscred/webhook-broker/scheduler"
 	"github.com/newscred/webhook-broker/storage"
 )
@@ -81,30 +82,32 @@ func GetHTTPServer(cliConfig *config.CLIConfig) (*HTTPServiceContainer, error) {
 	dlqStatusController := controllers.NewDLQStatusController(dlqSummaryRepository)
 	dlqPurgeController := controllers.NewDLQPurgeController(channelRepository, consumerRepository, deliveryJobRepository, dlqSummaryRepository, configConfig, metricsContainer)
 	deadJobDeleteController := controllers.NewDeadJobDeleteController(channelRepository, consumerRepository, deliveryJobRepository, dlqSummaryRepository, configConfig, metricsContainer)
+	internalJobEnqueueController := controllers.NewInternalJobEnqueueController(deliveryJobRepository, messageDispatcher, configConfig)
 	handler := dispatcher.NewPrometheusHandler()
 	controllersControllers := &controllers.Controllers{
-		StatusController:            statusController,
-		ProducersController:         producersController,
-		ProducerController:          producerController,
-		ChannelController:           channelController,
-		ConsumerController:          consumerController,
-		ConsumersController:         consumersController,
-		JobsController:              jobsController,
-		JobController:               jobController,
-		BroadcastController:         broadcastController,
-		MessageController:           messageController,
-		MessagesController:          messagesController,
-		DLQController:               dlqController,
-		ChannelsController:          channelsController,
-		MessagesStatusController:    messagesStatusController,
-		JobRequeueController:        jobRequeueController,
-		JobStatusController:         jobStatusController,
-		ScheduledMessageController:  scheduledMessageController,
-		ScheduledMessagesController: scheduledMessagesController,
-		DLQStatusController:         dlqStatusController,
-		DLQPurgeController:          dlqPurgeController,
-		DeadJobDeleteController:     deadJobDeleteController,
-		MetricsHandler:              handler,
+		StatusController:             statusController,
+		ProducersController:          producersController,
+		ProducerController:           producerController,
+		ChannelController:            channelController,
+		ConsumerController:           consumerController,
+		ConsumersController:          consumersController,
+		JobsController:               jobsController,
+		JobController:                jobController,
+		BroadcastController:          broadcastController,
+		MessageController:            messageController,
+		MessagesController:           messagesController,
+		DLQController:                dlqController,
+		ChannelsController:           channelsController,
+		MessagesStatusController:     messagesStatusController,
+		JobRequeueController:         jobRequeueController,
+		JobStatusController:          jobStatusController,
+		ScheduledMessageController:   scheduledMessageController,
+		ScheduledMessagesController:  scheduledMessagesController,
+		DLQStatusController:          dlqStatusController,
+		DLQPurgeController:           dlqPurgeController,
+		DeadJobDeleteController:      deadJobDeleteController,
+		InternalJobEnqueueController: internalJobEnqueueController,
+		MetricsHandler:               handler,
 	}
 	router := controllers.NewRouter(controllersControllers)
 	server := controllers.ConfigureAPI(configConfig, serverLifecycleListenerImpl, router, configConfig)
@@ -112,6 +115,8 @@ func GetHTTPServer(cliConfig *config.CLIConfig) (*HTTPServiceContainer, error) {
 	messageScheduler := scheduler.NewMessageScheduler(schedulerConfiguration)
 	dlqSummaryUpdaterConfiguration := dlq.NewDLQSummaryUpdaterConfiguration(dlqSummaryRepository, deliveryJobRepository, consumerRepository, channelRepository, lockRepository, configConfig, metricsContainer)
 	dlqSummaryUpdater := dlq.NewDLQSummaryUpdater(dlqSummaryUpdaterConfiguration)
+	drainerConfiguration := parking.NewDrainerConfiguration(jobParkingRepository, lockRepository, consumerRepository, messageDispatcher, configConfig, configConfig, configConfig, metricsContainer)
+	drainer := parking.NewDrainer(drainerConfiguration)
 	httpServiceContainer := &HTTPServiceContainer{
 		Configuration: configConfig,
 		Server:        server,
@@ -121,6 +126,7 @@ func GetHTTPServer(cliConfig *config.CLIConfig) (*HTTPServiceContainer, error) {
 		Scheduler:     messageScheduler,
 		DLQUpdater:    dlqSummaryUpdater,
 		PauseRegistry: pauseRegistry,
+		Drainer:       drainer,
 	}
 	return httpServiceContainer, nil
 }
