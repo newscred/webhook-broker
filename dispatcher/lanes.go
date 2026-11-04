@@ -55,7 +55,9 @@ func laneIdentity(job *Job) (channelID, consumerID, key string) {
 	} else if job.Data.Message != nil && job.Data.Message.BroadcastedTo != nil {
 		channelID = job.Data.Message.BroadcastedTo.ChannelID
 	}
-	return channelID, consumerID, job.Data.Listener.ID.String()
+	// Keyed like the limit lookup, so a consumer deleted and created again while its old jobs still
+	// run shares one lane, and one limit, with the new record.
+	return channelID, consumerID, channelID + "/" + consumerID
 }
 
 // enqueue adds the job to its consumer's lane; it returns false and drops the job when the same
