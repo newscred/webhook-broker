@@ -16,6 +16,34 @@ type DeliveryJobRepository struct {
 	mock.Mock
 }
 
+// CountJobsForConsumer provides a mock function with given fields: consumerInternalID, jobStatus
+func (_m *DeliveryJobRepository) CountJobsForConsumer(consumerInternalID string, jobStatus data.JobStatus) (int64, error) {
+	ret := _m.Called(consumerInternalID, jobStatus)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CountJobsForConsumer")
+	}
+
+	var r0 int64
+	var r1 error
+	if rf, ok := ret.Get(0).(func(string, data.JobStatus) (int64, error)); ok {
+		return rf(consumerInternalID, jobStatus)
+	}
+	if rf, ok := ret.Get(0).(func(string, data.JobStatus) int64); ok {
+		r0 = rf(consumerInternalID, jobStatus)
+	} else {
+		r0 = ret.Get(0).(int64)
+	}
+
+	if rf, ok := ret.Get(1).(func(string, data.JobStatus) error); ok {
+		r1 = rf(consumerInternalID, jobStatus)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // DeleteDeadJob provides a mock function with given fields: job, maxRetryCount
 func (_m *DeliveryJobRepository) DeleteDeadJob(job *data.DeliveryJob, maxRetryCount uint) (int64, error) {
 	ret := _m.Called(job, maxRetryCount)

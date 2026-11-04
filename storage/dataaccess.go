@@ -99,6 +99,8 @@ type DeliveryJobRepository interface {
 	GetDeadJobCountsSinceCheckpoint(since time.Time) (map[string]int64, error)
 	// GetQueuedJobsByIDs loads the jobs with the given ids that are currently QUEUED; unknown or non-QUEUED ids are skipped
 	GetQueuedJobsByIDs(ids []string) ([]*data.DeliveryJob, error)
+	// CountJobsForConsumer returns the number of jobs of one consumer (internal id) in the given status
+	CountJobsForConsumer(consumerInternalID string, jobStatus data.JobStatus) (int64, error)
 }
 
 // DispatchPauseRepository allows storage operations over DispatchPause
