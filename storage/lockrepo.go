@@ -55,14 +55,28 @@ func (lockRepo *LockDBRepository) TimeoutLocks(threshold time.Duration) (err err
 }
 
 // RenewLock refreshes attainedAt of a held lock so TimeoutLocks does not release it; returns ErrNoRowsUpdated if the
-// lock is no longer held (for example it was timed out and possibly attained by someone else)
+// lock is no longer held (for example it was timed out and possibly attained by someone else). attainedAt has second
+// precision, so a renew within the same second changes no row; MySQL reports changed (not matched) rows, hence the
+// existence check instead of relying on the affected row count.
 func (lockRepo *LockDBRepository) RenewLock(lock *data.Lock) (err error) {
 	if lock == nil {
 		return ErrNoLock
 	}
 	renewedAt := time.Now()
-	err = transactionalSingleRowWriteExec(lockRepo.db, emptyOps, "UPDATE `lock` SET attainedAt = ? WHERE lockId like ?",
-		args2SliceFnWrapper(renewedAt, lock.LockID))
+	err = transactionalWrites(lockRepo.db, func(tx *sql.Tx) error {
+		if execErr := inTransactionExec(tx, emptyOps, "UPDATE `lock` SET attainedAt = ? WHERE lockId like ?",
+			args2SliceFnWrapper(renewedAt, lock.LockID), int64(0)); execErr != nil {
+			return execErr
+		}
+		var held int
+		if scanErr := tx.QueryRow("SELECT COUNT(*) FROM `lock` WHERE lockId like ?", lock.LockID).Scan(&held); scanErr != nil {
+			return scanErr
+		}
+		if held == 0 {
+			return ErrNoRowsUpdated
+		}
+		return nil
+	})
 	if err == nil {
 		lock.AttainedAt = renewedAt
 	}
