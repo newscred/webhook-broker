@@ -233,16 +233,19 @@ func TestLaneScheduler_PerConsumerMetrics(t *testing.T) {
 	s := newLaneScheduler(fixedLimits(map[string]uint{"lane-metrics": 1}), counter)
 	queued := counter.ConsumerQueuedJobCount.WithLabelValues("lane-metrics-channel", "lane-metrics")
 	inflight := counter.ConsumerInflightJobCount.WithLabelValues("lane-metrics-channel", "lane-metrics")
+	queuedBefore, inflightBefore := gaugeValue(t, queued), gaugeValue(t, inflight)
 	s.enqueue(newLaneTestJob(consumer, 0))
 	s.enqueue(newLaneTestJob(consumer, 0))
-	assert.Equal(t, float64(2), gaugeValue(t, queued))
+	assert.Equal(t, float64(2), gaugeValue(t, queued)-queuedBefore)
 
 	job := s.tryNext()
-	assert.Equal(t, float64(1), gaugeValue(t, queued))
-	assert.Equal(t, float64(1), gaugeValue(t, inflight))
+	assert.Equal(t, float64(1), gaugeValue(t, queued)-queuedBefore)
+	assert.Equal(t, float64(1), gaugeValue(t, inflight)-inflightBefore)
 
 	s.done(job)
-	assert.Equal(t, float64(0), gaugeValue(t, inflight))
+	assert.Equal(t, float64(0), gaugeValue(t, inflight)-inflightBefore)
+	s.discardQueued()
+	assert.Equal(t, float64(0), gaugeValue(t, queued)-queuedBefore)
 }
 
 func TestLaneScheduler_DiscardQueuedClearsQueuedJobsAndGauges(t *testing.T) {
