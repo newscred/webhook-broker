@@ -273,22 +273,65 @@ func TestLaneScheduler_DiscardQueuedClearsQueuedJobsAndGauges(t *testing.T) {
 	assert.Empty(t, s.tracked)
 }
 
-// Generated with assistance from Claude AI
-
 func TestLaneScheduler_IsHeld(t *testing.T) {
 	consumer := newLaneTestConsumer(t, "lane-held-channel", "lane-held")
 	s := newLaneScheduler(fixedLimits(nil), counter)
 	job := newLaneTestJob(consumer, 0)
-	id := job.Data.ID.String()
-	assert.False(t, s.isHeld(id))
+	assert.False(t, s.isHeld(job.Data))
 	require.True(t, s.enqueue(job))
-	assert.True(t, s.isHeld(id), "a queued job is held")
+	assert.True(t, s.isHeld(job.Data), "a queued job is held")
 	running := s.tryNext()
 	require.NotNil(t, running)
-	assert.True(t, s.isHeld(id), "a running job is held")
+	assert.True(t, s.isHeld(job.Data), "a running job is held")
 	s.done(running)
-	assert.False(t, s.isHeld(id), "a finished job is no longer held")
+	assert.False(t, s.isHeld(job.Data), "a finished job is no longer held")
 	require.True(t, s.enqueue(NewJob(job.Data)))
 	s.discardQueued()
-	assert.False(t, s.isHeld(id), "a discarded job is no longer held")
+	assert.False(t, s.isHeld(job.Data), "a discarded job is no longer held")
 }
+
+// A copy that waits in a lane goes out of date when an attempt on another instance fails and raises the retry attempt
+// count. A fresh copy then replaces its data in place, so the job keeps its place instead of being refused at the front
+// and queued again at the back.
+func TestLaneScheduler_RefreshesOutOfDateQueuedCopy(t *testing.T) {
+	consumer := newLaneTestConsumer(t, "lane-refresh-channel", "lane-refresh")
+	s := newLaneScheduler(fixedLimits(nil), counter)
+	first := newLaneTestJob(consumer, 0)
+	second := newLaneTestJob(consumer, 0)
+	require.True(t, s.enqueue(first))
+	require.True(t, s.enqueue(second))
+
+	freshData := *first.Data
+	freshData.RetryAttemptCount = 1
+	assert.False(t, s.isHeld(&freshData), "an out-of-date waiting copy must not stop the recovery pass")
+	assert.False(t, s.enqueue(NewJob(&freshData)), "the fresh copy is not queued twice")
+	assert.True(t, s.isHeld(&freshData), "the held copy is now current")
+
+	taken := s.tryNext()
+	require.NotNil(t, taken)
+	assert.Equal(t, first.Data.ID, taken.Data.ID, "the refreshed job keeps its place in the lane")
+	assert.Equal(t, uint(1), taken.Data.RetryAttemptCount, "the worker gets the fresh copy")
+
+	// a running copy is never swapped: its attempt settles first
+	newerData := *taken.Data
+	newerData.RetryAttemptCount = 2
+	assert.True(t, s.isHeld(&newerData), "a running copy is held whatever its count")
+	assert.False(t, s.enqueue(NewJob(&newerData)))
+	assert.Equal(t, uint(1), taken.Data.RetryAttemptCount, "a running copy is not modified")
+
+	// an older copy never replaces a newer one
+	olderData := *second.Data
+	olderData.RetryAttemptCount = 0
+	secondFresh := *second.Data
+	secondFresh.RetryAttemptCount = 3
+	assert.False(t, s.enqueue(NewJob(&secondFresh)))
+	assert.False(t, s.enqueue(NewJob(&olderData)))
+	assert.True(t, s.isHeld(&olderData))
+	next := s.tryNext()
+	require.NotNil(t, next)
+	assert.Equal(t, uint(3), next.Data.RetryAttemptCount)
+	s.done(taken)
+	s.done(next)
+}
+
+// Generated with assistance from Claude AI

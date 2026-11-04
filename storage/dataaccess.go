@@ -71,6 +71,8 @@ type MessageRepository interface {
 // DeliveryJobRepository allows storage operations over DeliveryJob
 type DeliveryJobRepository interface {
 	DispatchMessage(message *data.Message, deliveryJobs ...*data.DeliveryJob) error
+	// MarkJobInflight moves the job from QUEUED to INFLIGHT only if its retry attempt count in the DB matches the object's,
+	// so an out-of-date in-memory copy is refused (ErrNoRowsUpdated)
 	MarkJobInflight(deliveryJob *data.DeliveryJob) error
 	MarkJobDelivered(deliveryJob *data.DeliveryJob) error
 	MarkJobDead(deliveryJob *data.DeliveryJob) error

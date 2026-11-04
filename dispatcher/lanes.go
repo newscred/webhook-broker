@@ -2,6 +2,8 @@ package dispatcher
 
 import (
 	"sync"
+
+	"github.com/newscred/webhook-broker/storage/data"
 )
 
 // consumerLane holds the jobs waiting for one consumer and how many of its deliveries are running.
@@ -23,6 +25,12 @@ func (lane *consumerLane) canRun() bool {
 	return lane.queue.Len() > 0 && lane.hasRoom()
 }
 
+// heldJob is a job that the scheduler holds, either waiting in its lane or handed to a worker.
+type heldJob struct {
+	job     *Job
+	running bool
+}
+
 // laneScheduler hands jobs to workers one consumer lane at a time, highest priority first and in
 // round-robin order for equal priority, and skips any lane that already runs its limit of deliveries. A slow consumer can therefore only hold up
 // its own jobs, never another consumer's. It also drops a job already queued or running on this
@@ -31,7 +39,7 @@ type laneScheduler struct {
 	mu       sync.Mutex
 	lanes    map[string]*consumerLane
 	ready    []*consumerLane
-	tracked  map[string]struct{}
+	tracked  map[string]*heldJob
 	seq      uint64
 	limitFor func(channelID, consumerID string) uint
 	metrics  *MetricsContainer
@@ -41,7 +49,7 @@ type laneScheduler struct {
 func newLaneScheduler(limitFor func(channelID, consumerID string) uint, metrics *MetricsContainer) *laneScheduler {
 	return &laneScheduler{
 		lanes:    make(map[string]*consumerLane),
-		tracked:  make(map[string]struct{}),
+		tracked:  make(map[string]*heldJob),
 		limitFor: limitFor,
 		metrics:  metrics,
 		wake:     make(chan struct{}, 1),
@@ -61,15 +69,21 @@ func laneIdentity(job *Job) (channelID, consumerID, key string) {
 }
 
 // enqueue adds the job to its consumer's lane; it returns false and drops the job when the same
-// job is already queued or running on this instance.
+// job is already queued or running on this instance. When the held copy is still waiting and is
+// out of date (a later attempt elsewhere raised the retry attempt count), the fresh copy's data
+// replaces it in place, keeping its place in the lane; otherwise MarkJobInflight would refuse the
+// old copy only once it reached the front, and the job would then queue again at the back.
 func (s *laneScheduler) enqueue(job *Job) bool {
 	jobID := job.Data.ID.String()
 	s.mu.Lock()
-	if _, exists := s.tracked[jobID]; exists {
+	if held, exists := s.tracked[jobID]; exists {
+		if !held.running && job.Data.RetryAttemptCount > held.job.Data.RetryAttemptCount {
+			held.job.Data = job.Data
+		}
 		s.mu.Unlock()
 		return false
 	}
-	s.tracked[jobID] = struct{}{}
+	s.tracked[jobID] = &heldJob{job: job}
 	channelID, consumerID, key := laneIdentity(job)
 	lane, ok := s.lanes[key]
 	if !ok {
@@ -86,12 +100,15 @@ func (s *laneScheduler) enqueue(job *Job) bool {
 	return true
 }
 
-// isHeld reports whether the job is queued or running on this instance.
-func (s *laneScheduler) isHeld(jobID string) bool {
+// isHeld reports whether this instance already holds the job (queued or running) with a retry
+// attempt count at least as high as the given copy's, so that queueing the copy would change
+// nothing. A held copy that is still waiting with a lower count is not "held" here: enqueue then
+// refreshes it with the given copy.
+func (s *laneScheduler) isHeld(job *data.DeliveryJob) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, held := s.tracked[jobID]
-	return held
+	held, exists := s.tracked[job.ID.String()]
+	return exists && (held.running || held.job.Data.RetryAttemptCount >= job.RetryAttemptCount)
 }
 
 func (s *laneScheduler) markReadyLocked(lane *consumerLane) {
@@ -140,6 +157,9 @@ func (s *laneScheduler) tryNext() *Job {
 	s.ready = s.ready[:len(s.ready)-1]
 	lane.ready = false
 	job := lane.queue.Dequeue()
+	if held, ok := s.tracked[job.Data.ID.String()]; ok {
+		held.running = true
+	}
 	lane.inflight++
 	s.metrics.ConsumerQueuedJobCount.WithLabelValues(lane.channelID, lane.consumerID).Dec()
 	s.metrics.ConsumerInflightJobCount.WithLabelValues(lane.channelID, lane.consumerID).Inc()
