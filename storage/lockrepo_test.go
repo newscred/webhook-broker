@@ -79,6 +79,15 @@ func TestRenewLock(t *testing.T) {
 		assert.True(t, attainedAt.After(original))
 		assert.Nil(t, lockRepo.ReleaseLock(lock))
 	})
+	t.Run("SameSecondAsAttained", func(t *testing.T) {
+		t.Parallel()
+		lock, _ := data.NewLock(getMessageForJob())
+		assert.Nil(t, lockRepo.TryLock(lock))
+		for i := 0; i < 3; i++ {
+			assert.Nil(t, lockRepo.RenewLock(lock))
+		}
+		assert.Nil(t, lockRepo.ReleaseLock(lock))
+	})
 	t.Run("TimedOut", func(t *testing.T) {
 		lock, _ := data.NewLock(getMessageForJob())
 		lock.AttainedAt = lock.AttainedAt.Add(-1 * time.Hour)
