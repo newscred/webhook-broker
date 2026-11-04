@@ -376,9 +376,30 @@ func TestQueueJobReparksWhenSnapshotPaused(t *testing.T) {
 		failing.On("ReparkQueuedJob", pausedJob).Return(false, errors.New("db down"))
 		impl := newBareDispatcher(newFakePauseRegistry(pausedJob.Listener.ID.String()), failing)
 		queueJob(impl, pausedJob)
-		assert.Equal(t, 0, len(impl.jobQueue))
+		assert.Equal(t, 1, len(impl.jobQueue), "a job that could not be re-parked is queued; MarkJobInflight checks the pause again")
 		assert.Contains(t, buf.String(), "could not re-park job")
 	})
+	t.Run("StaleSnapshotQueues", func(t *testing.T) {
+		notPausedInDB := new(storagemocks.JobParkingRepository)
+		notPausedInDB.On("ReparkQueuedJob", pausedJob).Return(false, nil).Once()
+		impl := newBareDispatcher(newFakePauseRegistry(pausedJob.Listener.ID.String()), notPausedInDB)
+		queueJob(impl, pausedJob)
+		assert.Equal(t, 1, len(impl.jobQueue))
+		notPausedInDB.AssertExpectations(t)
+	})
+}
+
+func TestEnqueueJobsStaleSnapshotQueues(t *testing.T) {
+	resumedJob := newPushJob(data.PushConsumer)
+	parkingRepo := new(storagemocks.JobParkingRepository)
+	// Snapshot still says paused, but the pause row is gone so the conditional re-park moves nothing
+	parkingRepo.On("ReparkQueuedJob", resumedJob).Return(false, nil).Once()
+	impl := newBareDispatcher(newFakePauseRegistry(resumedJob.Listener.ID.String()), parkingRepo)
+	before := counterValue(t, counter.ParkedJobsTotal.WithLabelValues(ParkReasonHandoff))
+	assert.Equal(t, 1, impl.EnqueueJobs([]*data.DeliveryJob{resumedJob}))
+	assert.Equal(t, 1, len(impl.jobQueue))
+	parkingRepo.AssertExpectations(t)
+	assert.Equal(t, float64(0), counterValue(t, counter.ParkedJobsTotal.WithLabelValues(ParkReasonHandoff))-before)
 }
 
 func TestEnqueueJobsAndQueueDepth(t *testing.T) {
