@@ -21,6 +21,7 @@ import (
 	"github.com/newscred/webhook-broker/controllers"
 	"github.com/newscred/webhook-broker/storage"
 	"github.com/newscred/webhook-broker/storage/data"
+	dispatchermocks "github.com/newscred/webhook-broker/dispatcher/mocks"
 	"github.com/newscred/webhook-broker/storage/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -518,4 +519,49 @@ func TestCreateSeedData_ErrorFlows(t *testing.T) {
 		createSeedData(dataAccessor, configuration)
 		dataAccessor.AssertExpectations(t)
 	})
+}
+
+// lifecycleRecorder records Start/Stop calls of background services in order
+type lifecycleRecorder struct {
+	calls []string
+}
+
+type recordingService struct {
+	name     string
+	recorder *lifecycleRecorder
+}
+
+func (s *recordingService) Start() { s.recorder.calls = append(s.recorder.calls, s.name+".Start") }
+func (s *recordingService) Stop()  { s.recorder.calls = append(s.recorder.calls, s.name+".Stop") }
+
+type recordingDispatcher struct {
+	dispatchermocks.MessageDispatcher
+	recorder *lifecycleRecorder
+}
+
+func (d *recordingDispatcher) Stop() { d.recorder.calls = append(d.recorder.calls, "Dispatcher.Stop") }
+
+type recordingPauseRegistry struct {
+	dispatchermocks.PauseRegistry
+	recorder *lifecycleRecorder
+}
+
+func (r *recordingPauseRegistry) Start() { r.recorder.calls = append(r.recorder.calls, "PauseRegistry.Start") }
+func (r *recordingPauseRegistry) Stop()  { r.recorder.calls = append(r.recorder.calls, "PauseRegistry.Stop") }
+
+func TestBackgroundServicesLifecycleOrder(t *testing.T) {
+	recorder := &lifecycleRecorder{}
+	container := &HTTPServiceContainer{
+		Dispatcher:    &recordingDispatcher{recorder: recorder},
+		PauseRegistry: &recordingPauseRegistry{recorder: recorder},
+		Scheduler:     &recordingService{name: "Scheduler", recorder: recorder},
+		DLQUpdater:    &recordingService{name: "DLQUpdater", recorder: recorder},
+		Drainer:       &recordingService{name: "Drainer", recorder: recorder},
+	}
+	startBackgroundServices(container)
+	assert.Equal(t, []string{"PauseRegistry.Start", "Scheduler.Start", "DLQUpdater.Start", "Drainer.Start"}, recorder.calls)
+	recorder.calls = nil
+	stopBackgroundServices(container)
+	assert.Equal(t, []string{"Drainer.Stop", "DLQUpdater.Stop", "Scheduler.Stop", "Dispatcher.Stop", "PauseRegistry.Stop"}, recorder.calls,
+		"the drainer stops before the dispatcher and the pause registry stops last")
 }
