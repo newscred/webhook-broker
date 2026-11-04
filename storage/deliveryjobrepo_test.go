@@ -788,3 +788,33 @@ func TestGetDeadJobCountsSinceCheckpoint(t *testing.T) {
 }
 
 // Generated with assistance from Claude AI
+
+// A copy of a job read before a later attempt failed must not be marked in flight: the job is queued again, but with a
+// higher retry attempt count and a later earliest next attempt. Delivering the old copy would skip the backoff and
+// write a retry count that is too low.
+func TestMarkJobInflight_RefusesStaleCopy(t *testing.T) {
+	djRepo := getDeliverJobRepository()
+	msgRepo := getMessageRepository()
+	message := getMessageForJob()
+	assert.Nil(t, msgRepo.Create(message))
+	job, err := data.NewDeliveryJob(message, consumers[0])
+	assert.Nil(t, err)
+	assert.Nil(t, djRepo.DispatchMessage(message, job))
+	staleCopy := *job
+
+	// another instance delivers the job and the attempt fails
+	assert.Nil(t, djRepo.MarkJobInflight(job))
+	assert.Nil(t, djRepo.MarkJobRetry(job, time.Minute))
+	assert.Equal(t, uint(1), job.RetryAttemptCount)
+
+	assert.Equal(t, ErrNoRowsUpdated, djRepo.MarkJobInflight(&staleCopy), "the out-of-date copy must be refused")
+	assert.Equal(t, data.JobQueued, staleCopy.Status)
+	reloaded, err := djRepo.GetByID(job.ID.String())
+	assert.Nil(t, err)
+	assert.Equal(t, data.JobQueued, reloaded.Status)
+	assert.Equal(t, uint(1), reloaded.RetryAttemptCount)
+
+	// a fresh copy, as the recovery workers load it, is accepted
+	assert.Nil(t, djRepo.MarkJobInflight(reloaded))
+	assert.Equal(t, data.JobInflight, reloaded.Status)
+}

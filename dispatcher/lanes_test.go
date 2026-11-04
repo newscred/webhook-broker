@@ -274,3 +274,21 @@ func TestLaneScheduler_DiscardQueuedClearsQueuedJobsAndGauges(t *testing.T) {
 }
 
 // Generated with assistance from Claude AI
+
+func TestLaneScheduler_IsHeld(t *testing.T) {
+	consumer := newLaneTestConsumer(t, "lane-held-channel", "lane-held")
+	s := newLaneScheduler(fixedLimits(nil), counter)
+	job := newLaneTestJob(consumer, 0)
+	id := job.Data.ID.String()
+	assert.False(t, s.isHeld(id))
+	require.True(t, s.enqueue(job))
+	assert.True(t, s.isHeld(id), "a queued job is held")
+	running := s.tryNext()
+	require.NotNil(t, running)
+	assert.True(t, s.isHeld(id), "a running job is held")
+	s.done(running)
+	assert.False(t, s.isHeld(id), "a finished job is no longer held")
+	require.True(t, s.enqueue(NewJob(job.Data)))
+	s.discardQueued()
+	assert.False(t, s.isHeld(id), "a discarded job is no longer held")
+}

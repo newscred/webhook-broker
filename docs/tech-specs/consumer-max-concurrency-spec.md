@@ -5,7 +5,7 @@
 | _Version_     | 1                |
 | _By_          | Shadman Shadab   |
 | _Date_        | November 2, 2026 |
-| _Last Update_ | November 2, 2026 |
+| _Last Update_ | November 4, 2026 |
 
 ## Problem Statement / Goal
 
@@ -197,7 +197,9 @@ Between lanes with equal priority, round-robin gives each lane one job per turn.
 
 ### Duplicate jobs
 
-The recovery workers run every `rational-delay-in-seconds` and queue all jobs that the database shows as queued. Before this change, a job that was already in the in-memory queue went in again on each pass. Each copy later failed when it tried to mark the job in flight. The scheduler now drops a job whose ID it already holds. This check is per instance, and it holds a job only until its attempt ends. `MarkJobInflight` accepts a job that the database shows as queued. So when a failed attempt puts a job back to queued, an old copy on another instance, or a copy that a recovery pass read before the attempt ended, can deliver it again before its retry time. This is not new, and it happens less often than before this change.
+The recovery workers run every `rational-delay-in-seconds` and queue all jobs that the database shows as queued. Before this change, a job that was already in the in-memory queue went in again on each pass. Each copy later failed when it tried to mark the job in flight. The scheduler now drops a job whose ID it already holds, and the recovery pass skips such a job before it takes the job's lock, so a large backlog that a consumer at its limit keeps does not cost a lock write per job on every pass. This check is per instance, and it holds a job only until its attempt ends.
+
+A copy can still go out of date. For example, instance A queues a job in a lane at its limit, instance B's recovery pass also queues it and delivers it, and the attempt fails, so the job is queued again with a higher retry attempt count and a later earliest next attempt. A's copy still has the old count. To refuse such a copy, `MarkJobInflight` accepts the job only when the database shows it as queued **and** its retry attempt count matches the copy's. The old copy then fails to go in flight, its slot is freed, and the next recovery pass queues a fresh copy when the job is due. Without this check, lanes make the problem worse than before, because a copy can wait in a lane for minutes: in a two-instance test with a failing consumer limited to 1, messages got 7 to 9 attempts instead of `1 + max-retry` = 6.
 
 ### Per-instance limit
 
@@ -250,6 +252,7 @@ A change to the configuration file takes effect in the same way as a change to a
 - Look at `consumer_inflight_job_count` for the consumer under normal load, and at its response time. Set the limit a little above the normal in-flight count.
 - A limit reduces the slow consumer's throughput: with limit `L` and a response time of `T` seconds, one instance delivers at most `L / T` jobs per second to that consumer. If the consumer must keep its throughput, raise `max-workers` when you set the limit.
 - A lane at its limit does not use free workers, even when no other lane has jobs. The free workers stay idle until other jobs arrive.
+- A consumer at its limit keeps a backlog of queued jobs. Each recovery pass, on every instance, still loads all the due queued jobs from the database (with their messages), even though it skips the ones the instance already holds. A very large backlog therefore costs database reads and memory on every pass; raise the limit or `max-workers`, or fix the consumer, rather than let the backlog grow without bound.
 
 ## Failure Handling
 

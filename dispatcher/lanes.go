@@ -86,6 +86,14 @@ func (s *laneScheduler) enqueue(job *Job) bool {
 	return true
 }
 
+// isHeld reports whether the job is queued or running on this instance.
+func (s *laneScheduler) isHeld(jobID string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, held := s.tracked[jobID]
+	return held
+}
+
 func (s *laneScheduler) markReadyLocked(lane *consumerLane) {
 	if !lane.ready && lane.canRun() {
 		lane.ready = true
