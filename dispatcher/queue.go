@@ -58,6 +58,16 @@ func (pq *PriorityQueue) Enqueue(job *Job) {
 	pq.queuedCounter.Inc()
 }
 
+// Peek returns the item next in order without removing it, or nil when the queue is empty
+func (pq *PriorityQueue) Peek() *Job {
+	pq.mu.Lock()
+	defer pq.mu.Unlock()
+	if len(pq.jobs) == 0 {
+		return nil
+	}
+	return pq.jobs[0]
+}
+
 // Dequeue pops the item next in order
 func (pq *PriorityQueue) Dequeue() *Job {
 	pq.mu.Lock()

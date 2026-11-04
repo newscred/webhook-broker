@@ -23,8 +23,8 @@ func (lane *consumerLane) canRun() bool {
 	return lane.queue.Len() > 0 && lane.hasRoom()
 }
 
-// laneScheduler hands jobs to workers one consumer lane at a time, in round-robin order, and skips
-// any lane that already runs its limit of deliveries. A slow consumer can therefore only hold up
+// laneScheduler hands jobs to workers one consumer lane at a time, highest priority first and in
+// round-robin order for equal priority, and skips any lane that already runs its limit of deliveries. A slow consumer can therefore only hold up
 // its own jobs, never another consumer's. It also drops a job already queued or running on this
 // instance, which the recovery workers would otherwise enqueue again on every pass.
 type laneScheduler struct {
@@ -98,27 +98,43 @@ func (s *laneScheduler) signal() {
 	}
 }
 
-// tryNext pops the next job from the lane at the head of the round-robin, or returns nil when no
-// lane can run.
+// tryNext pops the next job from the ready lane whose next job has the highest priority, or returns
+// nil when no lane can run. Lanes whose next jobs have equal priority are served in round-robin
+// order, because a lane that was just served goes to the end of the ready list.
 func (s *laneScheduler) tryNext() *Job {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for len(s.ready) > 0 {
-		lane := s.ready[0]
-		s.ready[0] = nil
-		s.ready = s.ready[1:]
-		lane.ready = false
+	best := -1
+	var bestPriority uint
+	runnable := s.ready[:0]
+	for _, lane := range s.ready {
 		if !lane.canRun() {
+			lane.ready = false
 			continue
 		}
-		job := lane.queue.Dequeue()
-		lane.inflight++
-		s.metrics.ConsumerQueuedJobCount.WithLabelValues(lane.channelID, lane.consumerID).Dec()
-		s.metrics.ConsumerInflightJobCount.WithLabelValues(lane.channelID, lane.consumerID).Inc()
-		s.markReadyLocked(lane)
-		return job
+		runnable = append(runnable, lane)
+		if priority := lane.queue.Peek().Priority; best < 0 || priority > bestPriority {
+			best, bestPriority = len(runnable)-1, priority
+		}
 	}
-	return nil
+	for i := len(runnable); i < len(s.ready); i++ {
+		s.ready[i] = nil
+	}
+	s.ready = runnable
+	if best < 0 {
+		return nil
+	}
+	lane := s.ready[best]
+	copy(s.ready[best:], s.ready[best+1:])
+	s.ready[len(s.ready)-1] = nil
+	s.ready = s.ready[:len(s.ready)-1]
+	lane.ready = false
+	job := lane.queue.Dequeue()
+	lane.inflight++
+	s.metrics.ConsumerQueuedJobCount.WithLabelValues(lane.channelID, lane.consumerID).Dec()
+	s.metrics.ConsumerInflightJobCount.WithLabelValues(lane.channelID, lane.consumerID).Inc()
+	s.markReadyLocked(lane)
+	return job
 }
 
 // next blocks until a job can run or stop is closed; it returns nil when stopped.

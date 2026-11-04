@@ -142,6 +142,41 @@ func TestLaneScheduler_PriorityThenFIFOWithinConsumer(t *testing.T) {
 	assert.Equal(t, []*Job{high, lowFirst, lowSecond, lowThird}, drainReady(s))
 }
 
+func TestLaneScheduler_HighestPriorityFirstAcrossConsumers(t *testing.T) {
+	busy := newLaneTestConsumer(t, "lane-xprio-channel", "lane-xprio-busy")
+	other := newLaneTestConsumer(t, "lane-xprio-channel", "lane-xprio-other")
+	urgent := newLaneTestConsumer(t, "lane-xprio-channel", "lane-xprio-urgent")
+	s := newLaneScheduler(fixedLimits(nil), counter)
+	for i := 0; i < 3; i++ {
+		s.enqueue(newLaneTestJob(busy, 0))
+	}
+	s.enqueue(newLaneTestJob(other, 0))
+	high := newLaneTestJob(urgent, 100)
+	s.enqueue(high)
+
+	assert.Equal(t, high, s.tryNext())
+	order := make([]string, 0)
+	for _, job := range drainReady(s) {
+		order = append(order, job.Data.Listener.ConsumerID)
+	}
+	assert.Equal(t, []string{"lane-xprio-busy", "lane-xprio-other", "lane-xprio-busy", "lane-xprio-busy"}, order)
+}
+
+func TestLaneScheduler_FullHighPriorityLaneDoesNotBlockOthers(t *testing.T) {
+	urgent := newLaneTestConsumer(t, "lane-xfull-channel", "lane-xfull-urgent")
+	other := newLaneTestConsumer(t, "lane-xfull-channel", "lane-xfull-other")
+	s := newLaneScheduler(fixedLimits(map[string]uint{"lane-xfull-urgent": 1}), counter)
+	first := newLaneTestJob(urgent, 100)
+	s.enqueue(first)
+	s.enqueue(newLaneTestJob(urgent, 100))
+	low := newLaneTestJob(other, 0)
+	s.enqueue(low)
+
+	assert.Equal(t, first, s.tryNext())
+	assert.Equal(t, low, s.tryNext())
+	assert.Nil(t, s.tryNext())
+}
+
 func TestLaneScheduler_RemovesIdleLane(t *testing.T) {
 	consumer := newLaneTestConsumer(t, "lane-idle-channel", "lane-idle")
 	s := newLaneScheduler(fixedLimits(nil), counter)
