@@ -35,6 +35,7 @@ type MessageDispatcherImpl struct {
 	scheduler                         *laneScheduler
 	schedulerStop                     chan struct{}
 	schedulerStopOnce                 sync.Once
+	assignerDone                      chan struct{}
 	stopTimeout                       time.Duration
 	rationalDelay                     time.Duration
 	brokerConfig                      config.BrokerConfig
@@ -294,12 +295,35 @@ func (msgDispatcher *MessageDispatcherImpl) Stop() {
 			anyRunning = localRun
 		}
 		wg.Wait()
+		msgDispatcher.releaseUnreadJobs(timeoutContext)
+	}
+}
+
+// releaseUnreadJobs frees the slot of each job that the assign loop gave to a worker which then
+// stopped without reading it. The job stays queued in the database for the next dispatcher.
+func (msgDispatcher *MessageDispatcherImpl) releaseUnreadJobs(ctx context.Context) {
+	select {
+	case <-msgDispatcher.assignerDone:
+	default:
+		select {
+		case <-msgDispatcher.assignerDone:
+		case <-ctx.Done():
+			return
+		}
+	}
+	for _, worker := range msgDispatcher.workers {
+		select {
+		case job := <-worker.jobChannel:
+			msgDispatcher.scheduler.done(job)
+		default:
+		}
 	}
 }
 
 // assignJobsToWorkers waits for an idle worker, then asks the scheduler for the next job. The job
 // is chosen only once a worker is free, so the round-robin across consumers sees the latest state.
 func (msgDispatcher *MessageDispatcherImpl) assignJobsToWorkers() {
+	defer close(msgDispatcher.assignerDone)
 	for {
 		var jobChannel chan *Job
 		select {
@@ -345,7 +369,7 @@ func NewMessageDispatcher(configuration *Configuration) MessageDispatcher {
 	msgRepo := configuration.MsgRepo
 	lockRepo := configuration.LockRepo
 	dispatcherImpl := &MessageDispatcherImpl{djRepo: djRepo, consumerRepo: consumerRepo, msgRepo: msgRepo, dispatcherStop: make(chan bool),
-		workerPool: make(chan chan *Job, brokerConfig.GetMaxWorkers()), scheduler: newLaneScheduler(brokerConfig.GetConsumerMaxConcurrency, configuration.MetricsCollector), schedulerStop: make(chan struct{}),
+		workerPool: make(chan chan *Job, brokerConfig.GetMaxWorkers()), scheduler: newLaneScheduler(brokerConfig.GetConsumerMaxConcurrency, configuration.MetricsCollector), schedulerStop: make(chan struct{}), assignerDone: make(chan struct{}),
 		messageRecoverWorkerStop: make(chan bool), jobQueue: make(chan *Job, brokerConfig.GetMaxMessageQueueSize()),
 		rationalDelay: brokerConfig.GetRationalDelay(), lockRepo: lockRepo, recoveryWorkersEnabled: brokerConfig.IsRecoveryWorkersEnabled(),
 		jobRecoverStaleInflightWorkerStop: make(chan bool), jobRecoverRetryWorkerStop: make(chan bool), brokerConfig: brokerConfig}
