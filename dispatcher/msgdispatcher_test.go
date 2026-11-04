@@ -858,3 +858,31 @@ func consumerBaseURL(consumer *data.Consumer) string {
 }
 
 // Generated with assistance from Claude AI
+
+func TestDispatcherStopReleasesJobsLeftInStoppedWorkers(t *testing.T) {
+	origDeliver := deliverJob
+	deliverJob = func(w *Worker, job *Job) { time.Sleep(200 * time.Microsecond) }
+	defer func() { deliverJob = origDeliver }()
+	consumer := newLaneTestConsumer(t, "stop-unread-channel", "stop-unread-consumer")
+	inflight := counter.ConsumerInflightJobCount.WithLabelValues("stop-unread-channel", "stop-unread-consumer")
+	start := gaugeValue(t, inflight)
+	for i := 0; i < 100; i++ {
+		brokerConf := new(configmocks.BrokerConfig)
+		brokerConf.On("GetMaxMessageQueueSize").Return(uint(100))
+		brokerConf.On("GetMaxWorkers").Return(uint(8))
+		brokerConf.On("IsRecoveryWorkersEnabled").Return(false)
+		brokerConf.On("GetRationalDelay").Return(100 * time.Millisecond)
+		brokerConf.On("GetMaxRetry").Return(uint8(5))
+		brokerConf.On("GetRetryBackoffDelays").Return([]time.Duration{5 * time.Second})
+		brokerConf.On("GetConsumerMaxConcurrency", mock.Anything, mock.Anything).Return(uint(0))
+		dispatcher := NewMessageDispatcher(getCompleteDispatcherConfiguration(dataAccessor.GetMessageRepository(), dataAccessor.GetDeliveryJobRepository(), dataAccessor.GetConsumerRepository(), brokerConf, configuration, dataAccessor.GetLockRepository())).(*MessageDispatcherImpl)
+		for j := 0; j < 50; j++ {
+			dispatcher.scheduler.enqueue(newLaneTestJob(consumer, 0))
+		}
+		dispatcher.Stop()
+		for _, worker := range dispatcher.workers {
+			assert.Len(t, worker.jobChannel, 0)
+		}
+	}
+	assert.Eventually(t, func() bool { return gaugeValue(t, inflight) == start }, time.Second, 10*time.Millisecond)
+}
