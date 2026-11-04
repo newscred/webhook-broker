@@ -19,6 +19,8 @@ func (status JobStatus) String() string {
 		return JobDeliveredStr
 	case JobDead:
 		return JobDeadStr
+	case JobParked:
+		return JobParkedStr
 	default:
 		return strconv.Itoa(int(status))
 	}
@@ -67,6 +69,16 @@ const (
 	JobDeadStr = "DEAD"
 )
 
+// The virtual parked status lives in its own const block on purpose: the block above maps
+// iota values to persisted job.status integers and must never be reordered or extended.
+const (
+	// JobParked marks a DeliveryJob loaded from the job_parking table. It is NEVER persisted to
+	// job.status; IsInValidState rejects it so a parked job can not be written to the job table.
+	JobParked JobStatus = 1100
+	// JobParkedStr is the string rep of JobParked
+	JobParkedStr = "PARKED"
+)
+
 // DeliveryJob represents the DTO object for deliverying a Message to a consumer
 type DeliveryJob struct {
 	BasePaginateable
@@ -102,6 +114,8 @@ func (job *DeliveryJob) QuickFix() bool {
 	case JobInflight:
 	case JobDelivered:
 	case JobDead:
+	case JobParked:
+		// Left as is; IsInValidState still rejects it for persistence into the job table
 	default:
 		job.Status = JobQueued
 		madeChanges = true

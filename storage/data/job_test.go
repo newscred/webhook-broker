@@ -159,6 +159,30 @@ func TestDJString(t *testing.T) {
 	assert.Equal(t, "1", JobStatus(1).String())
 }
 
+func TestJobParkedString(t *testing.T) {
+	assert.Equal(t, JobParkedStr, JobParked.String())
+	assert.Equal(t, "PARKED", JobParked.String())
+}
+
+func TestJobParkedNeverValidForPersistence(t *testing.T) {
+	job := getDeliveryJob()
+	assert.True(t, job.IsInValidState())
+	job.Status = JobParked
+	assert.False(t, job.QuickFix(), "QuickFix must leave a parked status untouched")
+	assert.Equal(t, JobParked, job.Status)
+	assert.False(t, job.IsInValidState())
+}
+
+// TestJobStatusPersistedValues guards the integers stored in job.status. If this fails, the
+// JobStatus iota block was edited, which would silently corrupt production data.
+func TestJobStatusPersistedValues(t *testing.T) {
+	assert.Equal(t, 1001, int(JobQueued))
+	assert.Equal(t, 1002, int(JobInflight))
+	assert.Equal(t, 1003, int(JobDelivered))
+	assert.Equal(t, 1004, int(JobDead))
+	assert.Equal(t, 1100, int(JobParked))
+}
+
 func TestGenericStatus(t *testing.T) {
 	t.Run("JobStatus", func(t *testing.T) {
 		status := JobStatus(JobQueued)
