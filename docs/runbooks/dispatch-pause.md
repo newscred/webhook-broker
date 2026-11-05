@@ -74,7 +74,9 @@ GROUP BY c.channelId, c.consumerId;
 ```
 
 For a very large backlog on a fragile downstream, consider lowering `drain-page-size` / `handoff-concurrency` first
-(config change restarts the node).
+(config change restarts the node). Drained jobs go through the consumer's dispatch lane, so a
+`[consumer-max-concurrency]` limit for the consumer also caps how many deliveries each node runs at once while the
+backlog drains; setting one before resuming is the gentlest way to bring a recovered downstream back.
 
 ## Resume
 
