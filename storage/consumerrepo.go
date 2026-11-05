@@ -60,9 +60,40 @@ func (consumerRepo *ConsumerDBRepository) insertConsumer(consumer *data.Consumer
 	return consumer, err
 }
 
-// Delete deletes consumer from DB
+// consumerJobDeleteBatchSize bounds how many job rows one transaction deletes when a consumer is deleted, so
+// deleting a consumer with a large backlog does not hold locks on the job table for long.
+var consumerJobDeleteBatchSize int64 = 5000
+
+// Delete deletes consumer from DB along with its delivery jobs. The job table references consumer with ON DELETE
+// RESTRICT, and the pruner only removes a job once its message is fully delivered and past retention, so without
+// this a consumer on a channel that keeps receiving messages could never be deleted. Jobs are deleted in committed
+// batches first; the jobs that arrive meanwhile are deleted in the same transaction as the consumer. If the request
+// is interrupted the batches already committed stay deleted, and retrying continues from there.
 func (consumerRepo *ConsumerDBRepository) Delete(consumer *data.Consumer) error {
-	return transactionalSingleRowWriteExec(consumerRepo.db, emptyOps, "DELETE from consumer WHERE channelId = ? and consumerId = ?", args2SliceFnWrapper(consumer.GetChannelIDSafely(), consumer.ConsumerID))
+	deleteJobsBatch := "DELETE FROM job WHERE id IN (SELECT id FROM (SELECT id FROM job WHERE consumerId = ? LIMIT ?) AS batch)"
+	for {
+		var rowsAffected int64
+		err := transactionalWrites(consumerRepo.db, func(tx *sql.Tx) error {
+			result, execErr := tx.Exec(deleteJobsBatch, consumer.ID, consumerJobDeleteBatchSize)
+			if execErr != nil {
+				return execErr
+			}
+			rowsAffected, execErr = result.RowsAffected()
+			return execErr
+		})
+		if err != nil {
+			return err
+		}
+		if rowsAffected < consumerJobDeleteBatchSize {
+			break
+		}
+	}
+	return transactionalWrites(consumerRepo.db,
+		func(tx *sql.Tx) error {
+			return inTransactionExec(tx, emptyOps, "DELETE FROM job WHERE consumerId = ?", args2SliceFnWrapper(consumer.ID), 0)
+		},
+		getTxWrapperForSingleWriteQuery(emptyOps, "DELETE from consumer WHERE channelId = ? and consumerId = ?", args2SliceFnWrapper(consumer.GetChannelIDSafely(), consumer.ConsumerID)),
+	)
 }
 
 // Get retrieves consumer for specific consumer, error if either consumer or channel does not exist

@@ -203,6 +203,39 @@ func TestConsumerDelete(t *testing.T) {
 		assert.Nil(t, err)
 
 	})
+	t.Run("DeleteConsumerWithJobs", func(t *testing.T) {
+		t.Parallel()
+		repo := getConsumerRepo()
+		djRepo := getDeliverJobRepository()
+		msgRepo := getMessageRepository()
+		consumerID := successfulDeleteTestConsumerID + "-with-jobs"
+		sampleConsumer, err := data.NewConsumer(channel1, consumerID, successfulGetTestToken, callbackURL, data.PullConsumerStr)
+		assert.Nil(t, err)
+		resultConsumer, err := repo.Store(sampleConsumer)
+		assert.Nil(t, err)
+		queuedMsg := getMessageForJob()
+		assert.Nil(t, msgRepo.Create(queuedMsg))
+		queuedJob, _ := data.NewDeliveryJob(queuedMsg, resultConsumer)
+		assert.Nil(t, djRepo.DispatchMessage(queuedMsg, queuedJob))
+		deliveredMsg := getMessageForJob()
+		assert.Nil(t, msgRepo.Create(deliveredMsg))
+		deliveredJob, _ := data.NewDeliveryJob(deliveredMsg, resultConsumer)
+		assert.Nil(t, djRepo.DispatchMessage(deliveredMsg, deliveredJob))
+		assert.Nil(t, djRepo.MarkJobInflight(deliveredJob))
+		assert.Nil(t, djRepo.MarkJobDelivered(deliveredJob))
+
+		err = repo.Delete(resultConsumer)
+		assert.Nil(t, err)
+
+		_, err = repo.Get(channel1.ChannelID, consumerID)
+		assert.NotNil(t, err)
+		_, err = djRepo.GetByID(queuedJob.ID.String())
+		assert.NotNil(t, err)
+		_, err = djRepo.GetByID(deliveredJob.ID.String())
+		assert.NotNil(t, err)
+		_, err = msgRepo.GetByID(queuedMsg.ID.String())
+		assert.Nil(t, err)
+	})
 	t.Run("DeleteMissing", func(t *testing.T) {
 		t.Parallel()
 		repo := getConsumerRepo()
@@ -212,6 +245,38 @@ func TestConsumerDelete(t *testing.T) {
 		err = repo.Delete(sampleConsumer)
 		assert.NotNil(t, err)
 	})
+}
+
+func TestConsumerDeleteInBatches(t *testing.T) {
+	originalBatchSize := consumerJobDeleteBatchSize
+	consumerJobDeleteBatchSize = 1
+	defer func() { consumerJobDeleteBatchSize = originalBatchSize }()
+	repo := getConsumerRepo()
+	djRepo := getDeliverJobRepository()
+	msgRepo := getMessageRepository()
+	consumerID := successfulDeleteTestConsumerID + "-in-batches"
+	sampleConsumer, err := data.NewConsumer(channel1, consumerID, successfulGetTestToken, callbackURL, data.PullConsumerStr)
+	assert.Nil(t, err)
+	resultConsumer, err := repo.Store(sampleConsumer)
+	assert.Nil(t, err)
+	jobs := make([]*data.DeliveryJob, 0, 3)
+	for i := 0; i < 3; i++ {
+		msg := getMessageForJob()
+		assert.Nil(t, msgRepo.Create(msg))
+		job, _ := data.NewDeliveryJob(msg, resultConsumer)
+		assert.Nil(t, djRepo.DispatchMessage(msg, job))
+		jobs = append(jobs, job)
+	}
+
+	err = repo.Delete(resultConsumer)
+	assert.Nil(t, err)
+
+	_, err = repo.Get(channel1.ChannelID, consumerID)
+	assert.NotNil(t, err)
+	for _, job := range jobs {
+		_, err = djRepo.GetByID(job.ID.String())
+		assert.NotNil(t, err)
+	}
 }
 
 func TestConsumerStore(t *testing.T) {
