@@ -29,6 +29,7 @@ type CommandOption string
 type CLIConfig struct {
 	ConfigPath             string
 	MigrationSource        string
+	RunMigration           bool
 	StopOnConfigChange     bool
 	DoNotWatchConfigChange bool
 	Command                CommandOption
@@ -56,9 +57,13 @@ func (conf *CLIConfig) SetCommandIfValid(command string) error {
 	}
 }
 
-// IsMigrationEnabled returns whether migration is enabled
+// IsMigrationEnabled returns whether migrations should be applied at startup.
+// Applying migrations is opt-in: it requires both a migration source (-migrate) and
+// the explicit -run-migration flag. This keeps pod startup decoupled from DDL so a
+// blocking migration cannot crashloop the fleet; migrations are run deliberately
+// out-of-band (see docs/runbooks/run-migrations-out-of-band.md).
 func (conf *CLIConfig) IsMigrationEnabled() bool {
-	return len(conf.MigrationSource) > 0
+	return conf.RunMigration && len(conf.MigrationSource) > 0
 }
 
 // NotifyOnConfigFileChange registers a callback function for changes to ConfigPath; it calls the `callback` when a change is detected

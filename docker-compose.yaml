@@ -7,7 +7,7 @@ services:
       - "18181:8080"
     volumes:
       - ./webhook-broker-dc.cfg:/webhook-broker.cfg
-    command: ["./webhook-broker", "-migrate", "./migration/sqls/"]
+    command: ["./webhook-broker", "-migrate", "./migration/sqls/", "-run-migration"]
     depends_on:
       mysql:
         condition: service_healthy

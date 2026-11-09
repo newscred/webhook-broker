@@ -29,7 +29,7 @@ services:
     container_name: ibroker
     volumes:
       - ./webhook-broker-integration-test.cfg:/webhook-broker.cfg
-    command: ["./webhook-broker", "-migrate", "./migration/sqls/"]
+    command: ["./webhook-broker", "-migrate", "./migration/sqls/", "-run-migration"]
     depends_on:
       mysql8:
         condition: service_healthy
@@ -51,7 +51,7 @@ services:
     container_name: ibroker-hmac
     volumes:
       - ./webhook-broker-integration-test-hmac.cfg:/webhook-broker.cfg
-    command: ["./webhook-broker", "-migrate", "./migration/sqls/"]
+    command: ["./webhook-broker", "-migrate", "./migration/sqls/", "-run-migration"]
     depends_on:
       ibroker:
         condition: service_healthy
