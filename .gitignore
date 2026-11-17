@@ -19,7 +19,6 @@
 *.log
 
 # IDE
-.vscode
 
 # Dependency directories (remove the comment below to include it)
 vendor/
@@ -36,3 +35,5 @@ webhook-broker-chart-*.tgz
 testDockerfile
 
 **/.claude/settings.local.json
+config.bat
+node_modules

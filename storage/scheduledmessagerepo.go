@@ -101,6 +101,23 @@ func (msgRepo *ScheduledMessageDBRepository) MarkDispatched(message *data.Schedu
 	return err
 }
 
+// DispatchAsMessage marks a SCHEDULED scheduled message as DISPATCHED and inserts its regular message in one
+// transaction, so either both rows change or neither does. It returns ErrNoRowsUpdated, writing nothing, when
+// the scheduled message is no longer in SCHEDULED status.
+func (msgRepo *ScheduledMessageDBRepository) DispatchAsMessage(scheduledMsg *data.ScheduledMessage, message *data.Message) error {
+	if scheduledMsg.Status != data.ScheduledMsgStatusDispatched {
+		return fmt.Errorf("can only mark scheduled messages with status DISPATCHED; current status - %v", scheduledMsg.Status)
+	}
+	if !message.IsInValidState() {
+		return data.ErrInsufficientInformationForCreating
+	}
+	err := transactionalWrites(msgRepo.db,
+		getTxWrapperForSingleWriteQuery(emptyOps, "UPDATE scheduled_message SET status = ?, dispatchedAt = ?, updatedAt = ? WHERE id = ? AND status = ?",
+			args2SliceFnWrapper(scheduledMsg.Status, scheduledMsg.DispatchedAt, time.Now(), scheduledMsg.ID, data.ScheduledMsgStatusScheduled)),
+		getTxWrapperForSingleWriteQuery(emptyOps, messageInsertQuery, messageInsertArgs(message)))
+	return normalizeDBError(err, mysqlErrorMap)
+}
+
 // GetMessagesReadyForDispatch retrieves scheduled messages that are ready to be dispatched
 func (msgRepo *ScheduledMessageDBRepository) GetMessagesReadyForDispatch(limit int) []*data.ScheduledMessage {
 	var messages []*data.ScheduledMessage
