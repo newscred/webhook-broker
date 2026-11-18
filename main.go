@@ -21,6 +21,11 @@
 // @in header
 // @name X-Broker-Consumer-Token
 // @description Consumer authentication token issued when the consumer was created or last rotated.
+//
+// @securityDefinitions.apikey AdminToken
+// @in header
+// @name X-Broker-Admin-Token
+// @description Broker admin token, set by admin-token in the [dispatch-pause] config section. Endpoints that require it return 404 when it is not configured.
 package main
 
 import (

@@ -164,6 +164,41 @@ definitions:
       statusChangedAt:
         type: string
     type: object
+  controllers.DispatchPauseModel:
+    properties:
+      channelId:
+        type: string
+      consumerId:
+        type: string
+      globallyPaused:
+        type: boolean
+      inflightJobCount:
+        description: |-
+          InflightJobCount is the number of deliveries still in flight for the consumer; only set on the consumer endpoint.
+          Wait for 0 before treating the consumer as quiet.
+        type: integer
+      parkedJobCount:
+        type: integer
+      pausedAt:
+        type: string
+      reason:
+        type: string
+      scope:
+        type: string
+    type: object
+  controllers.DispatchPausesModel:
+    properties:
+      globallyPaused:
+        type: boolean
+      parked:
+        items:
+          $ref: '#/definitions/controllers.ParkedJobsModel'
+        type: array
+      pauses:
+        items:
+          $ref: '#/definitions/controllers.DispatchPauseModel'
+        type: array
+    type: object
   controllers.HyperlinkedDeliveryJobModel:
     properties:
       channelURL:
@@ -257,6 +292,19 @@ definitions:
       token:
         type: string
     type: object
+  controllers.ParkedJobsModel:
+    properties:
+      channelId:
+        type: string
+      consumerId:
+        type: string
+      count:
+        type: integer
+      oldestParkedAt:
+        type: string
+      paused:
+        type: boolean
+    type: object
   controllers.QeuedMessageModel:
     properties:
       contentType:
@@ -340,6 +388,18 @@ definitions:
     additionalProperties:
       type: string
     type: object
+  parking.EnqueueRequest:
+    properties:
+      jobIds:
+        items:
+          type: string
+        type: array
+    type: object
+  parking.EnqueueResponse:
+    properties:
+      accepted:
+        type: integer
+    type: object
 info:
   contact: {}
   description: This is a fully HTTP-based Pub/Sub Broker designed to simplify system
@@ -347,6 +407,54 @@ info:
   title: Webhook Broker API
   version: 1.0.0
 paths:
+  /_internal/jobs/enqueue:
+    post:
+      consumes:
+      - application/json
+      description: Called by the parking drainer through the load-balanced [broker]
+        retrigger-base-endpoint; not for public use. Puts the given QUEUED jobs in
+        this node's in-memory queue; accepted excludes ids that are no longer QUEUED
+        or whose consumer was paused again. Returns 404 unless an admin token is configured,
+        and 503 with Retry-After when the node's queue plus the request's jobs would
+        exceed the hand-off high-water mark.
+      parameters:
+      - description: Broker admin token
+        in: header
+        name: X-Broker-Admin-Token
+        required: true
+        type: string
+      - description: Ids of QUEUED jobs; at most [dispatch-pause] drain-page-size
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/parking.EnqueueRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/parking.EnqueueResponse'
+        "400":
+          description: Bad Request
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+        "503":
+          description: Service Unavailable
+          headers:
+            Retry-After:
+              description: Seconds to wait before retrying
+              type: integer
+      security:
+      - AdminToken: []
+      summary: Enqueue Handed-Off Jobs (Internal)
+      tags:
+      - Internal
   /_status:
     get:
       description: Retrieves the current status of the Webhook Broker application,
@@ -613,6 +721,144 @@ paths:
       summary: Update Consumer
       tags:
       - Consumers
+  /channel/{channelId}/consumer/{consumerId}/dispatch-pause:
+    delete:
+      description: Resumes delivery to a consumer. Its parked jobs move back to the
+        job queue on the drainer's next run, unless a global pause is active. Returns
+        404 if the channel or consumer does not exist or the consumer was not paused.
+      parameters:
+      - description: Channel ID
+        in: path
+        name: channelId
+        required: true
+        type: string
+      - description: Consumer ID
+        in: path
+        name: consumerId
+        required: true
+        type: string
+      - description: Channel authentication token
+        in: header
+        name: X-Broker-Channel-Token
+        required: true
+        type: string
+      - description: Consumer authentication token
+        in: header
+        name: X-Broker-Consumer-Token
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "403":
+          description: Forbidden
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+      security:
+      - ChannelToken: []
+        ConsumerToken: []
+      summary: Resume Consumer Dispatch
+      tags:
+      - Dispatch Pause
+    get:
+      description: Returns the consumer's dispatch pause, including its parked and
+        in-flight job counts. Returns 404 if the channel or consumer does not exist
+        or the consumer is not paused.
+      parameters:
+      - description: Channel ID
+        in: path
+        name: channelId
+        required: true
+        type: string
+      - description: Consumer ID
+        in: path
+        name: consumerId
+        required: true
+        type: string
+      - description: Channel authentication token
+        in: header
+        name: X-Broker-Channel-Token
+        required: true
+        type: string
+      - description: Consumer authentication token
+        in: header
+        name: X-Broker-Consumer-Token
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.DispatchPauseModel'
+        "403":
+          description: Forbidden
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+      security:
+      - ChannelToken: []
+        ConsumerToken: []
+      summary: Get Consumer Dispatch Pause
+      tags:
+      - Dispatch Pause
+    put:
+      consumes:
+      - application/x-www-form-urlencoded
+      description: Pauses delivery to a consumer while broadcasts keep being accepted;
+        the consumer's jobs are parked until it is resumed. Idempotent. Pausing an
+        already paused consumer returns the existing pause.
+      parameters:
+      - description: Channel ID
+        in: path
+        name: channelId
+        required: true
+        type: string
+      - description: Consumer ID
+        in: path
+        name: consumerId
+        required: true
+        type: string
+      - description: Channel authentication token
+        in: header
+        name: X-Broker-Channel-Token
+        required: true
+        type: string
+      - description: Consumer authentication token
+        in: header
+        name: X-Broker-Consumer-Token
+        required: true
+        type: string
+      - description: Why dispatch is paused
+        in: formData
+        maxLength: 1024
+        name: reason
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.DispatchPauseModel'
+        "400":
+          description: Bad Request
+        "403":
+          description: Forbidden
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+      security:
+      - ChannelToken: []
+        ConsumerToken: []
+      summary: Pause Consumer Dispatch
+      tags:
+      - Dispatch Pause
   /channel/{channelId}/consumer/{consumerId}/dlq:
     delete:
       description: Purge all dead jobs for a consumer.
@@ -824,7 +1070,8 @@ paths:
       consumes:
       - application/json
       description: Updates the status of a delivery job. Used by pull-based consumers
-        to transition jobs through their lifecycle.
+        to transition jobs through their lifecycle. Returns 409 for a parked job,
+        or for a QUEUED or DEAD to INFLIGHT transition while the consumer is paused.
       parameters:
       - description: Channel ID
         in: path
@@ -868,6 +1115,8 @@ paths:
           description: Forbidden
         "404":
           description: Not Found
+        "409":
+          description: Conflict
         "412":
           description: Precondition Failed
         "500":
@@ -932,7 +1181,9 @@ paths:
       - Jobs
   /channel/{channelId}/consumer/{consumerId}/queued-jobs:
     get:
-      description: Retrieves prioritized queued jobs for a pull-based consumer.
+      description: 'Retrieves prioritized queued jobs for a pull-based consumer. While
+        the consumer is paused, returns an empty list with X-Broker-Dispatch-Paused:
+        true.'
       parameters:
       - description: Channel ID
         in: path
@@ -965,6 +1216,10 @@ paths:
       responses:
         "200":
           description: OK
+          headers:
+            X-Broker-Dispatch-Paused:
+              description: Set to true while the consumer is paused; absent otherwise
+              type: string
           schema:
             $ref: '#/definitions/controllers.JobListResult'
         "400":
@@ -1174,6 +1429,95 @@ paths:
       summary: List All Channels
       tags:
       - Channels
+  /dispatch-pause:
+    delete:
+      description: Lifts the global pause; consumers with their own pause stay paused.
+        Returns 404 if no admin token is configured or the broker was not paused.
+      parameters:
+      - description: Broker admin token
+        in: header
+        name: X-Broker-Admin-Token
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+      security:
+      - AdminToken: []
+      summary: Resume Global Dispatch
+      tags:
+      - Dispatch Pause
+    put:
+      consumes:
+      - application/x-www-form-urlencoded
+      description: Pauses delivery to every consumer while broadcasts keep being accepted.
+        Idempotent. Returns 404 unless an admin token is configured.
+      parameters:
+      - description: Broker admin token
+        in: header
+        name: X-Broker-Admin-Token
+        required: true
+        type: string
+      - description: Why dispatch is paused
+        in: formData
+        maxLength: 1024
+        name: reason
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.DispatchPauseModel'
+        "400":
+          description: Bad Request
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+      security:
+      - AdminToken: []
+      summary: Pause Global Dispatch
+      tags:
+      - Dispatch Pause
+  /dispatch-pauses:
+    get:
+      description: Lists every dispatch pause and the parked job counts per consumer,
+        including resumed consumers that are still draining. Returns 404 unless an
+        admin token is configured.
+      parameters:
+      - description: Broker admin token
+        in: header
+        name: X-Broker-Admin-Token
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controllers.DispatchPausesModel'
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+      security:
+      - AdminToken: []
+      summary: List Dispatch Pauses
+      tags:
+      - Dispatch Pause
   /dlq-status:
     get:
       description: Get DLQ status summary across all consumers.
@@ -1282,6 +1626,12 @@ paths:
       tags:
       - Producers
 securityDefinitions:
+  AdminToken:
+    description: Broker admin token, set by admin-token in the [dispatch-pause] config
+      section. Endpoints that require it return 404 when it is not configured.
+    in: header
+    name: X-Broker-Admin-Token
+    type: apiKey
   ChannelToken:
     description: Channel authentication token issued when the channel was created
       or last rotated.

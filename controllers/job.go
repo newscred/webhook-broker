@@ -92,7 +92,7 @@ type JobListResult struct {
 
 // Get implements the GET /channel/:channelId/consumer/:consumerId/queued-jobs endpoint
 // @Summary Get Queued Jobs for Consumer (Pull-Based)
-// @Description Retrieves prioritized queued jobs for a pull-based consumer.
+// @Description Retrieves prioritized queued jobs for a pull-based consumer. While the consumer is paused, returns an empty list with X-Broker-Dispatch-Paused: true.
 // @Tags Jobs
 // @Produce json
 // @Param channelId path string true "Channel ID"
@@ -101,6 +101,7 @@ type JobListResult struct {
 // @Param X-Broker-Channel-Token header string true "Channel authentication token"
 // @Param X-Broker-Consumer-Token header string true "Consumer authentication token"
 // @Success 200 {object} JobListResult
+// @Header 200 {string} X-Broker-Dispatch-Paused "Set to true while the consumer is paused; absent otherwise"
 // @Failure 400
 // @Failure 401
 // @Failure 403
@@ -315,7 +316,7 @@ func (controller *JobController) Get(w http.ResponseWriter, r *http.Request, par
 
 // Post implements the POST /channel/:channelId/consumer/:consumerId/job/:jobId endpoint
 // @Summary Update Job Status (Pull-Based)
-// @Description Updates the status of a delivery job. Used by pull-based consumers to transition jobs through their lifecycle.
+// @Description Updates the status of a delivery job. Used by pull-based consumers to transition jobs through their lifecycle. Returns 409 for a parked job, or for a QUEUED or DEAD to INFLIGHT transition while the consumer is paused.
 // @Tags Jobs
 // @Accept json
 // @Param channelId path string true "Channel ID"
@@ -329,6 +330,7 @@ func (controller *JobController) Get(w http.ResponseWriter, r *http.Request, par
 // @Failure 401
 // @Failure 403
 // @Failure 404
+// @Failure 409
 // @Failure 412
 // @Failure 500
 // @Security ChannelToken && ConsumerToken
