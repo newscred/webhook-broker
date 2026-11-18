@@ -1,3 +1,31 @@
+// @title Webhook Broker API
+// @version 1.0.0
+// @description This is a fully HTTP-based Pub/Sub Broker designed to simplify system architecture in SOA or Microservice architecture.
+//
+// @securityDefinitions.apikey ChannelToken
+// @in header
+// @name X-Broker-Channel-Token
+// @description Channel authentication token issued when the channel was created or last rotated.
+//
+// @securityDefinitions.apikey ProducerToken
+// @in header
+// @name X-Broker-Producer-Token
+// @description Producer authentication token issued when the producer was created or last rotated.
+//
+// @securityDefinitions.apikey ProducerID
+// @in header
+// @name X-Broker-Producer-ID
+// @description Identifier of the producer originating the request.
+//
+// @securityDefinitions.apikey ConsumerToken
+// @in header
+// @name X-Broker-Consumer-Token
+// @description Consumer authentication token issued when the consumer was created or last rotated.
+//
+// @securityDefinitions.apikey AdminToken
+// @in header
+// @name X-Broker-Admin-Token
+// @description Broker admin token, set by admin-token in the [dispatch-pause] config section. Endpoints that require it return 404 when it is not configured.
 package main
 
 import (

@@ -64,6 +64,22 @@ func (controller *InternalJobEnqueueController) FormatAsRelativeLink(params ...h
 }
 
 // Post implements POST /_internal/jobs/enqueue
+// @Summary Enqueue Handed-Off Jobs (Internal)
+// @Description Called by the parking drainer through the load-balanced [broker] retrigger-base-endpoint; not for public use. Puts the given QUEUED jobs in this node's in-memory queue; accepted excludes ids that are no longer QUEUED or whose consumer was paused again. Returns 404 unless an admin token is configured, and 503 with Retry-After when the node's queue plus the request's jobs would exceed the hand-off high-water mark.
+// @Tags Internal
+// @Accept json
+// @Produce json
+// @Param X-Broker-Admin-Token header string true "Broker admin token"
+// @Param body body parking.EnqueueRequest true "Ids of QUEUED jobs; at most [dispatch-pause] drain-page-size"
+// @Success 202 {object} parking.EnqueueResponse
+// @Failure 400
+// @Failure 401
+// @Failure 404
+// @Failure 500
+// @Failure 503
+// @Header 503 {integer} Retry-After "Seconds to wait before retrying"
+// @Security AdminToken
+// @Router /_internal/jobs/enqueue [post]
 func (controller *InternalJobEnqueueController) Post(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 	if !controller.PauseConfig.IsAdminTokenConfigured() {
 		writeNotFound(w)

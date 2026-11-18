@@ -148,6 +148,23 @@ func (controller *ConsumerDispatchPauseController) writeModel(w http.ResponseWri
 }
 
 // Put pauses dispatching for the consumer; idempotent
+// @Summary Pause Consumer Dispatch
+// @Description Pauses delivery to a consumer while broadcasts keep being accepted; the consumer's jobs are parked until it is resumed. Idempotent. Pausing an already paused consumer returns the existing pause.
+// @Tags Dispatch Pause
+// @Accept x-www-form-urlencoded
+// @Produce json
+// @Param channelId path string true "Channel ID"
+// @Param consumerId path string true "Consumer ID"
+// @Param X-Broker-Channel-Token header string true "Channel authentication token"
+// @Param X-Broker-Consumer-Token header string true "Consumer authentication token"
+// @Param reason formData string false "Why dispatch is paused" maxlength(1024)
+// @Success 200 {object} DispatchPauseModel
+// @Failure 400
+// @Failure 403
+// @Failure 404
+// @Failure 500
+// @Security ChannelToken && ConsumerToken
+// @Router /channel/{channelId}/consumer/{consumerId}/dispatch-pause [put]
 func (controller *ConsumerDispatchPauseController) Put(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 	consumer, valid := getChannelConsumerWithAuth(w, r, params, controller.ChannelRepo, controller.ConsumerRepo)
 	if !valid {
@@ -172,6 +189,20 @@ func (controller *ConsumerDispatchPauseController) Put(w http.ResponseWriter, r 
 }
 
 // Get returns the consumer's pause or 404 if it is not paused
+// @Summary Get Consumer Dispatch Pause
+// @Description Returns the consumer's dispatch pause, including its parked and in-flight job counts. Returns 404 if the channel or consumer does not exist or the consumer is not paused.
+// @Tags Dispatch Pause
+// @Produce json
+// @Param channelId path string true "Channel ID"
+// @Param consumerId path string true "Consumer ID"
+// @Param X-Broker-Channel-Token header string true "Channel authentication token"
+// @Param X-Broker-Consumer-Token header string true "Consumer authentication token"
+// @Success 200 {object} DispatchPauseModel
+// @Failure 403
+// @Failure 404
+// @Failure 500
+// @Security ChannelToken && ConsumerToken
+// @Router /channel/{channelId}/consumer/{consumerId}/dispatch-pause [get]
 func (controller *ConsumerDispatchPauseController) Get(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 	consumer, valid := getChannelConsumerWithAuth(w, r, params, controller.ChannelRepo, controller.ConsumerRepo)
 	if !valid {
@@ -189,6 +220,19 @@ func (controller *ConsumerDispatchPauseController) Get(w http.ResponseWriter, r 
 }
 
 // Delete resumes dispatching for the consumer; the drainer moves its parked jobs back on its next run
+// @Summary Resume Consumer Dispatch
+// @Description Resumes delivery to a consumer. Its parked jobs move back to the job queue on the drainer's next run, unless a global pause is active. Returns 404 if the channel or consumer does not exist or the consumer was not paused.
+// @Tags Dispatch Pause
+// @Param channelId path string true "Channel ID"
+// @Param consumerId path string true "Consumer ID"
+// @Param X-Broker-Channel-Token header string true "Channel authentication token"
+// @Param X-Broker-Consumer-Token header string true "Consumer authentication token"
+// @Success 204
+// @Failure 403
+// @Failure 404
+// @Failure 500
+// @Security ChannelToken && ConsumerToken
+// @Router /channel/{channelId}/consumer/{consumerId}/dispatch-pause [delete]
 func (controller *ConsumerDispatchPauseController) Delete(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 	consumer, valid := getChannelConsumerWithAuth(w, r, params, controller.ChannelRepo, controller.ConsumerRepo)
 	if !valid {
@@ -233,6 +277,20 @@ func (controller *GlobalDispatchPauseController) FormatAsRelativeLink(params ...
 }
 
 // Put pauses dispatching for every consumer; idempotent
+// @Summary Pause Global Dispatch
+// @Description Pauses delivery to every consumer while broadcasts keep being accepted. Idempotent. Returns 404 unless an admin token is configured.
+// @Tags Dispatch Pause
+// @Accept x-www-form-urlencoded
+// @Produce json
+// @Param X-Broker-Admin-Token header string true "Broker admin token"
+// @Param reason formData string false "Why dispatch is paused" maxlength(1024)
+// @Success 200 {object} DispatchPauseModel
+// @Failure 400
+// @Failure 401
+// @Failure 404
+// @Failure 500
+// @Security AdminToken
+// @Router /dispatch-pause [put]
 func (controller *GlobalDispatchPauseController) Put(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 	if !checkAdminToken(w, r, controller.PauseConfig) {
 		return
@@ -261,6 +319,16 @@ func (controller *GlobalDispatchPauseController) Put(w http.ResponseWriter, r *h
 }
 
 // Delete resumes dispatching globally; consumers with their own pause stay paused
+// @Summary Resume Global Dispatch
+// @Description Lifts the global pause; consumers with their own pause stay paused. Returns 404 if no admin token is configured or the broker was not paused.
+// @Tags Dispatch Pause
+// @Param X-Broker-Admin-Token header string true "Broker admin token"
+// @Success 204
+// @Failure 401
+// @Failure 404
+// @Failure 500
+// @Security AdminToken
+// @Router /dispatch-pause [delete]
 func (controller *GlobalDispatchPauseController) Delete(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 	if !checkAdminToken(w, r, controller.PauseConfig) {
 		return
@@ -304,6 +372,17 @@ func (controller *DispatchPausesController) FormatAsRelativeLink(params ...httpr
 }
 
 // Get lists every pause (from the database) and the parked job counts per consumer
+// @Summary List Dispatch Pauses
+// @Description Lists every dispatch pause and the parked job counts per consumer, including resumed consumers that are still draining. Returns 404 unless an admin token is configured.
+// @Tags Dispatch Pause
+// @Produce json
+// @Param X-Broker-Admin-Token header string true "Broker admin token"
+// @Success 200 {object} DispatchPausesModel
+// @Failure 401
+// @Failure 404
+// @Failure 500
+// @Security AdminToken
+// @Router /dispatch-pauses [get]
 func (controller *DispatchPausesController) Get(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 	if !checkAdminToken(w, r, controller.PauseConfig) {
 		return
