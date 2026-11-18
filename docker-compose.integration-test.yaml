@@ -1,6 +1,6 @@
 services:
   mysql8:
-    image: mysql:${MYSQL_VERSION:-8.0.37}
+    image: mysql:${MYSQL_VERSION:-8.4.13}
     container_name: mysql8
     # Three broker nodes (up to 100 connections each) plus the pruner exceed MySQL's default of 151
     command: ["--max-connections=500"]
